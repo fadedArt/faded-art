@@ -13,43 +13,62 @@ app = Flask(__name__)
 
 UPLOAD_FOLDER = 'static'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-NUM_PINS = 320         # Anzahl der Pins am Kreisumfang
 IMAGE_SIZE = 1000
 
-def compute_string_art(image_path, thickness_option):
-    if not thickness_option:
-        thickness_option = "Ultra-Scharf (0.15 mm - Maximale Details)"
+def compute_string_art(image_path, num_pins, thickness_option, thread_color_option, wood_option):
+    try:
+        pins_count = int(num_pins)
+    except (TypeError, ValueError):
+        pins_count = 240
 
-    # Fein abgestimmte Linien und Transparenz gegen das Schwarzwerden
-    if "0.15" in thickness_option:
-        line_weight, alpha_val = 2, 12   
-    elif "0.3" in thickness_option:
-        line_weight, alpha_val = 4, 20
+    line_weight = 1       
+    if "0.3" in str(thickness_option):
+        alpha_val = 40    
+    elif "0.2" in str(thickness_option):
+        alpha_val = 28    
     else:
-        line_weight, alpha_val = 3, 15
+        alpha_val = 20    # Ultra-fein (0.15 mm)
 
-    # 1. Bild laden und optimieren
+    # Exakte RGB-Farbwerte für die Fäden
+    color_map = {
+        "Tiefschwarz": (15, 15, 15),
+        "Reinweiß": (245, 245, 245),
+        "Champagner Gold": (212, 175, 55),
+        "Silber": (200, 200, 200)
+    }
+    thread_rgb = color_map.get(thread_color_option, (15, 15, 15))
+
+    # Realistische Hintergrundfarben für das Brett
+    bg_color_map = {
+        "Klassik Weiß matt": (250, 250, 250, 255),
+        "MDF Schwarz matt": (20, 20, 20, 255),
+        "Eiche Natur geölt": (160, 115, 75, 255),
+        "Nussbaum Premium": (65, 42, 25, 255),
+        "Schwarze Esche": (30, 30, 30, 255),
+        "Beton-Look": (90, 90, 90, 255)
+    }
+    canvas_bg = bg_color_map.get(wood_option, (250, 250, 250, 255))
+
+    # 1. Bild laden und für String Art optimieren
     img = Image.open(image_path).convert('L')
     img = img.resize((IMAGE_SIZE, IMAGE_SIZE), Image.Resampling.LANCZOS)
     
     enhancer = ImageEnhance.Contrast(img)
-    img = enhancer.enhance(1.8)
+    img = enhancer.enhance(2.2)  
     img_np = np.array(img, dtype=float)
 
-    # 2. Kantenerkennung (Canny) für saubere Details
-    edges = canny(img_np / 255.0, sigma=2.0)
-    target_img = 255.0 - ((255 - img_np) * 0.2 + (edges.astype(float) * 255 * 0.8))
+    edges = canny(img_np / 255.0, sigma=1.5)
+    # Bei hellem Faden auf hellem Grund (oder umgekehrt) Kontrast umkehren für optimale Sichtbarkeit
+    target_img = 255.0 - ((255 - img_np) * 0.15 + (edges.astype(float) * 255 * 0.85))
     
     radius = IMAGE_SIZE // 2
     y, x = np.ogrid[:IMAGE_SIZE, :IMAGE_SIZE]
     mask = (x - radius)**2 + (y - radius)**2 > radius**2
     target_img[mask] = 255
     
-    # Pins im Kreis anordnen
     pins = []
-    for i in range(NUM_PINS):
-        angle = 2 * math.pi * i / NUM_PINS
+    for i in range(pins_count):
+        angle = 2 * math.pi * i / pins_count
         px = int(radius + (radius - 1) * math.cos(angle))
         py = int(radius + (radius - 1) * math.sin(angle))
         pins.append((px, py))
@@ -58,18 +77,20 @@ def compute_string_art(image_path, thickness_option):
     current_pin = 0
     
     frames = []
-    anim_img = Image.new('RGBA', (IMAGE_SIZE, IMAGE_SIZE), color=(255, 255, 255, 255))
+    anim_img = Image.new('RGBA', (IMAGE_SIZE, IMAGE_SIZE), color=canvas_bg)
     anim_draw = ImageDraw.Draw(anim_img, 'RGBA')
     
-    num_lines_adjusted = 3500 
+    num_lines_adjusted = 4600 if pins_count > 300 else 3200 
     
     for step in range(num_lines_adjusted):
         best_pin = -1
         max_score = -1
         best_line_pixels = None
         
-        for next_pin in range(NUM_PINS):
-            if abs(current_pin - next_pin) <= 15 or abs(current_pin - next_pin) >= NUM_PINS - 15:
+        skip_range = 18 if pins_count > 300 else 12
+        
+        for next_pin in range(pins_count):
+            if abs(current_pin - next_pin) <= skip_range or abs(current_pin - next_pin) >= pins_count - skip_range:
                 continue
             r0, c0 = pins[current_pin][1], pins[current_pin][0]
             r1, c1 = pins[next_pin][1], pins[next_pin][0]
@@ -84,23 +105,37 @@ def compute_string_art(image_path, thickness_option):
         pin_sequence.append(best_pin)
         rr, cc = best_line_pixels
         
-        target_img[rr, cc] = np.clip(target_img[rr, cc] + 15, 0, 255)
+        target_img[rr, cc] = np.clip(target_img[rr, cc] + 12, 0, 255)
         
         p1 = pins[current_pin]
         p2 = pins[best_pin]
-        anim_draw.line([p1, p2], fill=(15, 15, 15, alpha_val), width=1)
         
-        if step % 150 == 0 or step == num_lines_adjusted - 1:
+        line_color_rgba = (thread_rgb[0], thread_rgb[1], thread_rgb[2], alpha_val)
+        anim_draw.line([p1, p2], fill=line_color_rgba, width=line_weight)
+        
+        if step % 100 == 0 or step == num_lines_adjusted - 1:
             frames.append(anim_img.copy().convert('P', palette=Image.ADAPTIVE))
             
         current_pin = best_pin
+
+    # Zum Schluss fotorealistische Nägel (Pins) um den Kreis herum zeichnen
+    pin_color = (212, 175, 55, 255) if "Gold" in thread_color_option else (220, 220, 220, 255)
+    for px, py in pins:
+        anim_draw.ellipse([px-4, py-4, px+4, py+4], fill=pin_color, outline=(50, 50, 50, 255))
 
     output_image_path = os.path.join(UPLOAD_FOLDER, 'preview.png')
     anim_img.save(output_image_path)
     
     gif_path = os.path.join(UPLOAD_FOLDER, 'progress.gif')
     if frames:
-        frames[0].save(gif_path, save_all=True, append_images=frames[1:], optimize=False, duration=80, loop=0)
+        frames[0].save(
+            gif_path, 
+            save_all=True, 
+            append_images=frames[1:], 
+            optimize=False, 
+            duration=150,  
+            loop=0
+        )
     
     with open("produktion_pinfolge.txt", "w") as f:
         f.write(",".join(map(str, pin_sequence)))
@@ -130,7 +165,7 @@ def send_order_email(customer_email, size, wood, thread_color, thread_thickness,
     Konfiguration:
     - Größe: {size}
     - Untergrund: {wood}
-    - Faden: {thread_color} ({thread_thickness})
+    - Faden: {thread_color} (Dicke: {thread_thickness} mm)
     - Pins/Nägel: {nail}
 
     -----------------------------------------
@@ -138,7 +173,6 @@ def send_order_email(customer_email, size, wood, thread_color, thread_thickness,
     {pin_sequence_text}
     -----------------------------------------
     """
-
     message.attach(MIMEText(text_content, "plain"))
 
     try:
@@ -152,6 +186,10 @@ def send_order_email(customer_email, size, wood, thread_color, thread_thickness,
 def index():
     return render_template('index.html')
 
+@app.route('/configure')
+def configure():
+    return render_template('configure.html')
+
 @app.route('/generate', methods=['POST'])
 def generate():
     size = request.form.get('size')
@@ -160,11 +198,13 @@ def generate():
     thread_thickness = request.form.get('thread_thickness')
     nail = request.form.get('nail')
     
+    num_pins = 360 if "360" in str(nail) else 240
+    
     uploaded_file = request.files['image']
     temp_path = os.path.join(UPLOAD_FOLDER, 'temp_input.jpg')
     uploaded_file.save(temp_path)
     
-    compute_string_art(temp_path, thread_thickness)
+    compute_string_art(temp_path, num_pins, thread_thickness, thread_color, wood)
     
     return jsonify({
         "size": size,
@@ -189,8 +229,6 @@ def checkout():
         total_price=data.get('total_price')
     )
     return jsonify({"status": "success"})
-
-import os
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
