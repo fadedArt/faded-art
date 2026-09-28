@@ -19,34 +19,35 @@
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background-color: var(--bg-color); color: var(--text-main); font-family: 'Plus Jakarta Sans', sans-serif; }
-        .site-container { max-width: 1400px; margin: 0 auto; padding: 0 3rem; }
+        .site-container { max-width: 1400px; margin: 0 auto; padding: 0 1.5rem; }
 
-        header { padding: 2.5rem 0; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(212, 175, 55, 0.15); margin-bottom: 3rem; }
-        .logo { font-family: 'Cinzel', serif; font-size: 1.8rem; font-weight: 700; letter-spacing: 4px; background: var(--border-gold); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-decoration: none; text-transform: uppercase; }
+        header { padding: 2rem 0; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(212, 175, 55, 0.15); margin-bottom: 2rem; }
+        .logo { font-family: 'Cinzel', serif; font-size: 1.5rem; font-weight: 700; letter-spacing: 3px; background: var(--border-gold); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-decoration: none; text-transform: uppercase; }
 
-        .progress-bar { display: flex; justify-content: space-between; margin-bottom: 4rem; position: relative; max-width: 800px; margin: 0 auto 4rem auto; }
-        .progress-bar::before { content: ''; position: absolute; top: 15px; left: 0; width: 100%; height: 2px; background-color: #222; z-index: 1; }
+        .progress-bar { display: flex; justify-content: space-between; margin-bottom: 3rem; position: relative; max-width: 800px; margin: 0 auto 3rem auto; }
+        .progress-bar::before { content: ''; position: absolute; top: 12px; left: 0; width: 100%; height: 2px; background-color: #222; z-index: 1; }
         .step { position: relative; z-index: 2; text-align: center; width: 20%; }
-        .step-icon { width: 30px; height: 30px; border-radius: 50%; background-color: var(--bg-color); border: 2px solid #222; display: flex; align-items: center; justify-content: center; margin: 0 auto 0.5rem auto; color: #222; transition: all 0.3s ease; font-weight: 600; }
-        .step-text { font-size: 0.8rem; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase; }
+        .step-icon { width: 26px; height: 26px; border-radius: 50%; background-color: var(--bg-color); border: 2px solid #222; display: flex; align-items: center; justify-content: center; margin: 0 auto 0.4rem auto; color: #222; transition: all 0.3s ease; font-weight: 600; font-size: 0.8rem; }
+        .step-text { font-size: 0.7rem; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase; }
         .step.active .step-icon { border-color: var(--step-active); color: var(--step-active); background-color: #0b0b0b; }
         .step.active .step-text { color: var(--text-gold); }
         .step.completed .step-icon { border-color: var(--step-active); background-color: var(--step-active); color: var(--bg-color); }
         .step.completed .step-text { color: var(--text-main); }
 
-        .config-step { display: none; grid-template-columns: 1fr 1.5fr; gap: 4rem; align-items: start; }
+        /* WICHTIG: Standardmäßig Spaltenlayout, auf Handys automatisch untereinander */
+        .config-step { display: none; grid-template-columns: 1fr 1.5fr; gap: 3rem; align-items: start; }
         .config-step.active { display: grid; }
-        .step-panel { background-color: var(--card-bg); border: 1px solid var(--step-border); border-radius: 16px; padding: 2.5rem; }
-        h2 { font-family: 'Cinzel', serif; font-size: 1.8rem; margin-bottom: 2rem; color: #fff; letter-spacing: 1px; }
+        
+        .step-panel { background-color: var(--card-bg); border: 1px solid var(--step-border); border-radius: 16px; padding: 2rem; }
+        h2 { font-family: 'Cinzel', serif; font-size: 1.5rem; margin-bottom: 1.5rem; color: #fff; letter-spacing: 1px; }
 
-        .form-group { margin-bottom: 1.8rem; }
-        label { display: block; font-size: 0.9rem; letter-spacing: 1px; color: var(--text-gold); margin-bottom: 0.6rem; font-weight: 500; text-transform: uppercase; }
-        select, input[type="file"], input[type="email"] { width: 100%; padding: 1rem; background-color: #1f1f1f; border: 1px solid rgba(212, 175, 55, 0.3); border-radius: 8px; color: #fff; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1rem; }
+        .form-group { margin-bottom: 1.5rem; }
+        label { display: block; font-size: 0.85rem; letter-spacing: 1px; color: var(--text-gold); margin-bottom: 0.5rem; font-weight: 500; text-transform: uppercase; }
+        select, input[type="file"], input[type="email"] { width: 100%; padding: 0.9rem; background-color: #1f1f1f; border: 1px solid rgba(212, 175, 55, 0.3); border-radius: 8px; color: #fff; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1rem; }
         select:focus, input:focus { outline: none; border-color: #d4af37; }
 
-        .preview-panel { background-color: #f5f5f5; border: 1px solid var(--step-border); border-radius: 16px; padding: 2.5rem; text-align: center; min-height: 600px; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; overflow: hidden; transition: background 0.5s ease; }
+        .preview-panel { background-color: #f5f5f5; border: 1px solid var(--step-border); border-radius: 16px; padding: 2rem; text-align: center; min-height: 450px; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; overflow: hidden; transition: background 0.5s ease; }
 
-        /* Realistische Holz-Looks */
         .wood-weiss { background-color: #fcfcfc; border: 2px solid #e0e0e0; }
         .wood-mdf { background-color: #161616; border: 2px solid #222; }
         .wood-eiche { background: repeating-linear-gradient(45deg, #c49a6c, #c49a6c 15px, #b08253 15px, #b08253 30px); border: 2px solid #8c6239; }
@@ -54,33 +55,37 @@
         .wood-esche { background: repeating-linear-gradient(0deg, #2b2b2b, #2b2b2b 10px, #1c1c1c 10px, #1c1c1c 20px); border: 2px solid #404040; }
         .wood-beton { background: radial-gradient(circle, #7a7a7a 0%, #4a4a4a 100%); border: 2px solid #333; }
 
-        #imagePreviewCanvas, #threadPreviewCanvas { max-width: 100%; max-height: 450px; border: 2px solid #d4af37; border-radius: 50%; cursor: grab; display: none; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        #finalResultImage { max-width: 100%; max-height: 450px; border-radius: 50%; box-shadow: 0 15px 40px rgba(0,0,0,0.7); border: 3px solid #d4af37; display: none; margin-bottom: 1rem; }
+        #imagePreviewCanvas, #threadPreviewCanvas { max-width: 100%; max-height: 350px; border: 2px solid #d4af37; border-radius: 50%; cursor: grab; display: none; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        #finalResultImage { max-width: 100%; max-height: 350px; border-radius: 50%; box-shadow: 0 15px 40px rgba(0,0,0,0.7); border: 3px solid #d4af37; display: none; margin-bottom: 1rem; }
         
-        .preview-placeholder { color: #444; font-style: italic; z-index: 2; font-weight: 500; }
+        .preview-placeholder { color: #444; font-style: italic; z-index: 2; font-weight: 500; font-size: 0.9rem; }
         .wood-mdf .preview-placeholder, .wood-eiche .preview-placeholder, .wood-nussbaum .preview-placeholder, .wood-esche .preview-placeholder { color: #e0e0e0; }
 
-        .loader { border: 4px solid #222; border-top: 4px solid #d4af37; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 1.5rem; display: none; z-index: 2; }
+        .loader { border: 4px solid #222; border-top: 4px solid #d4af37; border-radius: 50%; width: 45px; height: 45px; animation: spin 1s linear infinite; margin-bottom: 1rem; display: none; z-index: 2; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
         #checkoutSection { display: none; margin-top: 1.5rem; width: 100%; text-align: left; background: rgba(0,0,0,0.85); padding: 1.5rem; border-radius: 10px; border: 1px solid rgba(212,175,55,0.4); z-index: 3; }
 
         .nav-buttons { margin-top: 2rem; display: flex; justify-content: space-between; gap: 1rem; }
-        .btn-outline { padding: 0.8rem 2rem; font-family: 'Cinzel', serif; font-size: 0.9rem; letter-spacing: 1px; color: var(--text-gold); background: transparent; border: 1px solid var(--step-border); border-radius: 50px; cursor: pointer; transition: all 0.3s ease; text-decoration: none; }
+        .btn-outline { padding: 0.8rem 1.5rem; font-family: 'Cinzel', serif; font-size: 0.85rem; letter-spacing: 1px; color: var(--text-gold); background: transparent; border: 1px solid var(--step-border); border-radius: 50px; cursor: pointer; transition: all 0.3s ease; text-decoration: none; }
         .btn-outline:hover { border-color: var(--step-active); color: #fff; }
-        .btn-gold { padding: 0.8rem 3rem; font-family: 'Cinzel', serif; font-size: 0.9rem; letter-spacing: 2px; color: #0b0b0b; background: var(--border-gold); border: none; border-radius: 50px; cursor: pointer; transition: transform 0.3s ease, box-shadow 0.3s ease; width: 100%; text-align: center; }
+        .btn-gold { padding: 0.8rem 2.5rem; font-family: 'Cinzel', serif; font-size: 0.85rem; letter-spacing: 2px; color: #0b0b0b; background: var(--border-gold); border: none; border-radius: 50px; cursor: pointer; transition: transform 0.3s ease, box-shadow 0.3s ease; width: 100%; text-align: center; }
         .btn-gold:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(212, 175, 55, 0.3); }
 
-        footer { text-align: center; padding: 3rem 0; border-top: 1px solid rgba(212, 175, 55, 0.1); margin-top: 4rem; color: var(--text-muted); font-size: 0.85rem; letter-spacing: 1px; }
-        footer a { color: var::text-gold; text-decoration: none; margin: 0 1rem; }
+        footer { text-align: center; padding: 2.5rem 0; border-top: 1px solid rgba(212, 175, 55, 0.15); margin-top: 3rem; color: var(--text-muted); font-size: 0.8rem; letter-spacing: 1px; }
+        footer a { color: var(--text-gold); text-decoration: none; margin: 0 0.5rem; }
         footer a:hover { text-decoration: underline; }
 
-        @media (max-width: 1000px) {
-            .config-step { grid-template-columns: 1fr; gap: 2rem; }
-            .site-container { padding: 0 1.5rem; }
-            .progress-bar { flex-wrap: wrap; gap: 1rem; justify-content: center; }
-            .step { width: 40%; }
-            .progress-bar::before { display: none; }
+        /* MOBIL-OPTIMIERUNG (Bildschirme unter 900px, z.B. Smartphones) */
+        @media (max-width: 900px) {
+            .site-container { padding: 0 1rem; }
+            .config-step.active { grid-template-columns: 1fr; gap: 1.5rem; }
+            .step-panel { padding: 1.5rem; }
+            .preview-panel { min-height: 350px; padding: 1.5rem; }
+            .progress-bar { max-width: 100%; margin-bottom: 2rem; }
+            .step-text { display: none; } /* Versteckt auf kleinen Handys die Text unter den Zahlen, damit es nicht bricht */
+            header { padding: 1.5rem 0; }
+            h2 { font-size: 1.3rem; }
         }
     </style>
 </head>
@@ -89,7 +94,7 @@
     <div class="site-container">
         <header>
             <a href="/" class="logo">Faded Art</a>
-            <span style="color: var(--text-muted); letter-spacing: 1px; font-size: 0.9rem;">Exklusiver Konfigurator</span>
+            <span style="color: var(--text-muted); letter-spacing: 1px; font-size: 0.8rem;">Konfigurator</span>
         </header>
 
         <div class="progress-bar">
@@ -103,7 +108,7 @@
             </div>
             <div class="step" id="tab-3">
                 <div class="step-icon">3</div>
-                <div class="step-text">Untergrund</div>
+                <div class="step-text">Holz</div>
             </div>
             <div class="step" id="tab-4">
                 <div class="step-icon">4</div>
@@ -119,16 +124,16 @@
             <!-- SCHRITT 1 -->
             <div class="config-step active" id="step-1">
                 <div class="step-panel">
-                    <h2>1. Wunschbild hochladen & positionieren</h2>
+                    <h2>1. Wunschbild hochladen</h2>
                     <div class="form-group">
                         <label>Bilddatei auswählen</label>
                         <input type="file" id="imageInput" name="image" accept="image/*" required>
                     </div>
                     <div class="form-group" style="display: none;" id="transformControls">
                         <label>Ausschnitt anpassen</label>
-                        <div style="display: flex; gap: 1rem;">
+                        <div style="display: flex; gap: 0.5rem;">
                             <input type="range" id="scaleRange" min="0.1" max="2" step="0.01" value="1" style="flex: 1;">
-                            <button type="button" id="centerBtn" class="btn-outline" style="padding: 0.5rem 1rem;">Zentrieren</button>
+                            <button type="button" id="centerBtn" class="btn-outline" style="padding: 0.5rem 0.8rem;">Zentrieren</button>
                         </div>
                     </div>
                     <div class="nav-buttons">
@@ -145,7 +150,7 @@
             <!-- SCHRITT 2 -->
             <div class="config-step" id="step-2">
                 <div class="step-panel">
-                    <h2>2. Größe des Brettes auswählen</h2>
+                    <h2>2. Größe des Brettes</h2>
                     <div class="form-group">
                         <label>Format</label>
                         <select id="sizeSelect" name="size">
@@ -154,7 +159,7 @@
                             <option value="L (80x80 cm)">L — 80 x 80 cm (190,00 €)</option>
                             <option value="XL (100x100 cm)" selected>XL — 100 x 100 cm (240,00 €)</option>
                             <option value="XXL (120x120 cm)">XXL — 120 x 120 cm (310,00 €)</option>
-                            <option value="XXXL (150x150 cm)">XXXL — 150 x 150 cm / 1,50 m (420,00 €)</option>
+                            <option value="XXXL (150x150 cm)">XXXL — 150 x 150 cm (420,00 €)</option>
                         </select>
                     </div>
                     <div class="nav-buttons">
@@ -170,16 +175,16 @@
             <!-- SCHRITT 3 -->
             <div class="config-step" id="step-3">
                 <div class="step-panel">
-                    <h2>3. Art des Untergrunds (Holz & Weiß)</h2>
+                    <h2>3. Untergrund & Farbe</h2>
                     <div class="form-group">
-                        <label>Untergrund & Farbe</label>
+                        <label>Untergrund</label>
                         <select id="woodSelect" name="wood">
-                            <option value="Klassik Weiß matt" data-theme="wood-weiss" selected>Klassik Weiß matt (Standard)</option>
-                            <option value="MDF Schwarz matt" data-theme="wood-mdf">MDF Schwarz matt beschichtet</option>
-                            <option value="Eiche Natur geölt" data-theme="wood-eiche">Eiche Natur geölt (+50,00 €)</option>
-                            <option value="Nussbaum Premium" data-theme="wood-nussbaum">Nussbaum Premium gebeizt (+80,00 €)</option>
-                            <option value="Schwarze Esche" data-theme="wood-esche">Schwarze Esche gebürstet (+90,00 €)</option>
-                            <option value="Beton-Look" data-theme="wood-beton">Beton-Look Manufaktur (+60,00 €)</option>
+                            <option value="Klassik Weiß matt" data-theme="wood-weiss" selected>Klassik Weiß matt</option>
+                            <option value="MDF Schwarz matt" data-theme="wood-mdf">MDF Schwarz matt</option>
+                            <option value="Eiche Natur geölt" data-theme="wood-eiche">Eiche Natur geölt (+50 €)</option>
+                            <option value="Nussbaum Premium" data-theme="wood-nussbaum">Nussbaum Premium (+80 €)</option>
+                            <option value="Schwarze Esche" data-theme="wood-esche">Schwarze Esche (+90 €)</option>
+                            <option value="Beton-Look" data-theme="wood-beton">Beton-Look (+60 €)</option>
                         </select>
                     </div>
                     <div class="nav-buttons">
@@ -195,7 +200,7 @@
             <!-- SCHRITT 4 -->
             <div class="config-step" id="step-4">
                 <div class="step-panel">
-                    <h2>4. Faden & Fadendicke</h2>
+                    <h2>4. Faden & Dicke</h2>
                     <div class="form-group">
                         <label>Fadenfarbe</label>
                         <select id="threadColorSelect" name="thread_color">
@@ -208,7 +213,7 @@
                     <div class="form-group">
                         <label>Fadendicke</label>
                         <select id="threadThicknessSelect" name="thread_thickness">
-                            <option value="0.15">Fein — 0.15 mm (Ultra-Scharf)</option>
+                            <option value="0.15">Fein — 0.15 mm</option>
                             <option value="0.20" selected>Standard — 0.20 mm</option>
                             <option value="0.30">Kräftig — 0.30 mm</option>
                         </select>
@@ -219,7 +224,7 @@
                     </div>
                 </div>
                 <div class="preview-panel wood-weiss" id="threadPreviewPanel">
-                    <div class="preview-placeholder" id="threadPlaceholder">Faden- & Nagel-Live-Vorschau aktiv</div>
+                    <div class="preview-placeholder" id="threadPlaceholder">Faden- & Nagel-Live-Vorschau</div>
                     <canvas id="threadPreviewCanvas"></canvas>
                 </div>
             </div>
@@ -227,46 +232,46 @@
             <!-- SCHRITT 5 -->
             <div class="config-step" id="step-5">
                 <div class="step-panel">
-                    <h2>5. Pins & Ansicht wählen</h2>
+                    <h2>5. Pins & Berechnung</h2>
                     <div class="form-group">
                         <label>Anzahl Pins</label>
                         <select id="nailSelect" name="nail">
-                            <option value="240 Pins">240 Pins (Standard Detailgrad)</option>
-                            <option value="360 Pins">360 Pins (High-End Masterpiece +70,00 €)</option>
+                            <option value="240 Pins">240 Pins (Standard)</option>
+                            <option value="360 Pins">360 Pins (High-End +70 €)</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Vorschau-Modus nach Berechnung</label>
+                        <label>Vorschau-Modus</label>
                         <select id="viewModeSelect">
-                            <option value="static">Fertiges Kunstwerk (Standbild)</option>
-                            <option value="animation">15-Sekunden Entstehungs-Prozess (Animation)</option>
+                            <option value="static">Fertiges Kunstwerk</option>
+                            <option value="animation">15-Sekunden Animation</option>
                         </select>
                     </div>
                     <div class="nav-buttons">
                         <button type="button" class="btn-outline" onclick="prevStep(5)">Zurück</button>
-                        <button type="button" class="btn-gold" style="width: auto;" id="calculateBtn">Kunstwerk berechnen</button>
+                        <button type="button" class="btn-gold" style="width: auto;" id="calculateBtn">Berechnen</button>
                     </div>
                 </div>
                 <div class="preview-panel wood-weiss wood-preview-box" id="resultPreviewPanel">
                     <div class="loader" id="loader"></div>
-                    <div class="preview-placeholder" id="resultPlaceholder">Klicke auf Berechnen, um dein Meisterwerk zu generieren.</div>
-                    <img id="finalResultImage" alt="Dein String Art Meisterwerk">
+                    <div class="preview-placeholder" id="resultPlaceholder">Klicke auf Berechnen.</div>
+                    <img id="finalResultImage" alt="String Art Meisterwerk">
                     
                     <div id="checkoutSection">
-                        <h3 style="font-family:'Cinzel',serif; color:var(--text-gold); margin-bottom:0.8rem; font-size:1.1rem;">Dein Meisterwerk ist bereit</h3>
-                        <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">Gib deine E-Mail-Adresse ein, um die Bestellung und die Produktionsdaten abzuschließen.</p>
-                        <div class="form-group" style="margin-bottom:1rem;">
-                            <input type="email" id="customerEmail" placeholder="deine-email@beispiel.de">
+                        <h3 style="font-family:'Cinzel',serif; color:var(--text-gold); margin-bottom:0.5rem; font-size:1rem;">Meisterwerk bereit</h3>
+                        <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:0.8rem;">E-Mail für Bestelldaten:</p>
+                        <div class="form-group" style="margin-bottom:0.8rem;">
+                            <input type="email" id="customerEmail" placeholder="deine@email.de">
                         </div>
-                        <button type="button" class="btn-gold" id="checkoutBtn">Jetzt verbindlich bestellen & bezahlen</button>
+                        <button type="button" class="btn-gold" id="checkoutBtn">Verbindlich bestellen</button>
                     </div>
                 </div>
             </div>
         </form>
 
         <footer>
-            <div>&copy; 2026 Faded Art. Alle Rechte vorbehalten. Exklusive Manufaktur.</div>
-            <div style="margin-top: 1rem;">
+            <div>&copy; 2026 Faded Art. Alle Rechte vorbehalten.</div>
+            <div style="margin-top: 0.8rem;">
                 <a href="#">Impressum</a> | <a href="#">Datenschutz</a> | <a href="#">AGB</a>
             </div>
         </footer>
@@ -287,7 +292,6 @@
                 document.getElementById(`tab-${currentStep}`).classList.add('active');
                 document.getElementById(`step-${currentStep}`).classList.add('active');
 
-                // Wenn man zu Schritt 4 wechselt, Faden-Vorschau rendern
                 if(currentStep === 4) {
                     drawThreadPreview();
                 }
@@ -306,19 +310,16 @@
             }
         }
 
-        // Live-Holzwechsel / Untergrund für alle Vorschau-Panels synchronisieren
         const woodSelect = document.getElementById('woodSelect');
         woodSelect.addEventListener('change', function() {
             const selectedOption = this.options[this.selectedIndex];
             const themeClass = selectedOption.getAttribute('data-theme');
             document.querySelectorAll('.preview-panel').forEach(panel => {
-                // Nur die Theme-Klasse ersetzen, preview-panel beibehalten
                 panel.className = panel.className.replace(/wood-\w+/g, '') + ' ' + themeClass;
             });
             if(currentStep === 4) drawThreadPreview();
         });
 
-        // Fadenfarbe / Dicke Änderung Live-Update
         const threadColorSelect = document.getElementById('threadColorSelect');
         const threadThicknessSelect = document.getElementById('threadThicknessSelect');
         threadColorSelect.addEventListener('change', drawThreadPreview);
@@ -332,20 +333,18 @@
             tPlaceholder.style.display = 'none';
             tCanvas.style.display = 'block';
 
-            let canvasW = tCanvas.parentElement.clientWidth - 80;
+            let canvasW = tCanvas.parentElement.clientWidth - 40;
             tCanvas.width = canvasW;
             tCanvas.height = canvasW;
             let radius = canvasW * 0.42;
 
             tCtx.clearRect(0, 0, tCanvas.width, tCanvas.height);
 
-            // Fadenfarbe ermitteln
             const selectedOpt = threadColorSelect.options[threadColorSelect.selectedIndex];
             const threadHex = selectedOpt.getAttribute('data-hex');
             const thickness = parseFloat(threadThicknessSelect.value);
-            let lineWidth = thickness * 5; // Sichtbar machen im Canvas
+            let lineWidth = thickness * 5;
 
-            // Pins (Nägel) um den Kreis zeichnen
             let nailCount = 240;
             let pins = [];
             for(let i=0; i<nailCount; i++) {
@@ -355,7 +354,6 @@
                 pins.push({x: nx, y: ny});
             }
 
-            // Einige gekreuzte Fäden zur Demonstration der Farbe und Dicke zeichnen
             tCtx.strokeStyle = threadHex;
             tCtx.lineWidth = lineWidth;
             tCtx.globalAlpha = 0.4;
@@ -369,12 +367,11 @@
                 tCtx.stroke();
             }
 
-            // Pins (Nägel) als metallische Punkte zeichnen
             tCtx.globalAlpha = 1.0;
             pins.forEach(p => {
                 tCtx.beginPath();
-                tCtx.arc(p.x, p.y, 3.5, 0, Math.PI*2);
-                tCtx.fillStyle = '#d4af37'; // Goldene Pins als Vorschau
+                tCtx.arc(p.x, p.y, 3, 0, Math.PI*2);
+                tCtx.fillStyle = '#d4af37';
                 tCtx.fill();
                 tCtx.lineWidth = 1;
                 tCtx.strokeStyle = '#000';
@@ -413,7 +410,7 @@
         });
 
         function fitImageToCircle() {
-            let canvasW = canvas.parentElement.clientWidth - 80;
+            let canvasW = canvas.parentElement.clientWidth - 40;
             let circleW = circleRadius * 2;
             canvas.width = canvasW;
             canvas.height = canvasW;
@@ -448,7 +445,7 @@
                 let nx = canvas.width/2 + circleRadius * Math.cos(angle);
                 let ny = canvas.height/2 + circleRadius * Math.sin(angle);
                 ctx.beginPath();
-                ctx.arc(nx, ny, 3.5, 0, Math.PI*2);
+                ctx.arc(nx, ny, 3, 0, Math.PI*2);
                 ctx.fillStyle = '#d4af37';
                 ctx.fill();
             }
@@ -475,7 +472,6 @@
         scaleRange.addEventListener('input', function() { imgScale = parseFloat(this.value); drawPreview(); });
         centerBtn.addEventListener('click', function() { fitImageToCircle(); drawPreview(); });
 
-        // --- BERECHNUNG AUSLÖSEN ---
         document.getElementById('calculateBtn').addEventListener('click', function() {
             const loader = document.getElementById('loader');
             const resultPlaceholder = document.getElementById('resultPlaceholder');
@@ -484,7 +480,7 @@
             
             loader.style.display = 'block';
             resultPlaceholder.style.display = 'block';
-            resultPlaceholder.textContent = 'Dein Meisterwerk mit gewählter Fadenfarbe wird berechnet...';
+            resultPlaceholder.textContent = 'Berechne Meisterwerk...';
             finalResultImage.style.display = 'none';
             checkoutSection.style.display = 'none';
 
@@ -515,16 +511,15 @@
             })
             .catch(error => {
                 loader.style.display = 'none';
-                resultPlaceholder.textContent = 'Fehler bei der Berechnung aufgetreten.';
+                resultPlaceholder.textContent = 'Fehler bei der Berechnung.';
                 console.error('Error:', error);
             });
         });
 
-        // --- CHECKOUT ---
         document.getElementById('checkoutBtn').addEventListener('click', function() {
             const email = document.getElementById('customerEmail').value;
             if(!email) {
-                alert('Bitte gib eine gültige E-Mail-Adresse ein.');
+                alert('Bitte E-Mail eingeben.');
                 return;
             }
 
@@ -546,11 +541,11 @@
             .then(res => res.json())
             .then(data => {
                 if(data.status === 'success') {
-                    alert('Vielen Dank für deine Bestellung! Die Produktionsdaten wurden erfolgreich übermittelt.');
+                    alert('Bestellung erfolgreich abgeschickt!');
                 }
             })
             .catch(err => {
-                alert('Fehler beim Absenden der Bestellung.');
+                alert('Fehler beim Bestellen.');
             });
         });
     </script>
