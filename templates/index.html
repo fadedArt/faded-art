@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <h1 class="gold-text">Ihr Foto als String Art, gespannt aus einem einzigen Faden</h1>
+  <p>Laden Sie ein Foto hoch, wählen Sie Größe, Untergrund und Fadenfarbe und sehen Sie das berechnete Ergebnis, bevor Sie bestellen.</p>
+  <a href="/configure" class="btn btn-gold">Foto hochladen</a>
+</section>
+
+<section class="block">
+  <h2 class="title">So funktioniert's</h2>
+  <div class="grid">
+    <div class="card"><h3>1. Foto wählen</h3><p>Ausschnitt im Kreis zoomen und verschieben.</p></div>
+    <div class="card"><h3>2. Gestalten</h3><p>Größe, Untergrund, Fadenfarbe und Pin-Anzahl festlegen.</p></div>
+    <div class="card"><h3>3. Vorschau prüfen</h3><p>Das Ergebnis wird berechnet und als Vorschau gezeigt.</p></div>
+    <div class="card"><h3>4. Sicher bezahlen</h3><p>Bezahlung über Stripe, danach geht Ihr Bild in Fertigung.</p></div>
+  </div>
+</section>
+
+<section class="block">
+  <h2 class="title">Beispiele</h2>
+  <div class="grid">
+    <!-- TODO: Platzhalter durch echte Fotos ersetzen (static/img/...) -->
+    <article class="card"><div class="disc-mock">Beispiel</div><h3>Tiger</h3><p>360 Pins, schwarzer Faden, Eiche natur geölt, 100 × 100 cm</p></article>
+    <article class="card"><div class="disc-mock">Beispiel</div><h3>Porträt</h3><p>240 Pins, Champagner Gold, MDF schwarz matt, 80 × 80 cm</p></article>
+  </div>
+</section>
+{% endblock %}
+
