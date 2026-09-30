@@ -191,6 +191,8 @@ def compute_string_art(ref, m):
         used[cur, cand[j]] = used[cand[j], cur] = True
         cur = int(cand[j])
         seq.append(cur)
+        if len(seq) % 200 == 0:                              # Fortschritt und Lebenszeichen für die Anzeige
+            update(ref, progress=min(99, int(100 * len(seq) / n_lines)), beat=time.time())
 
     # 4) Rendern in 2000 px: jeder Faden ~1 px (bei 1000 px) breit, Deckkraft überlagert sich physikalisch
     k = S / W
@@ -206,9 +208,12 @@ def compute_string_art(ref, m):
         step = S if abs(P[v, 0] - P[u, 0]) >= abs(P[v, 1] - P[u, 1]) else 1
         idx = (base[:, None] + (np.arange(lw) - lw // 2)[None, :] * step).ravel()
         cnt[np.unique(idx[(idx >= 0) & (idx < S * S)])] += 1
-    coverage = (1 - np.power(1 - a, cnt.astype(np.float32))).reshape(S, S, 1)
     d0, t0 = np.asarray(disc, np.float32), np.asarray(thread, np.float32)
-    art = Image.fromarray((d0 + (t0 - d0) * coverage).astype(np.uint8), "RGB")
+    rgb = np.empty((S, S, 3), np.uint8)                     # streifenweise berechnen: spart Arbeitsspeicher (Render Free hat nur 512 MB)
+    for r0 in range(0, S, 250):
+        cov_s = (1 - np.power(1 - a, cnt[r0 * S:(r0 + 250) * S].astype(np.float32))).reshape(-1, S, 1)
+        rgb[r0:r0 + 250] = (d0 + (t0 - d0) * cov_s).astype(np.uint8)
+    art = Image.fromarray(rgb, "RGB")
     pin_col = PINCOL[m.get("pin", "gold")][1]
     edge = (40, 40, 40) if lum(pin_col) > 90 else (170, 170, 170)
     dr = ImageDraw.Draw(art)
@@ -269,12 +274,12 @@ Gesamtschritte: {len(seq)}
 
 def run_job(ref):
     try:
-        update(ref, status="running")
+        update(ref, status="running", beat=time.time(), progress=0)
         compute_string_art(ref, load(ref))
-        update(ref, status="done")
+        update(ref, status="done", progress=100)
     except Exception:
         app.logger.exception("Berechnung fehlgeschlagen (%s)", ref)
-        update(ref, status="error")
+        update(ref, status="error", message="Die Berechnung ist fehlgeschlagen.")
 
 
 # ---------- Admin: bezahlte Bestellungen mit Anleitung ansehen (nur mit ADMIN_KEY) ----------
@@ -375,15 +380,21 @@ def generate():
     pool.submit(run_job, ref)
     return jsonify(order_ref=ref, job_id=ref, status="queued"), 202
 
+@app.get("/health")
+def health():
+    return jsonify(ok=True)
+
 @app.get("/status/<ref>")
 def status(ref):
     m = load(ref)
     if not m:
         abort(404)
-    if m["status"] in ("queued", "running") and time.time() - m.get("created", 0) > 900:
-        update(ref, status="error")   # Job wurde vermutlich durch Neustart abgebrochen
-        m["status"] = "error"
-    out = {"status": m["status"], "order_ref": ref, "job_id": ref}
+    if m["status"] in ("queued", "running") and time.time() - max(m.get("beat", 0), m.get("created", 0)) > 300:
+        update(ref, status="error", message="Die Berechnung wurde unterbrochen (Server-Neustart). Bitte erneut versuchen.")
+        m = load(ref)
+    out = {"status": m["status"], "order_ref": ref, "job_id": ref, "progress": m.get("progress", 0)}
+    if m["status"] == "error":
+        out["message"] = m.get("message", "Die Berechnung ist fehlgeschlagen.")
     if m["status"] == "done":
         out["preview_url"] = f"/preview/{ref}.png"
     return jsonify(out)
