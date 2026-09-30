@@ -9,6 +9,7 @@ let step = 1, view = { x: S / 2, y: S / 2, s: 1, cover: 1 }, hasImg = false, ord
 const cfg = () => { const fmt = $('format').value, size = $('size').value, [w, h] = SIZES[fmt][size];
   return { format: fmt, size, w, h, wood: $('wood').value, color: $('color').value,
     hex: $('color').selectedOptions[0].dataset.hex,
+    pin: $('pincolor').value, pinHex: $('pincolor').selectedOptions[0].dataset.hex,
     disc: $('circle').value, discHex: $('circle').selectedOptions[0].dataset.hex, thick: $('thick').value, pins: parseInt($('pins').value) }; };
 const lum = h => { const n = parseInt(h.slice(1), 16); return .299 * (n >> 16) + .587 * ((n >> 8) & 255) + .114 * (n & 255); };
 const MSG = 'Fadenfarbe und Kreisfarbe sind zu ähnlich. Bitte wähle einen stärkeren Kontrast.';
@@ -16,7 +17,11 @@ const lowContrast = () => { const c = cfg(); return Math.abs(lum(c.hex) - lum(c.
 const msg = t => { $('msg').textContent = t || ''; };
 
 function price() {
-  const c = cfg(), cents = PRICE.base_cents + Math.max(0, c.w * c.h - PRICE.base_area) * PRICE.cents_per_cm2;
+  const c = cfg();
+  if (PRICE.test_quad_cents && c.format === 'quad') {   // Testpreis für quadratische Bretter
+    $('price').textContent = 'Preis: ' + (PRICE.test_quad_cents / 100).toFixed(2).replace('.', ',') + ' € (Testpreis)'; return;
+  }
+  const cents = PRICE.base_cents + Math.max(0, c.w * c.h - PRICE.base_area) * PRICE.cents_per_cm2;
   const p = Math.round(cents) / 100 + PRICE.wood[c.wood] + PRICE.pins[c.pins];
   $('price').textContent = 'Preis: ' + p.toFixed(2).replace('.', ',') + ' €';
 }
@@ -32,11 +37,11 @@ function board() {
   price(); draw();
 }
 
-function pins(c2, r, n, size) {
-  c2.fillStyle = '#d4af37';
+function pins(c2, r, n, size, col) {
+  c2.fillStyle = col; c2.strokeStyle = 'rgba(128,128,128,.7)'; c2.lineWidth = .8;
   for (let i = 0; i < n; i++) {
     const a = 2 * Math.PI * i / n;
-    c2.beginPath(); c2.arc(S / 2 + r * Math.cos(a), S / 2 + r * Math.sin(a), size, 0, 7); c2.fill();
+    c2.beginPath(); c2.arc(S / 2 + r * Math.cos(a), S / 2 + r * Math.sin(a), size, 0, 7); c2.fill(); c2.stroke();
   }
 }
 
@@ -57,7 +62,7 @@ function draw() {
     }
     ctx.restore();
   }
-  pins(ctx, R, c.pins, 2.5);
+  pins(ctx, R, c.pins, 3, c.pinHex);
 }
 
 function fit() {
@@ -90,7 +95,7 @@ const zoomBy = f => { const z = $('zoom'); view.s = Math.min(+z.max, Math.max(+z
 $('zin').addEventListener('click', () => zoomBy(1.1));
 $('zout').addEventListener('click', () => zoomBy(1 / 1.1));
 $('center').addEventListener('click', () => { fit(); draw(); });
-['format', 'size', 'wood', 'color', 'circle', 'thick', 'pins'].forEach(id => $(id).addEventListener('input', board));
+['format', 'size', 'wood', 'color', 'circle', 'thick', 'pincolor', 'pins'].forEach(id => $(id).addEventListener('input', board));
 $('cfg').addEventListener('submit', e => e.preventDefault());
 
 function show(n) {
@@ -132,13 +137,14 @@ async function generate() {
   try {
     const c = cfg(), fd = new FormData();
     fd.append('image', await cropBlob(), 'crop.png');
-    ['format', 'size', 'wood', 'color', 'disc', 'thick', 'pins'].forEach(k => fd.append(k, c[k]));
+    ['format', 'size', 'wood', 'color', 'disc', 'thick', 'pin', 'pins'].forEach(k => fd.append(k, c[k]));
     const res = await fetch('/generate', { method: 'POST', body: fd });
-    if (!res.ok) throw new Error('Server-Fehler ' + res.status);
+    if (!res.ok) { let m = ''; try { m = (await res.json()).message; } catch (e) {} throw new Error(m || 'Server-Fehler ' + res.status); }
     let d = await res.json();
-    for (let i = 0; d.job_id && d.status !== 'done' && i < 240; i++) { // Polling bei Hintergrundjob
+    const jobId = d.job_id;                                  // Job-ID merken: die Status-Antwort ersetzt d
+    for (let i = 0; jobId && d.status !== 'done' && i < 480; i++) {   // Polling bis zu 12 Minuten
       await new Promise(r => setTimeout(r, 1500));
-      d = await (await fetch('/status/' + d.job_id)).json();
+      try { d = await (await fetch('/status/' + jobId)).json(); } catch (e) { continue; }
       if (d.status === 'error') throw new Error('Berechnung fehlgeschlagen');
     }
     if (!d.preview_url) throw new Error('Die Berechnung dauert ungewöhnlich lange');
