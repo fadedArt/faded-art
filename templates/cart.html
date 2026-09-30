@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Warenkorb – Faded Art{% endblock %}
+{% block content %}
+<section class="block">
+  <h2 class="title">Warenkorb</h2>
+  {% if items %}
+  <div class="cart">
+    {% for i in items %}
+    <div class="card cart-item" data-ref="{{ i.ref }}">
+      <img src="/preview/{{ i.ref }}.png" alt="Vorschau" width="88" height="88">
+      <div><h3>{{ i.title }}</h3><p class="price">{{ i.cents|euro }}</p></div>
+      <button type="button" class="btn rm">Entfernen</button>
+    </div>
+    {% endfor %}
+    <div class="card">
+      <p class="price" style="margin-bottom:1rem">Gesamt: {{ total|euro }}</p>
+      <div class="field"><label for="email">E-Mail für Ihre Bestellung</label><input type="email" id="email" autocomplete="email" placeholder="name@beispiel.de"></div>
+      <div class="field"><label style="text-transform:none;font-weight:400"><input type="checkbox" id="agb">Ich akzeptiere die <a href="/agb" target="_blank" rel="noopener">AGB</a> und habe die <a href="/widerruf" target="_blank" rel="noopener">Widerrufsbelehrung</a> gelesen. Mir ist bekannt, dass für individuell angefertigte Ware kein Widerrufsrecht besteht.</label></div>
+      <button type="button" class="btn btn-gold" id="pay" style="width:100%">Zahlungspflichtig bestellen</button>
+      <p class="msg" id="msg" role="alert"></p>
+      <a href="/configure" class="btn" style="margin-top:.5rem">Weiteres Bild konfigurieren</a>
+    </div>
+  </div>
+  {% else %}
+  <div class="cart-empty"><p style="margin-bottom:1.5rem">Ihr Warenkorb ist leer.</p><a href="/configure" class="btn btn-gold">Jetzt konfigurieren</a></div>
+  {% endif %}
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+document.querySelectorAll('.rm').forEach(b => b.addEventListener('click', async () => {
+  await post('/cart/remove', { order_ref: b.closest('.cart-item').dataset.ref }); location.reload();
+}));
+const pay = document.getElementById('pay');
+if (pay) pay.addEventListener('click', async () => {
+  const msg = t => document.getElementById('msg').textContent = t || '';
+  const email = document.getElementById('email').value.trim();
+  if (!/^\S+@\S+\.\S+$/.test(email)) return msg('Bitte eine gültige E-Mail-Adresse eingeben.');
+  if (!document.getElementById('agb').checked) return msg('Bitte AGB und Widerrufsbelehrung bestätigen.');
+  pay.disabled = true; msg('');
+  try {
+    const d = await (await post('/checkout', { email, agb: true })).json();
+    if (d.url) location.href = d.url; else throw new Error(d.message || 'Unbekannt');
+  } catch (e) { msg('Checkout nicht möglich: ' + e.message); pay.disabled = false; }
+});
+</script>
+{% endblock %}
+
