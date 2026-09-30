@@ -1,4 +1,0 @@
-Flask
-numpy
-Pillow
-scikit-image
