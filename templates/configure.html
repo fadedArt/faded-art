@@ -44,6 +44,16 @@
         <option value="gold" data-hex="#d4af37">Champagner Gold</option>
         <option value="silber" data-hex="#c0c0c0">Silber</option>
       </select></div>
+    <div class="field"><label for="circle">Farbe des Kreises (Untergrund des Bildes)</label>
+      <select id="circle">
+        <option value="weiss" data-hex="#fafafa">Weiß</option>
+        <option value="creme" data-hex="#ece0c8">Creme</option>
+        <option value="braun" data-hex="#6e4a2d">Braun</option>
+        <option value="anthrazit" data-hex="#2d2d30">Anthrazit</option>
+        <option value="schwarz" data-hex="#0e0e0e">Schwarz</option>
+        <option value="marine" data-hex="#182442">Marineblau</option>
+      </select>
+      <p class="hint" style="margin-top:.4rem">Tipp: Helle Fäden auf dunklem Kreis eignen sich gut für Fotos mit dunklem Hintergrund.</p></div>
     <div class="field"><label for="thick">Dicke</label>
       <select id="thick"><option value="0.15">Fein, 0,15 mm</option><option value="0.20" selected>Standard, 0,20 mm</option><option value="0.30">Kräftig, 0,30 mm</option></select></div>
   </section>
@@ -59,6 +69,7 @@
       <p class="hint" id="cartinfo" style="margin-top:.75rem"></p>
     </div>
   </section>
+  <p class="hint" id="wait"></p>
   <p class="msg" id="msg" role="alert"></p>
   <div class="nav">
     <button type="button" class="btn" id="back">Zurück</button>
