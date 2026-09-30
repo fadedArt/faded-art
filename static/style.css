@@ -88,4 +88,7 @@ mark{background:rgba(212,175,55,.2);color:var(--gold-t);padding:0 .25rem;border-
 .cart-item>div{flex:1}
 .cart-item h3{font-size:1rem;margin-bottom:.2rem}
 .cart-empty{text-align:center;color:var(--muted)}
+/* Beispielbilder */
+.disc-mock.ex{position:relative;width:220px;overflow:hidden}
+.disc-mock.ex img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
 
