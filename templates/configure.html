@@ -97,5 +97,5 @@
 </div>
 </form>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='configure.js') }}"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='configure.js', v=asset_v('configure.js')) }}"></script>{% endblock %}
 
