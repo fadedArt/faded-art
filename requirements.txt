@@ -1,7 +1,0 @@
-Flask>=3.0
-numpy
-Pillow>=10.1
-scikit-image
-stripe
-gunicorn
-
