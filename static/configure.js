@@ -128,6 +128,17 @@ function cropBlob() { // exakt der sichtbare Kreisausschnitt, ohne Pins
   return new Promise(r => o.toBlob(r, 'image/png'));
 }
 
+async function fetchRetry(url, opts, tries = 4) {   // Server aufgeweckt/neu gestartet? Mehrfach versuchen
+  for (let i = 1; ; i++) {
+    try { return await fetch(url, opts); }
+    catch (e) {
+      if (i >= tries) throw new Error('Der Server ist gerade nicht erreichbar. Bitte in einer Minute erneut versuchen');
+      $('wait').textContent = 'Server wird geweckt, neuer Versuch ' + i + ' von ' + (tries - 1) + ' …';
+      await new Promise(r => setTimeout(r, 5000));
+    }
+  }
+}
+
 async function generate() {
   if (busy) return;
   if (lowContrast()) return msg(MSG);
@@ -135,17 +146,22 @@ async function generate() {
   $('wait').textContent = 'Berechnung läuft, das dauert meist unter einer Minute …';
   $('spin').hidden = false; $('checkout').hidden = true;
   try {
+    await fetchRetry('/health', {}, 10);                      // Server zuerst aufwecken
+    $('wait').textContent = 'Berechnung läuft, auf dem Server kann das 1 bis 3 Minuten dauern …';
     const c = cfg(), fd = new FormData();
     fd.append('image', await cropBlob(), 'crop.png');
     ['format', 'size', 'wood', 'color', 'disc', 'thick', 'pin', 'pins'].forEach(k => fd.append(k, c[k]));
-    const res = await fetch('/generate', { method: 'POST', body: fd });
+    const res = await fetchRetry('/generate', { method: 'POST', body: fd });
     if (!res.ok) { let m = ''; try { m = (await res.json()).message; } catch (e) {} throw new Error(m || 'Server-Fehler ' + res.status); }
     let d = await res.json();
+    let fails = 0;
     const jobId = d.job_id;                                  // Job-ID merken: die Status-Antwort ersetzt d
     for (let i = 0; jobId && d.status !== 'done' && i < 480; i++) {   // Polling bis zu 12 Minuten
       await new Promise(r => setTimeout(r, 1500));
-      try { d = await (await fetch('/status/' + jobId)).json(); } catch (e) { continue; }
-      if (d.status === 'error') throw new Error('Berechnung fehlgeschlagen');
+      try { d = await (await fetch('/status/' + jobId)).json(); fails = 0; }
+      catch (e) { if (++fails > 40) throw new Error('Die Verbindung zum Server ist abgebrochen'); continue; }
+      if (d.status === 'error') throw new Error(d.message || 'Berechnung fehlgeschlagen');
+      $('wait').textContent = 'Berechnung läuft … ' + (d.progress || 0) + ' % (bis zu 3 Minuten)';
     }
     if (!d.preview_url) throw new Error('Die Berechnung dauert ungewöhnlich lange');
     orderRef = d.order_ref;
@@ -177,3 +193,4 @@ $('buy').addEventListener('click', async () => {
 
 show(1); board();
 })();
+
