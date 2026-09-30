@@ -1,13 +1,17 @@
-import json, math, os, re, time, uuid
+import hmac, json, math, os, re, smtplib, threading, time, uuid
+from email.message import EmailMessage
+from datetime import datetime
 from datetime import timedelta
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import stripe
-from flask import Flask, abort, jsonify, render_template, request, send_file, session
+from flask import Flask, abort, jsonify, render_template, render_template_string, request, send_file, session
+from werkzeug.middleware.proxy_fix import ProxyFix
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)   # hinter Render: richtige https-Adresse für Stripe
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 # SECRET_KEY unbedingt als Umgebungsvariable setzen (sonst gehen Warenkörbe bei Neustart verloren)
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24).hex()
@@ -22,7 +26,7 @@ DATA_DIR = os.environ.get("DATA_DIR", "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 IMAGE_SIZE = 1000
-pool = ThreadPoolExecutor(max_workers=2)
+pool = ThreadPoolExecutor(max_workers=1)   # eine Berechnung gleichzeitig (schont den Arbeitsspeicher)
 REF_RE = re.compile(r"^[0-9a-f]{32}$")
 
 # Schlüssel = Werte aus dem Konfigurator; (Anzeigename, RGB, Aufpreis in €)
@@ -45,12 +49,26 @@ DISC = {  # Farbe des Kreises in der Mitte
     "braun": ("Braun", (110, 74, 45)), "anthrazit": ("Anthrazit", (45, 45, 48)),
     "schwarz": ("Schwarz", (14, 14, 14)), "marine": ("Marineblau", (24, 36, 66)),
 }
-THICK = {"0.15": 0.16, "0.20": 0.22, "0.30": 0.32}  # Fadendicke -> Deckkraft pro Faden
+THICK = {"0.15": 14 / 255, "0.20": 20 / 255, "0.30": 30 / 255}   # "Line Weight" 14 / 20 / 30 von 255  # Fadendicke -> Deckkraft pro Faden
+PINCOL = {  # Farbe der Nägel
+    "gold": ("Gold", (212, 175, 55)), "silber": ("Silber", (205, 205, 205)),
+    "schwarz": ("Schwarz", (30, 30, 30)), "weiss": ("Weiß", (245, 245, 245)),
+    "kupfer": ("Kupfer", (184, 115, 51)),
+}
+LINES = {240: 8000, 360: 10000}   # Anzahl Fäden je Pin-Zahl
+LENPOW, BUDGET, GAMMA0, TONE = 0.25, 3.0, 1.0, 1.0
+TONE_LIGHT, GAMMA_LIGHT = 1.0, 1.0   # helle Fäden auf dunklem Kreis: Fäden addieren sich optisch, daher sparsamer       # Gewicht der Sehnenlänge, Faden-Budget für die Tonwerte
+LOCAL, LC_R = 0.0, 40         # Stärke und Radius des lokalen Kontrasts
+LINE_W = 3.5                      # Fadenbreite in Pixeln (bei 1000 px Bildbreite)
+AUTOSTOP, MIN_GAP = True, 25        # Auto-Stopp; Mindestabstand in Nägeln (bei 360 Pins)
+TOPK = 1                          # 1 = immer die beste Sehne
+CELL, SAMPLES = 2, 300            # Rastergröße der Bewertung, Abtastpunkte je Sehne
 MIN_CONTRAST = 60
 
 def lum(rgb):
     return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 PINS = {240: 0, 360: 70}                       # Pins -> Aufpreis in €
+TEST_QUAD_CENTS = int(os.environ.get("TESTPREIS_QUAD_CENTS", "50"))   # Testpreis für ALLE quadratischen Bretter; 0 = aus (Live-Betrieb!)
 BASE_CENTS, BASE_AREA, CENTS_PER_CM2 = 50, 2500, 2.5  # 0,50 € ist noch der Testpreis!
 # Feste Größen (Breite x Höhe in cm) je Format. Einzige Quelle: Frontend liest sie von hier.
 SIZES = {
@@ -82,6 +100,8 @@ def update(ref, **kw):
     os.replace(p + ".tmp", p)
 
 def price_cents(m):
+    if TEST_QUAD_CENTS and m.get("fmt") == "quad":
+        return TEST_QUAD_CENTS
     extra = max(0, m["w"] * m["h"] - BASE_AREA) * CENTS_PER_CM2
     return BASE_CENTS + round(extra) + (WOOD[m["wood"]][2] + PINS[m["pins"]]) * 100
 
@@ -108,13 +128,18 @@ def compute_string_art(ref, m):
     thread, disc = COLORS[m["color"]][1], DISC[m["disc"]][1]
     bg = WOOD[m["wood"]][1]
     W, S = 1000, 2000
-    n_lines = 8000 if n > 300 else 5500
+    n_lines = LINES[n]
 
     # 1) Bild vorbereiten: Kontrast, Schärfe, dann "gewünschte Fadendichte" c (0..1)
     img = Image.open(os.path.join(d, "input.png")).convert("L").resize((W, W), Image.Resampling.LANCZOS)
     img = ImageOps.autocontrast(img, cutoff=1.5).filter(ImageFilter.UnsharpMask(radius=3, percent=140, threshold=2))
     nrm = np.asarray(img, dtype=np.float32) / 255.0
-    c = nrm if lum(thread) > lum(disc) else 1.0 - nrm    # heller Faden auf dunklem Grund: helle Stellen = Faden
+    if LOCAL:                                            # lokaler Kontrast: hebt Streifen, Augen, Ohren hervor
+        blur = np.asarray(img.filter(ImageFilter.GaussianBlur(LC_R)), dtype=np.float32) / 255.0
+        nrm = np.clip(nrm + LOCAL * (nrm - blur), 0, 1)
+    dark_thread = lum(thread) < lum(disc)
+    c = 1.0 - nrm if dark_thread else nrm    # heller Faden auf dunklem Grund: helle Stellen = Faden
+    c = 1.0 - (1.0 - c) ** (TONE if dark_thread else TONE_LIGHT)                          # TONE > 1: Mitteltöne bekommen mehr Fäden, das Bild wirkt plastischer
     yy, xx = np.mgrid[:W, :W]
     c = np.where((xx - W / 2) ** 2 + (yy - W / 2) ** 2 <= (W / 2 - 2) ** 2, c, 0).astype(np.float32)
 
@@ -123,40 +148,47 @@ def compute_string_art(ref, m):
     rp = W / 2 - 9
     ang = 2 * np.pi * np.arange(n) / n
     px, py = W / 2 + rp * np.cos(ang), W / 2 + rp * np.sin(ang)
-    q = 4
+    q = CELL
     Wc = W // q
     logk = np.log1p(-a)
     Tl = c.reshape(Wc, q, Wc, q).mean(axis=(1, 3)).astype(np.float32)
-    budget = 0.8 * n_lines * 0.65 * W                   # verfügbare Faden-Pixel
-    need = lambda t: float(-np.log1p(-np.minimum(t, .92)).sum() / -logk * q * q)
-    g = 1.0
+    budget = BUDGET * n_lines * 0.65 * W * LINE_W                   # verfügbare Faden-Pixel
+    need = lambda t: float(-np.log1p(-np.minimum(t, .92)).sum() / -logk * q * q)   # benötigte Faden-Pixel
+    g = GAMMA0 if dark_thread else GAMMA_LIGHT
     while need(Tl ** g) > budget and g < 4:             # Gamma: Lichter bleiben, Mitteltöne werden lichter -> mehr Kontrast
         g += 0.05
     T = np.minimum(Tl ** g, 0.92).ravel()
 
     # 3) Gierige Auswahl der Sehnen (alle Kandidaten pro Schritt gleichzeitig)
     cnt_c, cov, R = np.zeros(Wc * Wc, np.float32), np.zeros(Wc * Wc, np.float32), T.copy()
-    s = np.linspace(0, 1, 260)
-    skip, allp = (18 if n > 300 else 12), np.arange(n)
+    s = np.linspace(0, 1, SAMPLES)
+    skip, allp = max(8, round(MIN_GAP * n / 360) - 1), np.arange(n)     # Mindestabstand der Nägel je Sehne
+    KAPPA = -logk * LINE_W / (q * q)
+    used = np.zeros((n, n), bool)                                         # jede Sehne nur einmal
     seq, cur = [0], 0
+    rng = np.random.default_rng(1)
     for _ in range(n_lines):
         gap = np.abs(allp - cur)
-        cand = allp[np.minimum(gap, n - gap) > skip]
+        cand = allp[(np.minimum(gap, n - gap) > skip) & ~used[cur]]
+        if len(cand) == 0:
+            break
         X = px[cur] + (px[cand, None] - px[cur]) * s
         Y = py[cur] + (py[cand, None] - py[cur]) * s
         ix = (np.rint(Y).astype(np.int32) // q) * Wc + np.rint(X).astype(np.int32) // q
-        v = R[ix]
-        score = np.where(v > 0, v, v * 1.6).sum(axis=1) * np.hypot(px[cand] - px[cur], py[cand] - py[cur])
-        j = int(score.argmax())
-        if score[j] <= 1e-3:
-            break
+        dc = (1 - cov[ix]) * KAPPA                            # Deckungszuwachs pro Pixel Fadenweg
+        gain = (2 * R[ix] * dc - dc * dc).sum(axis=1) * np.hypot(px[cand] - px[cur], py[cand] - py[cur])   # echte Fehlerverringerung
+        j = int(gain.argmax())
+        if gain[j] <= 0:
+            break                                          # Auto-Stopp: kein Faden verbessert das Bild mehr
         ex, ey = px[cand[j]] - px[cur], py[cand[j]] - py[cur]
         tt = np.linspace(0, 1, int(np.hypot(ex, ey)) + 1)
         cells = (np.rint(py[cur] + ey * tt).astype(np.int32) // q) * Wc + np.rint(px[cur] + ex * tt).astype(np.int32) // q
         u, k_ = np.unique(cells, return_counts=True)
+        cov_new = 1 - np.exp(logk * (cnt_c[u] + k_) * LINE_W / (q * q))
         cnt_c[u] += k_
-        cov[u] = 1 - np.exp(logk * cnt_c[u] / (q * q))
+        cov[u] = cov_new
         R[u] = T[u] - cov[u]
+        used[cur, cand[j]] = used[cand[j], cur] = True
         cur = int(cand[j])
         seq.append(cur)
 
@@ -164,20 +196,24 @@ def compute_string_art(ref, m):
     k = S / W
     P = np.stack([px, py], 1) * k
     cnt = np.zeros(S * S, np.uint16)
+    lw = max(1, int(round(2 * LINE_W)))
     for u, v in zip(seq[:-1], seq[1:]):
         L = int(np.hypot(*(P[v] - P[u]))) + 1
         t = np.linspace(0, 1, L)
         x = np.clip(np.rint(P[u, 0] + (P[v, 0] - P[u, 0]) * t), 0, S - 2).astype(np.int64)
         y = np.clip(np.rint(P[u, 1] + (P[v, 1] - P[u, 1]) * t), 0, S - 2).astype(np.int64)
-        base = y * S + x
-        cnt[np.unique(np.concatenate((base, base + 1, base + S, base + S + 1)))] += 1
+        base = y * S + x                                      # Faden ist LINE_W px breit (bei 1000 px), quer zur Richtung verbreitert
+        step = S if abs(P[v, 0] - P[u, 0]) >= abs(P[v, 1] - P[u, 1]) else 1
+        idx = (base[:, None] + (np.arange(lw) - lw // 2)[None, :] * step).ravel()
+        cnt[np.unique(idx[(idx >= 0) & (idx < S * S)])] += 1
     coverage = (1 - np.power(1 - a, cnt.astype(np.float32))).reshape(S, S, 1)
     d0, t0 = np.asarray(disc, np.float32), np.asarray(thread, np.float32)
     art = Image.fromarray((d0 + (t0 - d0) * coverage).astype(np.uint8), "RGB")
-    pin_col = (212, 175, 55) if m["color"] == "gold" else (205, 205, 205)
+    pin_col = PINCOL[m.get("pin", "gold")][1]
+    edge = (40, 40, 40) if lum(pin_col) > 90 else (170, 170, 170)
     dr = ImageDraw.Draw(art)
     for x, y in P:
-        dr.ellipse([x - 5, y - 5, x + 5, y + 5], fill=pin_col, outline=(40, 40, 40))
+        dr.ellipse([x - 5, y - 5, x + 5, y + 5], fill=pin_col, outline=edge)
     art = art.reduce(2)
 
     mask = Image.new("L", (W, W), 0)
@@ -188,6 +224,48 @@ def compute_string_art(ref, m):
     watermark(final).save(os.path.join(d, "preview.png"))  # öffentlich, mit Wasserzeichen
     with open(os.path.join(d, "pinfolge.txt"), "w") as f:
         f.write(",".join(map(str, seq)))
+    write_instructions(ref, m, seq, px, py, rp)
+
+def write_instructions(ref, m, seq, px, py, rp):
+    """Anleitung mit allen Einstellungen und der kompletten Pinfolge (für die Fertigung)."""
+    n, disc_cm = m["pins"], round(min(m["w"], m["h"]) * 0.9)
+    sq = np.array(seq)
+    meters = float(np.hypot(np.diff(px[sq]), np.diff(py[sq])).sum()) * (disc_cm / 2 / rp) / 100
+    steps = "\n".join(f"Schritt {i + 1}: Pin {p}" for i, p in enumerate(seq))
+    txt = f"""FADED ART - Pinfolge und Anleitung
+Erstellt am: {datetime.now():%d.%m.%Y um %H:%M:%S}
+Bestellnummer: {ref}
+
+=== PROJEKT-EINSTELLUNGEN ===
+Anzahl Pins: {n}
+Maximale Linien: {LINES[n]}
+Verwendete Linien: {len(seq) - 1} (Auto-Stopp, sobald kein Faden das Bild mehr verbessert)
+Linienstärke: {round(THICK[m['thick']] * 255)} (Fadendicke {m['thick'].replace('.', ',')} mm)
+Fadenfarbe: {COLORS[m['color']][0]}
+Farbe des Kreises: {DISC[m['disc']][0]}
+Nagelfarbe: {PINCOL[m.get('pin', 'gold')][0]}
+Untergrund: {WOOD[m['wood']][0]}, Brett {m['w']} x {m['h']} cm
+Kreisdurchmesser (Pins): ca. {disc_cm} cm
+Fadenlänge: ca. {meters:.2f} Meter
+
+=== PINFOLGE ===
+Gesamtschritte: {len(seq)}
+
+{steps}
+
+=== ANLEITUNG ===
+1. Nagelkreis mit {n} gleichmäßig verteilten Nägeln setzen (Durchmesser ca. {disc_cm} cm)
+2. Nägel von 0 bis {n - 1} nummerieren: Pin 0 sitzt rechts auf 3 Uhr, die Nummern steigen im Uhrzeigersinn
+3. Faden an Pin 0 befestigen
+4. Der Pinfolge oben Schritt für Schritt folgen: jeden Pin mit dem nächsten verbinden
+5. Faden straff, aber nicht zu fest ziehen, damit sich das Brett nicht verzieht
+6. Weitermachen, bis alle {len(seq) - 1} Verbindungen fertig sind
+
+=== PINFOLGE ALS ZAHLENLISTE ===
+{",".join(map(str, seq))}
+"""
+    with open(os.path.join(odir(ref), "anleitung.txt"), "w", encoding="utf-8") as f:
+        f.write(txt)
 
 def run_job(ref):
     try:
@@ -199,6 +277,37 @@ def run_job(ref):
         update(ref, status="error")
 
 
+# ---------- Admin: bezahlte Bestellungen mit Anleitung ansehen (nur mit ADMIN_KEY) ----------
+def admin_ok():
+    key = os.environ.get("ADMIN_KEY", "")
+    return bool(key) and hmac.compare_digest(request.args.get("key", ""), key)
+
+@app.get("/admin")
+def admin():
+    if not admin_ok():
+        abort(404)
+    rows = []
+    for ref in os.listdir(DATA_DIR):
+        m = load(ref)
+        if m and m.get("status") == "done":
+            rows.append(dict(ref=ref, paid=m.get("paid", False), email=m.get("email") or "", title=item_title(m),
+                             cents=price_cents(m), created=time.strftime("%d.%m.%Y %H:%M", time.localtime(m.get("created", 0)))))
+    rows.sort(key=lambda r: (not r["paid"], r["created"]), reverse=False)
+    return render_template_string("""<!doctype html><meta name=viewport content="width=device-width,initial-scale=1"><title>Bestellungen</title>
+<body style="font-family:system-ui;background:#111;color:#eee;padding:1rem"><h1>Bestellungen</h1>
+{% for r in rows %}<p style="border-bottom:1px solid #333;padding:.6rem 0"><b>{{ "BEZAHLT" if r.paid else "nicht bezahlt" }}</b> {{ r.created }}<br>
+{{ r.title }}, {{ (r.cents / 100)|round(2) }} €<br>{{ r.email }}<br>
+<a style="color:#e6ca65" href="/admin/{{ r.ref }}/anleitung.txt?key={{ key }}">Anleitung mit Pinfolge</a> |
+<a style="color:#e6ca65" href="/admin/{{ r.ref }}/final.png?key={{ key }}">Bild in voller Größe</a></p>{% else %}<p>Noch keine Bestellungen.</p>{% endfor %}""",
+        rows=rows, key=request.args.get("key"))
+
+@app.get("/admin/<ref>/<name>")
+def admin_file(ref, name):
+    if not admin_ok() or name not in ("anleitung.txt", "final.png", "pinfolge.txt") or not load(ref):
+        abort(404)
+    return send_file(os.path.join(odir(ref), name), as_attachment=(name != "final.png"), max_age=0)
+
+
 # ---------- Seiten ----------
 @app.get("/")
 def index():
@@ -207,7 +316,7 @@ def index():
 @app.get("/configure")
 def configure():
     cfg = {"sizes": SIZES, "pricing": {
-        "base_cents": BASE_CENTS, "base_area": BASE_AREA, "cents_per_cm2": CENTS_PER_CM2,
+        "test_quad_cents": TEST_QUAD_CENTS, "base_cents": BASE_CENTS, "base_area": BASE_AREA, "cents_per_cm2": CENTS_PER_CM2,
         "wood": {k: v[2] for k, v in WOOD.items()}, "pins": PINS}}
     return render_template("configure.html", cfg=cfg)
 
@@ -245,7 +354,9 @@ def generate():
 
     wood, color, thick = form.get("wood"), form.get("color"), form.get("thick")
     pins = clamp(form.get("pins"), 0, 10000)
-    disc = form.get("disc")
+    disc, pin = form.get("disc"), form.get("pin")
+    if pin not in PINCOL:
+        return jsonify(message="Ungültige Nagelfarbe"), 400
     if disc not in DISC:
         return jsonify(message="Ungültige Kreisfarbe"), 400
     if color in COLORS and abs(lum(COLORS[color][1]) - lum(DISC[disc][1])) < MIN_CONTRAST:
@@ -260,7 +371,7 @@ def generate():
     os.makedirs(odir(ref))
     img.save(os.path.join(odir(ref), "input.png"))
     update(ref, fmt=fmt, size=size, w=SIZES[fmt][size][0], h=SIZES[fmt][size][1], wood=wood,
-           color=color, disc=disc, thick=thick, pins=pins, status="queued", paid=False, created=time.time())
+           color=color, disc=disc, pin=pin, thick=thick, pins=pins, status="queued", paid=False, created=time.time())
     pool.submit(run_job, ref)
     return jsonify(order_ref=ref, job_id=ref, status="queued"), 202
 
@@ -272,7 +383,7 @@ def status(ref):
     if m["status"] in ("queued", "running") and time.time() - m.get("created", 0) > 900:
         update(ref, status="error")   # Job wurde vermutlich durch Neustart abgebrochen
         m["status"] = "error"
-    out = {"status": m["status"], "order_ref": ref}
+    out = {"status": m["status"], "order_ref": ref, "job_id": ref}
     if m["status"] == "done":
         out["preview_url"] = f"/preview/{ref}.png"
     return jsonify(out)
@@ -288,7 +399,7 @@ MAX_CART = 10
 
 def item_title(m):
     return (f"String Art {m.get('size', '')} ({m['w']}x{m['h']} cm), {WOOD[m['wood']][0]}, "
-            f"{COLORS[m['color']][0]}, {m['pins']} Pins")
+            f"{COLORS[m['color']][0]} auf {DISC[m['disc']][0]}, {m['pins']} Pins ({PINCOL[m.get('pin', 'gold')][0]})")
 
 def cart_items():
     items, keep = [], []
@@ -359,6 +470,28 @@ def checkout():
         app.logger.exception("Stripe-Fehler")
         return jsonify(message="Checkout konnte nicht gestartet werden"), 500
 
+def notify_owner(ref):
+    """Schickt dir bei jeder bezahlten Bestellung Anleitung und Bild per E-Mail (sichert die Daten, falls der Server-Speicher gelöscht wird)."""
+    try:
+        host, to = os.environ.get("SMTP_HOST"), os.environ.get("ORDER_MAIL_TO")
+        if not (host and to):
+            app.logger.warning("Bestellung %s bezahlt. SMTP_HOST/ORDER_MAIL_TO fehlen, keine E-Mail. Daten liegen in %s", ref, odir(ref))
+            return
+        m = load(ref)
+        msg = EmailMessage()
+        msg["Subject"], msg["To"], msg["From"] = f"Neue Bestellung: {item_title(m)}", to, os.environ.get("SMTP_USER", to)
+        msg.set_content(f"Bezahlt: {price_cents(m) / 100:.2f} EUR\nKunden-E-Mail: {m.get('email')}\nBestellnummer: {ref}\n"
+                        "Anleitung mit Pinfolge und Bild im Anhang. Die Lieferadresse steht im Stripe-Dashboard.")
+        for name, kind in (("anleitung.txt", "text/plain"), ("final.png", "image/png")):
+            with open(os.path.join(odir(ref), name), "rb") as f:
+                msg.add_attachment(f.read(), maintype=kind.split("/")[0], subtype=kind.split("/")[1], filename=name)
+        with smtplib.SMTP(host, int(os.environ.get("SMTP_PORT", "587")), timeout=30) as s:
+            s.starttls()
+            s.login(os.environ["SMTP_USER"], os.environ["SMTP_PASS"])
+            s.send_message(msg)
+    except Exception:
+        app.logger.exception("Bestell-E-Mail konnte nicht gesendet werden (%s)", ref)
+
 @app.post("/stripe-webhook")
 def stripe_webhook():
     try:
@@ -375,7 +508,7 @@ def stripe_webhook():
             for ref in refs.split(","):
                 if load(ref):
                     update(ref, paid=True, stripe_session=s["id"], email=email)
-            # TODO: Bestell-E-Mail an dich senden (Pinfolge liegt in data/<ref>/pinfolge.txt)
+                    threading.Thread(target=notify_owner, args=(ref,), daemon=True).start()
     return "", 200
 
 
