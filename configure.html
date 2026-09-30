@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exklusiver Konfigurator — Faded Art</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0b0b0b;
+            --card-bg: #141414;
+            --border-gold: linear-gradient(135deg, #d4af37 0%, #f3e5ab 50%, #aa771c 100%);
+            --text-gold: #e6ca65;
+            --text-main: #f5f5f5;
+            --text-muted: #a0a0a0;
+            --step-border: rgba(212, 175, 55, 0.3);
+            --step-active: #d4af37;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background-color: var(--bg-color); color: var(--text-main); font-family: 'Plus Jakarta Sans', sans-serif; overflow-x: hidden; }
+        .site-container { max-width: 1400px; margin: 0 auto; padding: 0 1.5rem; }
+
+        header { padding: 2rem 0; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(212, 175, 55, 0.15); margin-bottom: 2rem; }
+        .logo { font-family: 'Cinzel', serif; font-size: 1.5rem; font-weight: 700; letter-spacing: 3px; background: var(--border-gold); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-decoration: none; text-transform: uppercase; }
+
+        .progress-bar { display: flex; justify-content: space-between; margin-bottom: 3rem; position: relative; max-width: 800px; margin: 0 auto 3rem auto; }
+        .progress-bar::before { content: ''; position: absolute; top: 12px; left: 0; width: 100%; height: 2px; background-color: #222; z-index: 1; }
+        .step { position: relative; z-index: 2; text-align: center; width: 20%; }
+        .step-icon { width: 26px; height: 26px; border-radius: 50%; background-color: var(--bg-color); border: 2px solid #222; display: flex; align-items: center; justify-content: center; margin: 0 auto 0.4rem auto; color: #222; transition: all 0.3s ease; font-weight: 600; font-size: 0.8rem; }
+        .step-text { font-size: 0.7rem; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase; }
+        .step.active .step-icon { border-color: var(--step-active); color: var(--step-active); background-color: #0b0b0b; }
+        .step.active .step-text { color: var(--text-gold); }
+        .step.completed .step-icon { border-color: var(--step-active); background-color: var(--step-active); color: var(--bg-color); }
+        .step.completed .step-text { color: var(--text-main); }
+
+        .config-step { display: none; grid-template-columns: 1fr 1fr; gap: 3rem; align-items: start; margin-bottom: 4rem; }
+        .config-step.active { display: grid; }
+        
+        .step-panel { background-color: var(--card-bg); border: 1px solid var(--step-border); border-radius: 16px; padding: 2rem; }
+        h2 { font-family: 'Cinzel', serif; font-size: 1.5rem; margin-bottom: 1.5rem; color: #fff; letter-spacing: 1px; }
+
+        .form-group { margin-bottom: 1.5rem; }
+        label { display: block; font-size: 0.85rem; letter-spacing: 1px; color: var(--text-gold); margin-bottom: 0.5rem; font-weight: 500; text-transform: uppercase; }
+        select, input[type="file"], input[type="email"] { width: 100%; padding: 0.9rem; background-color: #1f1f1f; border: 1px solid rgba(212, 175, 55, 0.3); border-radius: 8px; color: #fff; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1rem; }
+        select:focus, input:focus { outline: none; border-color: #d4af37; }
+
+        .preview-panel { background-color: #f5f5f5; border: 1px solid var(--step-border); border-radius: 16px; padding: 2rem; text-align: center; min-height: 500px; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; overflow: hidden; transition: background 0.5s ease; }
+
+        .wood-weiss { background-color: #fcfcfc; border: 2px solid #e0e0e0; }
+        .wood-mdf { background-color: #161616; border: 2px solid #222; }
+        .wood-eiche { background: repeating-linear-gradient(45deg, #c49a6c, #c49a6c 15px, #b08253 15px, #b08253 30px); border: 2px solid #8c6239; }
+        .wood-nussbaum { background: repeating-linear-gradient(45deg, #4a3319, #4a3319 20px, #33220f 20px, #33220f 40px); border: 2px solid #26180a; }
+        .wood-esche { background: repeating-linear-gradient(0deg, #2b2b2b, #2b2b2b 10px, #1c1c1c 10px, #1c1c1c 20px); border: 2px solid #404040; }
+        .wood-beton { background: radial-gradient(circle, #7a7a7a 0%, #4a4a4a 100%); border: 2px solid #333; }
+
+        #imagePreviewCanvas, #threadPreviewCanvas { max-width: 100%; max-height: 400px; border: 2px solid #d4af37; border-radius: 50%; cursor: grab; display: none; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        #finalResultImage { max-width: 100%; max-height: 400px; border-radius: 50%; box-shadow: 0 15px 40px rgba(0,0,0,0.7); border: 3px solid #d4af37; display: none; margin-bottom: 1rem; }
+        
+        .preview-placeholder { color: #444; font-style: italic; z-index: 2; font-weight: 500; font-size: 0.9rem; padding: 1rem; }
+        .wood-mdf .preview-placeholder, .wood-eiche .preview-placeholder, .wood-nussbaum .preview-placeholder, .wood-esche .preview-placeholder { color: #e0e0e0; }
+
+        .loader { border: 4px solid #222; border-top: 4px solid #d4af37; border-radius: 50%; width: 45px; height: 45px; animation: spin 1s linear infinite; margin-bottom: 1rem; display: none; z-index: 2; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        #checkoutSection { display: none; margin-top: 1.5rem; width: 100%; text-align: left; background: rgba(0,0,0,0.85); padding: 1.5rem; border-radius: 10px; border: 1px solid rgba(212,175,55,0.4); z-index: 3; }
+
+        .nav-buttons { margin-top: 2rem; display: flex; justify-content: space-between; gap: 1rem; }
+        .btn-outline { padding: 0.8rem 1.5rem; font-family: 'Cinzel', serif; font-size: 0.85rem; letter-spacing: 1px; color: var(--text-gold); background: transparent; border: 1px solid var(--step-border); border-radius: 50px; cursor: pointer; transition: all 0.3s ease; text-decoration: none; }
+        .btn-outline:hover { border-color: var(--step-active); color: #fff; }
+        .btn-gold { padding: 0.8rem 2.5rem; font-family: 'Cinzel', serif; font-size: 0.85rem; letter-spacing: 2px; color: #0b0b0b; background: var(--border-gold); border: none; border-radius: 50px; cursor: pointer; transition: transform 0.3s ease, box-shadow 0.3s ease; width: 100%; text-align: center; }
+        .btn-gold:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(212, 175, 55, 0.3); }
+
+        footer { text-align: center; padding: 2.5rem 0; border-top: 1px solid rgba(212, 175, 55, 0.15); margin-top: 3rem; color: var(--text-muted); font-size: 0.8rem; letter-spacing: 1px; }
+        footer a { color: var(--text-gold); text-decoration: none; margin: 0 0.5rem; }
+        footer a:hover { text-decoration: underline; }
+
+        @media (max-width: 900px) {
+            .site-container { padding: 0 1rem; }
+            .config-step.active { display: flex; flex-direction: column; gap: 2rem; }
+            .step-panel { width: 100%; padding: 1.5rem; }
+            .preview-panel { width: 100%; min-height: 400px; padding: 1.5rem; margin-bottom: 2rem; }
+            .progress-bar { max-width: 100%; margin-bottom: 2rem; }
+            .step-text { display: none; }
+            header { padding: 1.5rem 0; }
+            h2 { font-size: 1.3rem; }
+        }
+    </style>
+</head>
+<body class="wood-weiss" id="bodyTheme">
+
+    <div class="site-container">
+        <header>
+            <a href="/" class="logo">Faded Art</a>
+            <span style="color: var(--text-muted); letter-spacing: 1px; font-size: 0.8rem;">Konfigurator</span>
+        </header>
+
+        <div class="progress-bar">
+            <div class="step active" id="tab-1">
+                <div class="step-icon">1</div>
+                <div class="step-text">Bild</div>
+            </div>
+            <div class="step" id="tab-2">
+                <div class="step-icon">2</div>
+                <div class="step-text">Format</div>
+            </div>
+            <div class="step" id="tab-3">
+                <div class="step-icon">3</div>
+                <div class="step-text">Holz</div>
+            </div>
+            <div class="step" id="tab-4">
+                <div class="step-icon">4</div>
+                <div class="step-text">Faden</div>
+            </div>
+            <div class="step" id="tab-5">
+                <div class="step-icon">5</div>
+                <div class="step-text">Pins</div>
+            </div>
+        </div>
+
+        <form id="configForm" enctype="multipart/form-data">
+            <!-- SCHRITT 1 -->
+            <div class="config-step active" id="step-1">
+                <div class="step-panel">
+                    <h2>1. Wunschbild hochladen</h2>
+                    <div class="form-group">
+                        <label>Bilddatei auswählen</label>
+                        <input type="file" id="imageInput" name="image" accept="image/*" required>
+                    </div>
+                    <div class="form-group" style="display: none;" id="transformControls">
+                        <label>Ausschnitt anpassen (Zoom & Schieben)</label>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <input type="range" id="scaleRange" min="0.1" max="2" step="0.01" value="1" style="flex: 1;">
+                            <button type="button" id="centerBtn" class="btn-outline" style="padding: 0.5rem 0.8rem;">Zentrieren</button>
+                        </div>
+                    </div>
+                    <div class="nav-buttons">
+                        <div></div>
+                        <button type="button" class="btn-gold" style="width: auto;" onclick="nextStep(1)">Weiter</button>
+                    </div>
+                </div>
+                <div class="preview-panel wood-weiss" id="previewContainer">
+                    <div class="preview-placeholder" id="uploadPlaceholder">Lade ein Bild hoch, um es im Kreis zu positionieren. Scrolle nach unten, um das Ergebnis zu sehen.</div>
+                    <canvas id="imagePreviewCanvas"></canvas>
+                </div>
+            </div>
+
+            <!-- SCHRITT 2 -->
+            <div class="config-step" id="step-2">
+                <div class="step-panel">
+                    <h2>2. Größe des Brettes</h2>
+                    <div class="form-group">
+                        <label>Format</label>
+                        <select id="sizeSelect" name="size">
+                            <option value="S (40x40 cm)" selected>S — 40 x 40 cm (0,50 €)</option>
+                            <option value="M (60x60 cm)">M — 60 x 60 cm (150,00 €)</option>
+                            <option value="L (80x80 cm)">L — 80 x 80 cm (190,00 €)</option>
+                            <option value="XL (100x100 cm)">XL — 100 x 100 cm (240,00 €)</option>
+                            <option value="XXL (120x120 cm)">XXL — 120 x 120 cm (310,00 €)</option>
+                            <option value="XXXL (150x150 cm)">XXXL — 150 x 150 cm (420,00 €)</option>
+                        </select>
+                    </div>
+                    <div class="nav-buttons">
+                        <button type="button" class="btn-outline" onclick="prevStep(2)">Zurück</button>
+                        <button type="button" class="btn-gold" style="width: auto;" onclick="nextStep(2)">Weiter</button>
+                    </div>
+                </div>
+                <div class="preview-panel wood-weiss wood-preview-box">
+                    <div class="preview-placeholder">Format-Wahl aktiv. Scrolle für Details.</div>
+                </div>
+            </div>
+
+            <!-- SCHRITT 3 -->
+            <div class="config-step" id="step-3">
+                <div class="step-panel">
+                    <h2>3. Untergrund & Farbe</h2>
+                    <div class="form-group">
+                        <label>Untergrund</label>
+                        <select id="woodSelect" name="wood">
+                            <option value="Klassik Weiß matt" data-theme="wood-weiss" selected>Klassik Weiß matt</option>
+                            <option value="MDF Schwarz matt" data-theme="wood-mdf">MDF Schwarz matt</option>
+                            <option value="Eiche Natur geölt" data-theme="wood-eiche">Eiche Natur geölt (+50 €)</option>
+                            <option value="Nussbaum Premium" data-theme="wood-nussbaum">Nussbaum Premium (+80 €)</option>
+                            <option value="Schwarze Esche" data-theme="wood-esche">Schwarze Esche (+90 €)</option>
+                            <option value="Beton-Look" data-theme="wood-beton">Beton-Look (+60 €)</option>
+                        </select>
+                    </div>
+                    <div class="nav-buttons">
+                        <button type="button" class="btn-outline" onclick="prevStep(3)">Zurück</button>
+                        <button type="button" class="btn-gold" style="width: auto;" onclick="nextStep(3)">Weiter</button>
+                    </div>
+                </div>
+                <div class="preview-panel wood-weiss wood-preview-box" id="woodPreviewPanel">
+                    <div class="preview-placeholder">Live-Untergrund im Hintergrund.</div>
+                </div>
+            </div>
+
+            <!-- SCHRITT 4 -->
+            <div class="config-step" id="step-4">
+                <div class="step-panel">
+                    <h2>4. Faden & Dicke</h2>
+                    <div class="form-group">
+                        <label>Fadenfarbe</label>
+                        <select id="threadColorSelect" name="thread_color">
+                            <option value="Tiefschwarz" data-hex="#111111">Tiefschwarz</option>
+                            <option value="Reinweiß" data-hex="#f5f5f5">Reinweiß</option>
+                            <option value="Champagner Gold" data-hex="#d4af37">Champagner Gold</option>
+                            <option value="Silber" data-hex="#c0c0c0">Silber</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Fadendicke</label>
+                        <select id="threadThicknessSelect" name="thread_thickness">
+                            <option value="0.15">Fein — 0.15 mm</option>
+                            <option value="0.20" selected>Standard — 0.20 mm</option>
+                            <option value="0.30">Kräftig — 0.30 mm</option>
+                        </select>
+                    </div>
+                    <div class="nav-buttons">
+                        <button type="button" class="btn-outline" onclick="prevStep(4)">Zurück</button>
+                        <button type="button" class="btn-gold" style="width: auto;" onclick="nextStep(4)">Weiter</button>
+                    </div>
+                </div>
+                <div class="preview-panel wood-weiss" id="threadPreviewPanel">
+                    <div class="preview-placeholder" id="threadPlaceholder">Faden- & Nagel-Live-Vorschau</div>
+                    <canvas id="threadPreviewCanvas"></canvas>
+                </div>
+            </div>
+
+            <!-- SCHRITT 5 -->
+            <div class="config-step" id="step-5">
+                <div class="step-panel">
+                    <h2>5. Pins & Berechnung</h2>
+                    <div class="form-group">
+                        <label>Anzahl Pins</label>
+                        <select id="nailSelect" name="nail">
+                            <option value="240 Pins">240 Pins (Standard)</option>
+                            <option value="360 Pins">360 Pins (High-End +70 €)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Vorschau-Modus</label>
+                        <select id="viewModeSelect">
+                            <option value="static">Fertiges Kunstwerk</option>
+                            <option value="animation">15-Sekunden Animation</option>
+                        </select>
+                    </div>
+                    <div class="nav-buttons">
+                        <button type="button" class="btn-outline" onclick="prevStep(5)">Zurück</button>
+                        <button type="button" class="btn-gold" style="width: auto;" id="calculateBtn">Berechnen</button>
+                    </div>
+                </div>
+                <div class="preview-panel wood-weiss wood-preview-box" id="resultPreviewPanel">
+                    <div class="loader" id="loader"></div>
+                    <div class="preview-placeholder" id="resultPlaceholder">Klicke auf Berechnen.</div>
+                    <img id="finalResultImage" alt="String Art Meisterwerk">
+                    
+                    <div id="checkoutSection">
+                        <h3 style="font-family:'Cinzel',serif; color:var(--text-gold); margin-bottom:0.5rem; font-size:1rem;">Meisterwerk bereit</h3>
+                        <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:0.8rem;">E-Mail für Bestelldaten:</p>
+                        <div class="form-group" style="margin-bottom:0.8rem;">
+                            <input type="email" id="customerEmail" placeholder="deine@email.de">
+                        </div>
+                        <button type="button" class="btn-gold" id="checkoutBtn">Jetzt mit Stripe bezahlen</button>
+                    </div>
+                </div>
+            </div>
+        </form>
+
+        <footer>
+            <div>&copy; 2026 Faded Art. Alle Rechte vorbehalten.</div>
+            <div style="margin-top: 0.8rem;">
+                <a href="#">Impressum</a> | <a href="#">Datenschutz</a> | <a href="#">AGB</a>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        let currentStep = 1;
+        const totalSteps = 5;
+        let generatedDataUrls = { image: '', gif: '' };
+
+        function nextStep(n) {
+            if (n < totalSteps) {
+                document.getElementById(`tab-${n}`).classList.remove('active');
+                document.getElementById(`tab-${n}`).classList.add('completed');
+                document.getElementById(`step-${n}`).classList.remove('active');
+
+                currentStep = n + 1;
+                document.getElementById(`tab-${currentStep}`).classList.add('active');
+                document.getElementById(`step-${currentStep}`).classList.add('active');
+
+                if(currentStep === 4) {
+                    drawThreadPreview();
+                }
+            }
+        }
+
+        function prevStep(n) {
+            if (n > 1) {
+                document.getElementById(`tab-${n}`).classList.remove('active');
+                document.getElementById(`step-${n}`).classList.remove('active');
+
+                currentStep = n - 1;
+                document.getElementById(`tab-${currentStep}`).classList.remove('completed');
+                document.getElementById(`tab-${currentStep}`).classList.add('active');
+                document.getElementById(`step-${currentStep}`).classList.add('active');
+            }
+        }
+
+        const woodSelect = document.getElementById('woodSelect');
+        woodSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            const themeClass = selectedOption.getAttribute('data-theme');
+            document.querySelectorAll('.preview-panel').forEach(panel => {
+                panel.className = panel.className.replace(/wood-\w+/g, '') + ' ' + themeClass;
+            });
+            if(currentStep === 4) drawThreadPreview();
+        });
+
+        const threadColorSelect = document.getElementById('threadColorSelect');
+        const threadThicknessSelect = document.getElementById('threadThicknessSelect');
+        threadColorSelect.addEventListener('change', drawThreadPreview);
+        threadThicknessSelect.addEventListener('change', drawThreadPreview);
+
+        function drawThreadPreview() {
+            const tCanvas = document.getElementById('threadPreviewCanvas');
+            const tPlaceholder = document.getElementById('threadPlaceholder');
+            const tCtx = tCanvas.getContext('2d');
+
+            tPlaceholder.style.display = 'none';
+            tCanvas.style.display = 'block';
+
+            let canvasW = tCanvas.parentElement.clientWidth - 40;
+            tCanvas.width = canvasW;
+            tCanvas.height = canvasW;
+            let radius = canvasW * 0.42;
+
+            tCtx.clearRect(0, 0, tCanvas.width, tCanvas.height);
+
+            const selectedOpt = threadColorSelect.options[threadColorSelect.selectedIndex];
+            const threadHex = selectedOpt.getAttribute('data-hex');
+            const thickness = parseFloat(threadThicknessSelect.value);
+            let lineWidth = thickness * 5;
+
+            let nailCount = 240;
+            let pins = [];
+            for(let i=0; i<nailCount; i++) {
+                let angle = (i * 2 * Math.PI) / nailCount;
+                let nx = tCanvas.width/2 + radius * Math.cos(angle);
+                let ny = tCanvas.height/2 + radius * Math.sin(angle);
+                pins.push({x: nx, y: ny});
+            }
+
+            tCtx.strokeStyle = threadHex;
+            tCtx.lineWidth = lineWidth;
+            tCtx.globalAlpha = 0.4;
+
+            for(let i=0; i<nailCount; i+=4) {
+                let p1 = pins[i];
+                let p2 = pins[(i + 75) % nailCount];
+                tCtx.beginPath();
+                tCtx.moveTo(p1.x, p1.y);
+                tCtx.lineTo(p2.x, p2.y);
+                tCtx.stroke();
+            }
+
+            tCtx.globalAlpha = 1.0;
+            pins.forEach(p => {
+                tCtx.beginPath();
+                tCtx.arc(p.x, p.y, 3, 0, Math.PI*2);
+                tCtx.fillStyle = '#d4af37';
+                tCtx.fill();
+                tCtx.lineWidth = 1;
+                tCtx.strokeStyle = '#000';
+                tCtx.stroke();
+            });
+        }
+
+        const imageInput = document.getElementById('imageInput');
+        const canvas = document.getElementById('imagePreviewCanvas');
+        const ctx = canvas.getContext('2d');
+        const uploadPlaceholder = document.getElementById('uploadPlaceholder');
+        const transformControls = document.getElementById('transformControls');
+        const scaleRange = document.getElementById('scaleRange');
+        const centerBtn = document.getElementById('centerBtn');
+
+        let img = new Image();
+        let imgX = 0, imgY = 0, imgScale = 1;
+        let isDragging = false, lastX = 0, lastY = 0;
+        let circleRadius = 250;
+
+        imageInput.addEventListener('change', function(e) {
+            if (e.target.files && e.target.files[0]) {
+                let reader = new FileReader();
+                reader.onload = function(ev) {
+                    img.onload = function() {
+                        uploadPlaceholder.style.display = 'none';
+                        canvas.style.display = 'block';
+                        transformControls.style.display = 'block';
+                        fitImageToCircle();
+                        drawPreview();
+                    }
+                    img.src = ev.target.result;
+                }
+                reader.readAsDataURL(e.target.files[0]);
+            }
+        });
+
+        function fitImageToCircle() {
+            let canvasW = canvas.parentElement.clientWidth - 40;
+            let circleW = circleRadius * 2;
+            canvas.width = canvasW;
+            canvas.height = canvasW;
+            circleRadius = canvasW * 0.45;
+
+            let wr = img.width / circleW;
+            let hr = img.height / circleW;
+            imgScale = Math.max(wr, hr);
+            scaleRange.value = 1 / imgScale;
+            imgScale = parseFloat(scaleRange.value);
+
+            imgX = canvas.width / 2;
+            imgY = canvas.height / 2;
+        }
+
+        function drawPreview() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(canvas.width / 2, canvas.height / 2, circleRadius, 0, Math.PI * 2);
+            ctx.closePath();
+            ctx.clip();
+
+            let drawW = img.width * imgScale;
+            let drawH = img.height * imgScale;
+            ctx.drawImage(img, imgX - drawW / 2, imgY - drawH / 2, drawW, drawH);
+            ctx.restore();
+
+            let nailCount = 240;
+            for(let i=0; i<nailCount; i++) {
+                let angle = (i * 2 * Math.PI) / nailCount;
+                let nx = canvas.width/2 + circleRadius * Math.cos(angle);
+                let ny = canvas.height/2 + circleRadius * Math.sin(angle);
+                ctx.beginPath();
+                ctx.arc(nx, ny, 3, 0, Math.PI*2);
+                ctx.fillStyle = '#d4af37';
+                ctx.fill();
+            }
+
+            ctx.beginPath();
+            ctx.arc(canvas.width / 2, canvas.height / 2, circleRadius, 0, Math.PI * 2);
+            ctx.strokeStyle = '#d4af37';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.closePath();
+        }
+
+        canvas.addEventListener('mousedown', e => { isDragging = true; lastX = e.offsetX; lastY = e.offsetY; });
+        canvas.addEventListener('mousemove', e => {
+            if (isDragging) {
+                imgX += e.offsetX - lastX;
+                imgY += e.offsetY - lastY;
+                lastX = e.offsetX; lastY = e.offsetY;
+                drawPreview();
+            }
+        });
+        canvas.addEventListener('mouseup', () => isDragging = false);
+        canvas.addEventListener('mouseout', () => isDragging = false);
+
+        canvas.addEventListener('touchstart', e => { 
+            isDragging = true; 
+            lastX = e.touches[0].clientX; 
+            lastY = e.touches[0].clientY; 
+        });
+        canvas.addEventListener('touchmove', e => {
+            if (isDragging) {
+                let dx = e.touches[0].clientX - lastX;
+                let dy = e.touches[0].clientY - lastY;
+                imgX += dx;
+                imgY += dy;
+                lastX = e.touches[0].clientX; 
+                lastY = e.touches[0].clientY;
+                drawPreview();
+            }
+        });
+        canvas.addEventListener('touchend', () => isDragging = false);
+
+        scaleRange.addEventListener('input', function() { imgScale = parseFloat(this.value); drawPreview(); });
+        centerBtn.addEventListener('click', function() { fitImageToCircle(); drawPreview(); });
+
+        document.getElementById('calculateBtn').addEventListener('click', function() {
+            const loader = document.getElementById('loader');
+            const resultPlaceholder = document.getElementById('resultPlaceholder');
+            const finalResultImage = document.getElementById('finalResultImage');
+            const checkoutSection = document.getElementById('checkoutSection');
+            
+            loader.style.display = 'block';
+            resultPlaceholder.style.display = 'block';
+            resultPlaceholder.textContent = 'Berechne Meisterwerk...';
+            finalResultImage.style.display = 'none';
+            checkoutSection.style.display = 'none';
+
+            const formElement = document.getElementById('configForm');
+            const formData = new FormData(formElement);
+
+            fetch('/generate', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                loader.style.display = 'none';
+                resultPlaceholder.style.display = 'none';
+                
+                generatedDataUrls.image = data.image_url + '?' + new Date().getTime();
+                generatedDataUrls.gif = data.gif_url + '?' + new Date().getTime();
+
+                const mode = document.getElementById('viewModeSelect').value;
+                if(mode === 'animation') {
+                    finalResultImage.src = generatedDataUrls.gif;
+                } else {
+                    finalResultImage.src = generatedDataUrls.image;
+                }
+
+                finalResultImage.style.display = 'block';
+                checkoutSection.style.display = 'block';
+            })
+            .catch(error => {
+                loader.style.display = 'none';
+                resultPlaceholder.textContent = 'Fehler bei der Berechnung.';
+                console.error('Error:', error);
+            });
+        });
+
+        document.getElementById('checkoutBtn').addEventListener('click', function() {
+            const email = document.getElementById('customerEmail').value;
+            if(!email) {
+                alert('Bitte E-Mail eingeben.');
+                return;
+            }
+
+            const orderData = {
+                email: email,
+                size: document.getElementById('sizeSelect').value,
+                wood: document.getElementById('woodSelect').value,
+                thread_color: document.getElementById('threadColorSelect').value,
+                thread_thickness: document.getElementById('threadThicknessSelect').value,
+                nail: document.getElementById('nailSelect').value
+            };
+
+            fetch('/checkout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(orderData)
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'success' && data.url) {
+                    window.location.href = data.url; // Weiterleitung zu Stripe
+                } else {
+                    alert('Fehler beim Starten des Checkouts: ' + (data.message || 'Unbekannt'));
+                }
+            })
+            .catch(err => {
+                alert('Netzwerkfehler beim Checkout.');
+            });
+        });
+    </script>
+</body>
+</html>
