@@ -8,7 +8,11 @@ let step = 1, view = { x: S / 2, y: S / 2, s: 1, cover: 1 }, hasImg = false, ord
 
 const cfg = () => { const fmt = $('format').value, size = $('size').value, [w, h] = SIZES[fmt][size];
   return { format: fmt, size, w, h, wood: $('wood').value, color: $('color').value,
-    hex: $('color').selectedOptions[0].dataset.hex, thick: $('thick').value, pins: parseInt($('pins').value) }; };
+    hex: $('color').selectedOptions[0].dataset.hex,
+    disc: $('circle').value, discHex: $('circle').selectedOptions[0].dataset.hex, thick: $('thick').value, pins: parseInt($('pins').value) }; };
+const lum = h => { const n = parseInt(h.slice(1), 16); return .299 * (n >> 16) + .587 * ((n >> 8) & 255) + .114 * (n & 255); };
+const MSG = 'Fadenfarbe und Kreisfarbe sind zu ähnlich. Bitte wähle einen stärkeren Kontrast.';
+const lowContrast = () => { const c = cfg(); return Math.abs(lum(c.hex) - lum(c.discHex)) < 60; };
 const msg = t => { $('msg').textContent = t || ''; };
 
 function price() {
@@ -22,6 +26,8 @@ function board() {
   b.style.setProperty('--w', c.w); b.style.setProperty('--h', c.h);
   b.classList.toggle('wide', c.w >= c.h);
   b.dataset.wood = c.wood;
+  $('disc').style.background = c.discHex;
+  if (step >= 4) msg(lowContrast() ? MSG : '');
   [...$('size').options].forEach(o => { const [w, h] = SIZES[c.format][o.value]; o.textContent = o.value + ' (' + w + ' × ' + h + ' cm)'; });
   price(); draw();
 }
@@ -39,14 +45,13 @@ function draw() {
   const c = cfg();
   ctx.clearRect(0, 0, S, S);
   ctx.save(); ctx.beginPath(); ctx.arc(S / 2, S / 2, R, 0, 7); ctx.clip();
-  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, S, S);
-  const dw = img.width * view.s, dh = img.height * view.s;
-  ctx.drawImage(img, view.x - dw / 2, view.y - dh / 2, dw, dh);
+  ctx.fillStyle = step >= 4 ? c.discHex : '#fff'; ctx.fillRect(0, 0, S, S);   // ab Schritt 4: kein Bild, nur Kreisfarbe
+  if (step < 4) { const dw = img.width * view.s, dh = img.height * view.s; ctx.drawImage(img, view.x - dw / 2, view.y - dh / 2, dw, dh); }
   ctx.restore();
   if (step >= 4) { // Beispiel-Sehnen in Fadenfarbe (nur Look, nicht das echte Ergebnis)
-    ctx.save(); ctx.strokeStyle = c.hex; ctx.globalAlpha = .35; ctx.lineWidth = c.thick * 4;
-    for (let i = 0; i < 60; i++) {
-      const a = 2 * Math.PI * i / 60, b = a + 2.4;
+    ctx.save(); ctx.strokeStyle = c.hex; ctx.globalAlpha = .5; ctx.lineWidth = Math.max(1, c.thick * 5);
+    for (let i = 0; i < 120; i++) {
+      const a = 2 * Math.PI * i / 120, b = a + 2.6;
       ctx.beginPath(); ctx.moveTo(S / 2 + R * Math.cos(a), S / 2 + R * Math.sin(a));
       ctx.lineTo(S / 2 + R * Math.cos(b), S / 2 + R * Math.sin(b)); ctx.stroke();
     }
@@ -85,7 +90,7 @@ const zoomBy = f => { const z = $('zoom'); view.s = Math.min(+z.max, Math.max(+z
 $('zin').addEventListener('click', () => zoomBy(1.1));
 $('zout').addEventListener('click', () => zoomBy(1 / 1.1));
 $('center').addEventListener('click', () => { fit(); draw(); });
-['format', 'size', 'wood', 'color', 'thick', 'pins'].forEach(id => $(id).addEventListener('input', board));
+['format', 'size', 'wood', 'color', 'circle', 'thick', 'pins'].forEach(id => $(id).addEventListener('input', board));
 $('cfg').addEventListener('submit', e => e.preventDefault());
 
 function show(n) {
@@ -98,12 +103,14 @@ function show(n) {
   $('back').style.visibility = n > 1 ? 'visible' : 'hidden';
   $('next').textContent = n === 5 ? 'Vorschau berechnen' : 'Weiter';
   cv.style.cursor = n === 1 ? 'grab' : 'default'; cv.style.touchAction = n === 1 ? 'none' : 'auto'; // Verschieben nur in Schritt 1
-  msg(''); draw();
+  msg(''); if (n >= 4 && lowContrast()) msg(MSG);
+  draw();
 }
 
 $('back').addEventListener('click', () => step > 1 && show(step - 1));
 $('next').addEventListener('click', () => {
   if (step === 1 && !hasImg) return msg('Bitte zuerst ein Foto auswählen.');
+  if (step === 4 && lowContrast()) return msg(MSG);
   if (step < 5) return show(step + 1);
   generate();
 });
@@ -117,26 +124,29 @@ function cropBlob() { // exakt der sichtbare Kreisausschnitt, ohne Pins
 }
 
 async function generate() {
-  if (busy) return; busy = true; msg(''); $('next').disabled = true;
+  if (busy) return;
+  if (lowContrast()) return msg(MSG);
+  busy = true; msg(''); $('next').disabled = true;
+  $('wait').textContent = 'Berechnung läuft, das dauert meist unter einer Minute …';
   $('spin').hidden = false; $('checkout').hidden = true;
   try {
     const c = cfg(), fd = new FormData();
     fd.append('image', await cropBlob(), 'crop.png');
-    ['format', 'size', 'wood', 'color', 'thick', 'pins'].forEach(k => fd.append(k, c[k]));
+    ['format', 'size', 'wood', 'color', 'disc', 'thick', 'pins'].forEach(k => fd.append(k, c[k]));
     const res = await fetch('/generate', { method: 'POST', body: fd });
     if (!res.ok) throw new Error('Server-Fehler ' + res.status);
     let d = await res.json();
-    for (let i = 0; d.job_id && d.status !== 'done' && i < 80; i++) { // Polling bei Hintergrundjob
+    for (let i = 0; d.job_id && d.status !== 'done' && i < 240; i++) { // Polling bei Hintergrundjob
       await new Promise(r => setTimeout(r, 1500));
       d = await (await fetch('/status/' + d.job_id)).json();
       if (d.status === 'error') throw new Error('Berechnung fehlgeschlagen');
     }
-    if (!d.preview_url) throw new Error('Keine Vorschau erhalten');
+    if (!d.preview_url) throw new Error('Die Berechnung dauert ungewöhnlich lange');
     orderRef = d.order_ref;
     $('result').src = d.preview_url; $('result').hidden = false; cv.hidden = true;
     $('checkout').hidden = false;
   } catch (err) { msg('Berechnung nicht möglich: ' + err.message + '. Bitte erneut versuchen.'); }
-  finally { busy = false; $('next').disabled = false; $('spin').hidden = true; }
+  finally { $('wait').textContent = ''; busy = false; $('next').disabled = false; $('spin').hidden = true; }
 }
 
 async function addToCart() {
