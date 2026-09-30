@@ -1,5 +1,0 @@
-Flask
-numpy
-Pillow
-scikit-image
-stripe
