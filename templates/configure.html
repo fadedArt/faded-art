@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Konfigurator – Faded Art{% endblock %}
+{% block nav %}<a href="/" class="btn">Zur Startseite</a>{% endblock %}
+{% block content %}
+<ol class="steps" id="steps">
+  <li><b>1</b><span>Bild</span></li><li><b>2</b><span>Format</span></li><li><b>3</b><span>Untergrund</span></li><li><b>4</b><span>Faden</span></li><li><b>5</b><span>Pins</span></li>
+</ol>
+
+<form id="cfg" class="cfg" novalidate data-cfg='{{ cfg|tojson }}'>
+<div class="card panel">
+  <section data-step="1">
+    <h2>Foto hochladen</h2>
+    <div class="field"><label for="file">Bilddatei (JPG oder PNG, max. 15 MB)</label><input type="file" id="file" accept="image/jpeg,image/png"></div>
+    <div class="field" id="zoomBox" hidden><label for="zoom">Ausschnitt: zoomen, Bild im Kreis ziehen</label>
+      <div class="row"><button type="button" class="btn zbtn" id="zout" aria-label="Wegzoomen">−</button><input type="range" id="zoom"><button type="button" class="btn zbtn" id="zin" aria-label="Näher heranzoomen">+</button></div>
+      <button type="button" class="btn" id="center" style="margin-top:.75rem">Zentrieren</button></div>
+  </section>
+  <section data-step="2" hidden>
+    <h2>Format und Größe</h2>
+    <div class="field"><label for="format">Format</label>
+      <select id="format"><option value="quad">Quadratisch</option><option value="hoch">Hochformat</option><option value="quer">Querformat</option></select></div>
+    <div class="field"><label for="size">Größe</label>
+      <select id="size"><option value="S">S</option><option value="M" selected>M</option><option value="L">L</option><option value="XL">XL</option></select></div>
+    <p class="hint">Der Bildkreis bleibt rund, das Brett passt sich an.</p>
+  </section>
+  <section data-step="3" hidden>
+    <h2>Untergrund</h2>
+    <div class="field"><label for="wood">Material</label>
+      <select id="wood">
+        <option value="weiss">Klassik Weiß matt</option>
+        <option value="mdf">MDF Schwarz matt</option>
+        <option value="eiche">Eiche Natur geölt (+50 €)</option>
+        <option value="nussbaum">Nussbaum Premium (+80 €)</option>
+        <option value="esche">Schwarze Esche (+90 €)</option>
+        <option value="beton">Beton-Look (+60 €)</option>
+      </select></div>
+  </section>
+  <section data-step="4" hidden>
+    <h2>Faden</h2>
+    <div class="field"><label for="color">Farbe</label>
+      <select id="color">
+        <option value="schwarz" data-hex="#111111">Tiefschwarz</option>
+        <option value="weiss" data-hex="#f5f5f5">Reinweiß</option>
+        <option value="gold" data-hex="#d4af37">Champagner Gold</option>
+        <option value="silber" data-hex="#c0c0c0">Silber</option>
+      </select></div>
+    <div class="field"><label for="thick">Dicke</label>
+      <select id="thick"><option value="0.15">Fein, 0,15 mm</option><option value="0.20" selected>Standard, 0,20 mm</option><option value="0.30">Kräftig, 0,30 mm</option></select></div>
+  </section>
+  <section data-step="5" hidden>
+    <h2>Pins und Berechnung</h2>
+    <div class="field"><label for="pins">Anzahl Pins</label>
+      <select id="pins"><option value="240">240 Pins (Standard)</option><option value="360">360 Pins (+70 €)</option></select></div>
+    <p class="price" id="price"></p>
+    <p class="hint">Vorläufiger Preis. Der Endpreis wird beim Bezahlen vom Server berechnet.</p>
+    <div id="checkout" hidden style="margin-top:1.5rem">
+      <button type="button" class="btn btn-gold" id="buy" style="width:100%">Jetzt kaufen</button>
+      <button type="button" class="btn" id="addcart" style="width:100%;margin-top:.75rem">In den Warenkorb</button>
+      <p class="hint" id="cartinfo" style="margin-top:.75rem"></p>
+    </div>
+  </section>
+  <p class="msg" id="msg" role="alert"></p>
+  <div class="nav">
+    <button type="button" class="btn" id="back">Zurück</button>
+    <button type="button" class="btn btn-gold" id="next">Weiter</button>
+  </div>
+</div>
+
+<div class="preview" aria-live="polite">
+  <div class="board wide" id="board" data-wood="weiss">
+    <div class="disc" id="disc">
+      <canvas id="cv" width="600" height="600" hidden aria-label="Bildausschnitt, mit Maus oder Finger verschiebbar"></canvas>
+      <img id="result" alt="Berechnete String-Art-Vorschau" hidden>
+      <div class="ph" id="ph">Noch kein Bild gewählt</div>
+    </div>
+    <div class="spin" id="spin" hidden></div>
+  </div>
+</div>
+</form>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='configure.js') }}"></script>{% endblock %}
+
