@@ -177,4 +177,3 @@ $('buy').addEventListener('click', async () => {
 
 show(1); board();
 })();
-
