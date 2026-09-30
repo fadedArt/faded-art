@@ -354,14 +354,14 @@ def generate():
 
     wood, color, thick = form.get("wood"), form.get("color"), form.get("thick")
     pins = clamp(form.get("pins"), 0, 10000)
-    disc, pin = form.get("disc"), form.get("pin")
+    disc, pin = form.get("disc") or "weiss", form.get("pin") or "gold"   # fehlt ein Feld (alte Seitenversion), gelten Standardwerte
     if pin not in PINCOL:
         return jsonify(message="Ungültige Nagelfarbe"), 400
     if disc not in DISC:
         return jsonify(message="Ungültige Kreisfarbe"), 400
     if color in COLORS and abs(lum(COLORS[color][1]) - lum(DISC[disc][1])) < MIN_CONTRAST:
         return jsonify(message="Fadenfarbe und Kreisfarbe sind zu ähnlich"), 400
-    fmt, size = form.get("format"), form.get("size")
+    fmt, size = form.get("format") or "quad", form.get("size") or "M"
     if fmt not in SIZES or size not in SIZES[fmt]:
         return jsonify(message="Ungültige Größe"), 400
     if wood not in WOOD or color not in COLORS or thick not in THICK or pins not in PINS:
@@ -415,9 +415,24 @@ def cart_items():
 def euro(cents):
     return f"{cents / 100:.2f}".replace(".", ",") + " €"
 
+def asset_v(name):
+    """Änderungszeit der Datei als Versionsnummer: erzwingt, dass der Browser neue CSS/JS-Dateien lädt."""
+    try:
+        return int(os.path.getmtime(os.path.join(app.static_folder, name)))
+    except OSError:
+        return 0
+
 @app.context_processor
 def inject_cart():
-    return {"cart_count": len(session.get("cart", []))}
+    return {"cart_count": len(session.get("cart", [])), "asset_v": asset_v}
+
+@app.errorhandler(413)
+def too_big(e):
+    return jsonify(message="Das Bild ist zu groß (maximal 16 MB)"), 413
+
+@app.errorhandler(400)
+def bad_request(e):
+    return jsonify(message="Ungültige Anfrage. Bitte Seite neu laden und erneut versuchen."), 400
 
 @app.get("/warenkorb")
 def cart():
