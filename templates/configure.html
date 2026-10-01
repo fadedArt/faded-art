@@ -71,14 +71,6 @@
       <select id="pins"><option value="240">240 Pins (Standard)</option><option value="360">360 Pins (+70 €)</option></select></div>
     <p class="price" id="price"></p>
     <p class="hint">Vorläufiger Preis. Der Endpreis wird beim Bezahlen vom Server berechnet.</p>
-    <div id="variants" hidden style="margin-top:1.25rem">
-      <p class="hint" id="vtext" style="margin-bottom:.6rem"></p>
-      <div class="vgrid">
-        <button type="button" class="vopt wait" data-k="a"><img alt="Variante Ausgewogen"><span>Ausgewogen</span><small class="vp"></small></button>
-        <button type="button" class="vopt wait" data-k="b"><img alt="Variante Kontrastreich"><span>Kontrastreich</span><small class="vp"></small></button>
-        <button type="button" class="vopt wait" data-k="c"><img alt="Variante Weich"><span>Weich</span><small class="vp"></small></button>
-      </div>
-    </div>
     <div id="checkout" hidden style="margin-top:1.5rem">
       <button type="button" class="btn btn-gold" id="buy" style="width:100%">Jetzt kaufen</button>
       <button type="button" class="btn" id="addcart" style="width:100%;margin-top:.75rem">In den Warenkorb</button>
@@ -101,6 +93,14 @@
       <div class="ph" id="ph">Noch kein Bild gewählt</div>
     </div>
     <div class="spin" id="spin" hidden></div>
+  </div>
+  <div id="variants" hidden>
+    <p class="hint" id="vtext" style="margin-bottom:.6rem"></p>
+    <div class="vgrid">
+      <button type="button" class="vopt wait" data-k="a"><img alt="Variante Ausgewogen"><span>Ausgewogen</span><small class="vp"></small></button>
+      <button type="button" class="vopt wait" data-k="b"><img alt="Variante Kontrastreich"><span>Kontrastreich</span><small class="vp"></small></button>
+      <button type="button" class="vopt wait" data-k="c"><img alt="Variante Weich"><span>Weich</span><small class="vp"></small></button>
+    </div>
   </div>
 </div>
 </form>
