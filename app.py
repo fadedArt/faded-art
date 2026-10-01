@@ -1,4 +1,4 @@
-import hmac, json, math, os, re, smtplib, threading, time, uuid
+import hmac, json, math, os, re, shutil, smtplib, threading, time, uuid
 from email.message import EmailMessage
 from datetime import datetime
 from datetime import timedelta
@@ -59,6 +59,11 @@ LINES = {240: 8000, 360: 10000}   # Anzahl Fäden je Pin-Zahl
 LENPOW, BUDGET, GAMMA0, TONE = 0.25, 3.0, 1.0, 1.0
 TONE_LIGHT, GAMMA_LIGHT = 1.0, 1.0   # helle Fäden auf dunklem Kreis: Fäden addieren sich optisch, daher sparsamer       # Gewicht der Sehnenlänge, Faden-Budget für die Tonwerte
 LOCAL, LC_R = 0.0, 40         # Stärke und Radius des lokalen Kontrasts
+VARIANTS = {  # drei Stile, die bei jeder Berechnung erzeugt werden; der Kunde wählt seinen Favoriten
+    "a": dict(name="Ausgewogen", local=0.0, tone=1.0, tone_light=1.0, line_w=3.5),
+    "b": dict(name="Kontrastreich", local=0.6, tone=1.4, tone_light=1.3, line_w=3.5),
+    "c": dict(name="Weich", local=0.0, tone=0.8, tone_light=0.8, line_w=3.0),
+}
 LINE_W = 3.5                      # Fadenbreite in Pixeln (bei 1000 px Bildbreite)
 AUTOSTOP, MIN_GAP = True, 25        # Auto-Stopp; Mindestabstand in Nägeln (bei 360 Pins)
 TOPK = 1                          # 1 = immer die beste Sehne
@@ -120,9 +125,11 @@ def watermark(img):
             d.text((x, y), "VORSCHAU", fill=(128, 128, 128, 110), font=font)
     return Image.alpha_composite(img.convert("RGBA"), ov).convert("RGB")
 
-def compute_string_art(ref, m):
+def compute_string_art(ref, m, key="a", pbase=0.0, pscale=1.0):
     """Gierige String-Art: pro Schritt wird die Sehne gewählt, die dem Bild am meisten fehlt.
     Alles vektorisiert (numpy), Rendering mit echter Deckkraft-Überlagerung in doppelter Auflösung."""
+    var = VARIANTS[key]                        # Stil: Kontrast, Tonwerte, Fadenbreite
+    LW = var["line_w"]
     d, n = odir(ref), m["pins"]
     a = THICK[m["thick"]]                       # Deckkraft pro Faden
     thread, disc = COLORS[m["color"]][1], DISC[m["disc"]][1]
@@ -134,12 +141,12 @@ def compute_string_art(ref, m):
     img = Image.open(os.path.join(d, "input.png")).convert("L").resize((W, W), Image.Resampling.LANCZOS)
     img = ImageOps.autocontrast(img, cutoff=1.5).filter(ImageFilter.UnsharpMask(radius=3, percent=140, threshold=2))
     nrm = np.asarray(img, dtype=np.float32) / 255.0
-    if LOCAL:                                            # lokaler Kontrast: hebt Streifen, Augen, Ohren hervor
+    if var["local"]:                                            # lokaler Kontrast: hebt Streifen, Augen, Ohren hervor
         blur = np.asarray(img.filter(ImageFilter.GaussianBlur(LC_R)), dtype=np.float32) / 255.0
-        nrm = np.clip(nrm + LOCAL * (nrm - blur), 0, 1)
+        nrm = np.clip(nrm + var["local"] * (nrm - blur), 0, 1)
     dark_thread = lum(thread) < lum(disc)
     c = 1.0 - nrm if dark_thread else nrm    # heller Faden auf dunklem Grund: helle Stellen = Faden
-    c = 1.0 - (1.0 - c) ** (TONE if dark_thread else TONE_LIGHT)                          # TONE > 1: Mitteltöne bekommen mehr Fäden, das Bild wirkt plastischer
+    c = 1.0 - (1.0 - c) ** (var["tone"] if dark_thread else var["tone_light"])                          # TONE > 1: Mitteltöne bekommen mehr Fäden, das Bild wirkt plastischer
     yy, xx = np.mgrid[:W, :W]
     c = np.where((xx - W / 2) ** 2 + (yy - W / 2) ** 2 <= (W / 2 - 2) ** 2, c, 0).astype(np.float32)
 
@@ -152,7 +159,7 @@ def compute_string_art(ref, m):
     Wc = W // q
     logk = np.log1p(-a)
     Tl = c.reshape(Wc, q, Wc, q).mean(axis=(1, 3)).astype(np.float32)
-    budget = BUDGET * n_lines * 0.65 * W * LINE_W                   # verfügbare Faden-Pixel
+    budget = BUDGET * n_lines * 0.65 * W * LW                   # verfügbare Faden-Pixel
     need = lambda t: float(-np.log1p(-np.minimum(t, .92)).sum() / -logk * q * q)   # benötigte Faden-Pixel
     g = GAMMA0 if dark_thread else GAMMA_LIGHT
     while need(Tl ** g) > budget and g < 4:             # Gamma: Lichter bleiben, Mitteltöne werden lichter -> mehr Kontrast
@@ -163,7 +170,7 @@ def compute_string_art(ref, m):
     cnt_c, cov, R = np.zeros(Wc * Wc, np.float32), np.zeros(Wc * Wc, np.float32), T.copy()
     s = np.linspace(0, 1, SAMPLES)
     skip, allp = max(8, round(MIN_GAP * n / 360) - 1), np.arange(n)     # Mindestabstand der Nägel je Sehne
-    KAPPA = -logk * LINE_W / (q * q)
+    KAPPA = -logk * LW / (q * q)
     used = np.zeros((n, n), bool)                                         # jede Sehne nur einmal
     seq, cur = [0], 0
     rng = np.random.default_rng(1)
@@ -184,7 +191,7 @@ def compute_string_art(ref, m):
         tt = np.linspace(0, 1, int(np.hypot(ex, ey)) + 1)
         cells = (np.rint(py[cur] + ey * tt).astype(np.int32) // q) * Wc + np.rint(px[cur] + ex * tt).astype(np.int32) // q
         u, k_ = np.unique(cells, return_counts=True)
-        cov_new = 1 - np.exp(logk * (cnt_c[u] + k_) * LINE_W / (q * q))
+        cov_new = 1 - np.exp(logk * (cnt_c[u] + k_) * LW / (q * q))
         cnt_c[u] += k_
         cov[u] = cov_new
         R[u] = T[u] - cov[u]
@@ -192,19 +199,19 @@ def compute_string_art(ref, m):
         cur = int(cand[j])
         seq.append(cur)
         if len(seq) % 200 == 0:                              # Fortschritt und Lebenszeichen für die Anzeige
-            update(ref, progress=min(99, int(100 * len(seq) / n_lines)), beat=time.time())
+            update(ref, progress=min(99, int(pbase + pscale * 100 * len(seq) / n_lines)), beat=time.time())
 
     # 4) Rendern in 2000 px: jeder Faden ~1 px (bei 1000 px) breit, Deckkraft überlagert sich physikalisch
     k = S / W
     P = np.stack([px, py], 1) * k
     cnt = np.zeros(S * S, np.uint16)
-    lw = max(1, int(round(2 * LINE_W)))
+    lw = max(1, int(round(2 * LW)))
     for u, v in zip(seq[:-1], seq[1:]):
         L = int(np.hypot(*(P[v] - P[u]))) + 1
         t = np.linspace(0, 1, L)
         x = np.clip(np.rint(P[u, 0] + (P[v, 0] - P[u, 0]) * t), 0, S - 2).astype(np.int64)
         y = np.clip(np.rint(P[u, 1] + (P[v, 1] - P[u, 1]) * t), 0, S - 2).astype(np.int64)
-        base = y * S + x                                      # Faden ist LINE_W px breit (bei 1000 px), quer zur Richtung verbreitert
+        base = y * S + x                                      # Faden ist LW px breit (bei 1000 px), quer zur Richtung verbreitert
         step = S if abs(P[v, 0] - P[u, 0]) >= abs(P[v, 1] - P[u, 1]) else 1
         idx = (base[:, None] + (np.arange(lw) - lw // 2)[None, :] * step).ravel()
         cnt[np.unique(idx[(idx >= 0) & (idx < S * S)])] += 1
@@ -225,13 +232,13 @@ def compute_string_art(ref, m):
     ImageDraw.Draw(mask).ellipse([0, 0, W, W], fill=255)
     final = Image.new("RGB", (W, W), bg)
     final.paste(art, (0, 0), mask)
-    final.save(os.path.join(d, "final.png"))              # privat, nur nach Zahlung nutzbar
-    watermark(final).save(os.path.join(d, "preview.png"))  # öffentlich, mit Wasserzeichen
-    with open(os.path.join(d, "pinfolge.txt"), "w") as f:
+    final.save(os.path.join(d, f"final_{key}.png"))              # privat, nur nach Zahlung nutzbar
+    watermark(final).save(os.path.join(d, f"preview_{key}.png"))  # öffentlich, mit Wasserzeichen
+    with open(os.path.join(d, f"pinfolge_{key}.txt"), "w") as f:
         f.write(",".join(map(str, seq)))
-    write_instructions(ref, m, seq, px, py, rp)
+    write_instructions(ref, m, seq, px, py, rp, key)
 
-def write_instructions(ref, m, seq, px, py, rp):
+def write_instructions(ref, m, seq, px, py, rp, key="a"):
     """Anleitung mit allen Einstellungen und der kompletten Pinfolge (für die Fertigung)."""
     n, disc_cm = m["pins"], round(min(m["w"], m["h"]) * 0.9)
     sq = np.array(seq)
@@ -240,6 +247,7 @@ def write_instructions(ref, m, seq, px, py, rp):
     txt = f"""FADED ART - Pinfolge und Anleitung
 Erstellt am: {datetime.now():%d.%m.%Y um %H:%M:%S}
 Bestellnummer: {ref}
+Stil der Berechnung: {VARIANTS[key]['name']}
 
 === PROJEKT-EINSTELLUNGEN ===
 Anzahl Pins: {n}
@@ -269,13 +277,22 @@ Gesamtschritte: {len(seq)}
 === PINFOLGE ALS ZAHLENLISTE ===
 {",".join(map(str, seq))}
 """
-    with open(os.path.join(odir(ref), "anleitung.txt"), "w", encoding="utf-8") as f:
+    with open(os.path.join(odir(ref), f"anleitung_{key}.txt"), "w", encoding="utf-8") as f:
         f.write(txt)
 
 def run_job(ref):
     try:
-        update(ref, status="running", beat=time.time(), progress=0)
-        compute_string_art(ref, load(ref))
+        update(ref, status="running", beat=time.time(), progress=0, ready=[])
+        keys = list(VARIANTS)
+        for i, key in enumerate(keys):              # nacheinander; jede fertige Variante wird sofort angezeigt
+            try:
+                compute_string_art(ref, load(ref), key, pbase=100 * i / len(keys), pscale=1 / len(keys))
+            except Exception:
+                app.logger.exception("Variante %s fehlgeschlagen (%s)", key, ref)
+                continue
+            update(ref, ready=(load(ref).get("ready") or []) + [key], progress=int(100 * (i + 1) / len(keys)), beat=time.time())
+        if not load(ref).get("ready"):
+            raise RuntimeError("keine Variante berechnet")
         update(ref, status="done", progress=100)
     except Exception:
         app.logger.exception("Berechnung fehlgeschlagen (%s)", ref)
@@ -308,7 +325,7 @@ def admin():
 
 @app.get("/admin/<ref>/<name>")
 def admin_file(ref, name):
-    if not admin_ok() or name not in ("anleitung.txt", "final.png", "pinfolge.txt") or not load(ref):
+    if not admin_ok() or name not in ("anleitung.txt", "final.png", "pinfolge.txt") or not load(ref) or not os.path.exists(os.path.join(odir(ref), name)):
         abort(404)
     return send_file(os.path.join(odir(ref), name), as_attachment=(name != "final.png"), max_age=0)
 
@@ -395,22 +412,36 @@ def status(ref):
     out = {"status": m["status"], "order_ref": ref, "job_id": ref, "progress": m.get("progress", 0)}
     if m["status"] == "error":
         out["message"] = m.get("message", "Die Berechnung ist fehlgeschlagen.")
-    if m["status"] == "done":
-        out["preview_url"] = f"/preview/{ref}.png"
+    ready = m.get("ready") or []
+    out["variants"] = [{"key": k, "name": VARIANTS[k]["name"], "url": f"/preview/{ref}/{k}.png"} for k in VARIANTS if k in ready]
+    if m["status"] == "done" and out["variants"]:
+        out["preview_url"] = out["variants"][0]["url"]
     return jsonify(out)
+
+@app.get("/preview/<ref>/<key>.png")
+def preview_variant(ref, key):
+    p = os.path.join(odir(ref), f"preview_{key}.png")
+    if not load(ref) or key not in VARIANTS or not os.path.exists(p):
+        abort(404)
+    return send_file(p, mimetype="image/png", max_age=0)
 
 @app.get("/preview/<ref>.png")
 def preview(ref):
-    m = load(ref)
-    if not m or m["status"] != "done":
-        abort(404)
-    return send_file(os.path.join(odir(ref), "preview.png"), mimetype="image/png", max_age=0)
+    return preview_variant(ref, "a")
 
 MAX_CART = 10
 
+def choose_variant(ref, key):
+    """Die gewählte Variante wird zur Bestellung: Bild, Pinfolge und Anleitung erhalten die festen Dateinamen."""
+    for src, dst in ((f"final_{key}.png", "final.png"), (f"pinfolge_{key}.txt", "pinfolge.txt"),
+                     (f"anleitung_{key}.txt", "anleitung.txt"), (f"preview_{key}.png", "preview.png")):
+        shutil.copyfile(os.path.join(odir(ref), src), os.path.join(odir(ref), dst))
+    update(ref, variant=key)
+
 def item_title(m):
     return (f"String Art {m.get('size', '')} ({m['w']}x{m['h']} cm), {WOOD[m['wood']][0]}, "
-            f"{COLORS[m['color']][0]} auf {DISC[m['disc']][0]}, {m['pins']} Pins ({PINCOL[m.get('pin', 'gold')][0]})")
+            f"{COLORS[m['color']][0]} auf {DISC[m['disc']][0]}, {m['pins']} Pins ({PINCOL[m.get('pin', 'gold')][0]})"
+            + (f", Stil {VARIANTS[m['variant']]['name']}" if m.get("variant") in VARIANTS else ""))
 
 def cart_items():
     items, keep = [], []
@@ -418,7 +449,7 @@ def cart_items():
         m = load(ref)
         if m and m["status"] == "done":
             keep.append(ref)
-            items.append({"ref": ref, "title": item_title(m), "cents": price_cents(m)})
+            items.append({"ref": ref, "title": item_title(m), "cents": price_cents(m), "variant": m.get("variant", "a")})
     session["cart"] = keep
     return items
 
@@ -452,10 +483,12 @@ def cart():
 
 @app.post("/cart/add")
 def cart_add():
-    ref = (request.get_json(silent=True) or {}).get("order_ref")
+    body = request.get_json(silent=True) or {}
+    ref, key = body.get("order_ref"), body.get("variant") or "a"
     m = load(ref)
-    if not m or m["status"] != "done":
+    if not m or m["status"] != "done" or key not in (m.get("ready") or []):
         return jsonify(message="Bestellung nicht gefunden"), 400
+    choose_variant(ref, key)
     cart = session.get("cart", [])
     if ref not in cart:
         if len(cart) >= MAX_CART:
