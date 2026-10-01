@@ -139,22 +139,36 @@ async function fetchRetry(url, opts, tries = 4) {   // Server aufgeweckt/neu ges
   }
 }
 
-let variantKey = null, shown = {};
-function pick(k) {                                             // Variante wählen: großes Vorschaubild wechselt
-  const b = document.querySelector('.vopt[data-k="' + k + '"]');
+let variantKey = null, fin = {}, liveSeen = {};
+const tile = k => document.querySelector('.vopt[data-k="' + k + '"]');
+function syncBig() {                                           // das große Bild zeigt die gewählte Variante (live oder fertig)
+  const t = variantKey && tile(variantKey);
+  if (!t) return;
+  $('result').src = t.querySelector('img').src; $('result').hidden = false; cv.hidden = true;
+}
+function pick(k) {
+  const b = tile(k);
   if (!b || b.classList.contains('wait')) return;
   variantKey = k;
   document.querySelectorAll('.vopt').forEach(x => x.classList.toggle('sel', x === b));
-  $('result').src = b.querySelector('img').src; $('result').hidden = false; cv.hidden = true;
+  syncBig();
 }
-function showVariants(d) {                                     // fertige Varianten sofort anzeigen
-  if (!d.variants || !d.variants.length) return;
-  $('variants').hidden = false; $('spin').hidden = true;
-  d.variants.forEach(v => {
-    const b = document.querySelector('.vopt[data-k="' + v.key + '"]');
-    if (b && !shown[v.key]) { shown[v.key] = true; b.querySelector('img').src = v.url; b.classList.remove('wait'); }
+function showVariants(d) {                                     // Live-Bilder der drei Varianten, später die fertigen
+  $('variants').hidden = false;
+  ['a', 'b', 'c'].forEach(k => {
+    const b = tile(k), img = b.querySelector('img'), vp = b.querySelector('.vp');
+    const done = (d.variants || []).find(v => v.key === k);
+    if (done) {
+      if (!fin[k]) { fin[k] = true; img.src = done.url; b.classList.remove('wait'); vp.textContent = 'fertig ✓'; if (variantKey === k) syncBig(); }
+    } else if (d.live && d.live[k] && liveSeen[k] !== d.live[k]) {
+      liveSeen[k] = d.live[k];
+      img.src = '/live/' + d.order_ref + '/' + k + '.jpg?v=' + d.live[k]; b.classList.remove('wait');
+      vp.textContent = ((d.prog || {})[k] || 0) + ' %';
+      if (variantKey === k) syncBig();
+    }
   });
-  if (!variantKey) pick(d.variants[0].key);
+  if (!variantKey && !tile('a').classList.contains('wait')) pick('a');
+  if ((d.variants || []).length || Object.keys(d.live || {}).length) $('spin').hidden = true;
 }
 document.querySelectorAll('.vopt').forEach(b => b.addEventListener('click', () => pick(b.dataset.k)));
 
@@ -163,9 +177,11 @@ async function generate() {
   if (lowContrast()) return msg(MSG);
   busy = true; msg(''); $('next').disabled = true;
   $('wait').textContent = 'Berechnung läuft, das dauert meist unter einer Minute …';
-  $('spin').hidden = false; $('checkout').hidden = true; $('variants').hidden = true;
-  variantKey = null; shown = {};
-  document.querySelectorAll('.vopt').forEach(x => { x.classList.add('wait'); x.classList.remove('sel'); x.querySelector('img').removeAttribute('src'); });
+  $('spin').hidden = false; $('checkout').hidden = true; $('variants').hidden = false;
+  $('vtext').textContent = 'Deine drei Varianten werden gerade live gezeichnet. Tippe auf eine, um sie groß zu sehen.';
+  variantKey = null; fin = {}; liveSeen = {};
+  $('result').hidden = true; cv.hidden = false;
+  document.querySelectorAll('.vopt').forEach(x => { x.classList.add('wait'); x.classList.remove('sel'); x.querySelector('img').removeAttribute('src'); x.querySelector('.vp').textContent = ''; });
   try {
     await fetchRetry('/health', {}, 10);                      // Server zuerst aufwecken
     $('wait').textContent = 'Berechnung läuft, für drei Varianten kann das einige Minuten dauern …';
@@ -182,12 +198,13 @@ async function generate() {
       try { d = await (await fetch('/status/' + jobId)).json(); fails = 0; }
       catch (e) { if (++fails > 40) throw new Error('Die Verbindung zum Server ist abgebrochen'); continue; }
       if (d.status === 'error') throw new Error(d.message || 'Berechnung fehlgeschlagen');
-      $('wait').textContent = 'Berechnung läuft … ' + (d.progress || 0) + ' % (die Varianten erscheinen nacheinander)';
+      $('wait').textContent = 'Die Fäden werden gezogen … ' + (d.progress || 0) + ' %';
       showVariants(d);
     }
     if (!d.variants || !d.variants.length) throw new Error('Die Berechnung dauert ungewöhnlich lange');
     orderRef = d.order_ref;
     showVariants(d);
+    $('vtext').textContent = 'Fertig! Tippe auf deine Lieblingsvariante und kaufe sie:';
     $('checkout').hidden = false;
   } catch (err) { msg('Berechnung nicht möglich: ' + err.message + '. Bitte erneut versuchen.'); }
   finally { $('wait').textContent = ''; busy = false; $('next').disabled = false; $('spin').hidden = true; }
