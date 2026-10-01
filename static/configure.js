@@ -21,19 +21,33 @@ function price() {
   if (PRICE.test_quad_cents && c.format === 'quad') {   // Testpreis für quadratische Bretter
     $('price').textContent = 'Preis: ' + (PRICE.test_quad_cents / 100).toFixed(2).replace('.', ',') + ' € (Testpreis)'; return;
   }
-  const cents = PRICE.base_cents + Math.max(0, c.w * c.h - PRICE.base_area) * PRICE.cents_per_cm2;
+  const area = c.w * c.h * (c.format === 'rund' ? PRICE.round_factor : 1);
+  const cents = PRICE.base_cents + Math.max(0, area - PRICE.base_area) * PRICE.cents_per_cm2;
   const p = Math.round(cents) / 100 + PRICE.wood[c.wood] + PRICE.pins[c.pins];
   $('price').textContent = 'Preis: ' + p.toFixed(2).replace('.', ',') + ' €';
 }
+
+let threadTouched = false;
+function recommendThread() {                                   // größeres Bild = derselbe Faden wirkt feiner: dickeren Faden empfehlen
+  const c = cfg(), disc = 0.9 * Math.min(c.w, c.h), want = 0.20 * disc / 45;
+  const opts = [...$('thick').options].map(o => parseFloat(o.value));
+  const rec = opts.reduce((a, b) => Math.abs(b - want) < Math.abs(a - want) ? b : a);
+  if (!threadTouched) $('thick').value = rec.toFixed(2);
+  $('threadHint').textContent = 'Bild-Durchmesser ca. ' + Math.round(disc) + ' cm. Empfehlung: ' + rec.toFixed(2).replace('.', ',') +
+    ' mm. Auf größeren Brettern wirkt derselbe Faden feiner, auf kleineren kräftiger.';
+}
+$('thick').addEventListener('input', () => { threadTouched = true; });
 
 function board() {
   const c = cfg(), b = $('board');
   b.style.setProperty('--w', c.w); b.style.setProperty('--h', c.h);
   b.classList.toggle('wide', c.w >= c.h);
+  b.classList.toggle('round', c.format === 'rund');
   b.dataset.wood = c.wood;
   $('disc').style.background = c.discHex;
   if (step >= 4) msg(lowContrast() ? MSG : '');
   [...$('size').options].forEach(o => { const [w, h] = SIZES[c.format][o.value]; o.textContent = o.value + ' (' + w + ' × ' + h + ' cm)'; });
+  recommendThread();
   price(); draw();
 }
 
