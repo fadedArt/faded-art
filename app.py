@@ -49,7 +49,9 @@ DISC = {  # Farbe des Kreises in der Mitte
     "braun": ("Braun", (110, 74, 45)), "anthrazit": ("Anthrazit", (45, 45, 48)),
     "schwarz": ("Schwarz", (14, 14, 14)), "marine": ("Marineblau", (24, 36, 66)),
 }
-THICK = {"0.15": 14 / 255, "0.20": 20 / 255, "0.30": 30 / 255}   # "Line Weight" 14 / 20 / 30 von 255  # Fadendicke -> Deckkraft pro Faden
+THICKS = ("0.15", "0.20", "0.30", "0.40", "0.60")   # echte Fadendicke in mm
+E_REF, D0_CM = 0.274, 45.0     # Referenz: 0,20 mm Faden auf einem Bild von 45 cm Durchmesser (50-cm-Brett)
+ROUND_FORMATS = {"rund"}; ROUND_AREA = 0.785   # Rundes Holz: Fläche = Kreis, Preis nach Fläche
 PINCOL = {  # Farbe der Nägel
     "gold": ("Gold", (212, 175, 55)), "silber": ("Silber", (205, 205, 205)),
     "schwarz": ("Schwarz", (30, 30, 30)), "weiss": ("Weiß", (245, 245, 245)),
@@ -77,6 +79,7 @@ TEST_QUAD_CENTS = int(os.environ.get("TESTPREIS_QUAD_CENTS", "50"))   # Testprei
 BASE_CENTS, BASE_AREA, CENTS_PER_CM2 = 50, 2500, 2.5  # 0,50 € ist noch der Testpreis!
 # Feste Größen (Breite x Höhe in cm) je Format. Einzige Quelle: Frontend liest sie von hier.
 SIZES = {
+    "rund": {"S": (30, 30), "M": (50, 50), "L": (70, 70), "XL": (100, 100)},   # Durchmesser in cm
     "quad": {"S": (30, 30), "M": (50, 50), "L": (70, 70), "XL": (100, 100)},
     "hoch": {"S": (30, 40), "M": (45, 60), "L": (60, 80), "XL": (90, 120)},
     "quer": {"S": (40, 30), "M": (60, 45), "L": (80, 60), "XL": (120, 90)},
@@ -125,10 +128,14 @@ def update_variant(ref, key, pct=None, live=None, ready=False):
             m["progress"] = int(sum(m["prog"].values()) / len(VARIANTS))
         _write(ref, m)
 
+def board_label(m):
+    return f"rund, Durchmesser {m['w']} cm" if m.get("fmt") in ROUND_FORMATS else f"{m['w']} x {m['h']} cm"
+
 def price_cents(m):
     if TEST_QUAD_CENTS and m.get("fmt") == "quad":
         return TEST_QUAD_CENTS
-    extra = max(0, m["w"] * m["h"] - BASE_AREA) * CENTS_PER_CM2
+    area = m["w"] * m["h"] * (ROUND_AREA if m.get("fmt") in ROUND_FORMATS else 1)
+    extra = max(0, area - BASE_AREA) * CENTS_PER_CM2
     return BASE_CENTS + round(extra) + (WOOD[m["wood"]][2] + PINS[m["pins"]]) * 100
 
 
@@ -143,11 +150,14 @@ def compute_string_art(ref, m, key="a", pbase=0.0, pscale=1.0):
     var = VARIANTS[key]                        # Stil: Kontrast, Tonwerte, Fadenbreite
     LW = var["line_w"]
     d, n = odir(ref), m["pins"]
-    a = THICK[m["thick"]]                       # Deckkraft pro Faden
     thread, disc = COLORS[m["color"]][1], DISC[m["disc"]][1]
     bg = WOOD[m["wood"]][1]
     W, S = 1000, 2000
-    n_lines = LINES[n]
+    # Maßstab: derselbe Faden wirkt auf einem größeren Bild feiner, auf einem kleineren kräftiger
+    disc_cm = max(10.0, 0.9 * min(m["w"], m["h"]))
+    t_mm = float(m["thick"])
+    a = min(0.4, max(0.02, E_REF * (t_mm / 0.20) * (D0_CM / disc_cm) / LW))     # Deckkraft pro Faden
+    n_lines = int(LINES[n] * min(1.6, max(1.0, (0.20 / t_mm) * (disc_cm / D0_CM))))   # feinerer Faden braucht mehr Linien
 
     # 1) Bild vorbereiten: Kontrast, Schärfe, dann "gewünschte Fadendichte" c (0..1)
     img = Image.open(os.path.join(d, "input.png")).convert("L").resize((W, W), Image.Resampling.LANCZOS)
@@ -289,11 +299,11 @@ Stil der Berechnung: {VARIANTS[key]['name']}
 Anzahl Pins: {n}
 Maximale Linien: {LINES[n]}
 Verwendete Linien: {len(seq) - 1} (Auto-Stopp, sobald kein Faden das Bild mehr verbessert)
-Linienstärke: {round(THICK[m['thick']] * 255)} (Fadendicke {m['thick'].replace('.', ',')} mm)
+Fadendicke: {m['thick'].replace('.', ',')} mm (Maßstab: Bild {disc_cm} cm)
 Fadenfarbe: {COLORS[m['color']][0]}
 Farbe des Kreises: {DISC[m['disc']][0]}
 Nagelfarbe: {PINCOL[m.get('pin', 'gold')][0]}
-Untergrund: {WOOD[m['wood']][0]}, Brett {m['w']} x {m['h']} cm
+Untergrund: {WOOD[m['wood']][0]}, {board_label(m)}
 Kreisdurchmesser (Pins): ca. {disc_cm} cm
 Fadenlänge: ca. {meters:.2f} Meter
 
@@ -392,7 +402,7 @@ def index():
 @app.get("/configure")
 def configure():
     cfg = {"sizes": SIZES, "pricing": {
-        "test_quad_cents": TEST_QUAD_CENTS, "base_cents": BASE_CENTS, "base_area": BASE_AREA, "cents_per_cm2": CENTS_PER_CM2,
+        "test_quad_cents": TEST_QUAD_CENTS, "round_factor": ROUND_AREA, "base_cents": BASE_CENTS, "base_area": BASE_AREA, "cents_per_cm2": CENTS_PER_CM2,
         "wood": {k: v[2] for k, v in WOOD.items()}, "pins": PINS}}
     return render_template("configure.html", cfg=cfg)
 
@@ -440,7 +450,7 @@ def generate():
     fmt, size = form.get("format") or "quad", form.get("size") or "M"
     if fmt not in SIZES or size not in SIZES[fmt]:
         return jsonify(message="Ungültige Größe"), 400
-    if wood not in WOOD or color not in COLORS or thick not in THICK or pins not in PINS:
+    if wood not in WOOD or color not in COLORS or thick not in THICKS or pins not in PINS:
         return jsonify(message="Ungültige Auswahl"), 400
 
     ref = uuid.uuid4().hex
@@ -501,7 +511,7 @@ def choose_variant(ref, key):
     update(ref, variant=key)
 
 def item_title(m):
-    return (f"String Art {m.get('size', '')} ({m['w']}x{m['h']} cm), {WOOD[m['wood']][0]}, "
+    return (f"String Art {m.get('size', '')} ({board_label(m)}), {WOOD[m['wood']][0]}, "
             f"{COLORS[m['color']][0]} auf {DISC[m['disc']][0]}, {m['pins']} Pins ({PINCOL[m.get('pin', 'gold')][0]})"
             + (f", Stil {VARIANTS[m['variant']]['name']}" if m.get("variant") in VARIANTS else ""))
 
