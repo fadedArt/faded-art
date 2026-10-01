@@ -128,6 +128,10 @@ def update_variant(ref, key, pct=None, live=None, ready=False):
             m["progress"] = int(sum(m["prog"].values()) / len(VARIANTS))
         _write(ref, m)
 
+def ring_cm(m):
+    """Durchmesser des Nagelkreises: bei rundem Holz sitzen die Nägel direkt am Rand (95 %), sonst 90 % der kürzeren Seite."""
+    return (0.95 if m.get("fmt") in ROUND_FORMATS else 0.9) * min(m["w"], m["h"])
+
 def board_label(m):
     return f"rund, Durchmesser {m['w']} cm" if m.get("fmt") in ROUND_FORMATS else f"{m['w']} x {m['h']} cm"
 
@@ -154,7 +158,7 @@ def compute_string_art(ref, m, key="a", pbase=0.0, pscale=1.0):
     bg = WOOD[m["wood"]][1]
     W, S = 1000, 2000
     # Maßstab: derselbe Faden wirkt auf einem größeren Bild feiner, auf einem kleineren kräftiger
-    disc_cm = max(10.0, 0.9 * min(m["w"], m["h"]))
+    disc_cm = max(10.0, ring_cm(m))
     t_mm = float(m["thick"])
     a = min(0.4, max(0.02, E_REF * (t_mm / 0.20) * (D0_CM / disc_cm) / LW))     # Deckkraft pro Faden
     n_lines = int(LINES[n] * min(1.6, max(1.0, (0.20 / t_mm) * (disc_cm / D0_CM))))   # feinerer Faden braucht mehr Linien
@@ -286,7 +290,7 @@ def compute_string_art(ref, m, key="a", pbase=0.0, pscale=1.0):
 
 def write_instructions(ref, m, seq, px, py, rp, key="a"):
     """Anleitung mit allen Einstellungen und der kompletten Pinfolge (für die Fertigung)."""
-    n, disc_cm = m["pins"], round(min(m["w"], m["h"]) * 0.9)
+    n, disc_cm = m["pins"], round(ring_cm(m))
     sq = np.array(seq)
     meters = float(np.hypot(np.diff(px[sq]), np.diff(py[sq])).sum()) * (disc_cm / 2 / rp) / 100
     steps = "\n".join(f"Schritt {i + 1}: Pin {p}" for i, p in enumerate(seq))
