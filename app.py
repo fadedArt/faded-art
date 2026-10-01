@@ -3,7 +3,6 @@ from email.message import EmailMessage
 from datetime import datetime
 from datetime import timedelta
 from concurrent.futures import ThreadPoolExecutor
-from functools import lru_cache
 
 import numpy as np
 import stripe
@@ -21,8 +20,8 @@ app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
 Image.MAX_IMAGE_PIXELS = 50_000_000
 
 # Geheimnisse NUR über Umgebungsvariablen setzen, nie im Code
-stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
-WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "").strip().strip("\"'")      # Leerzeichen und Anführungszeichen aus Versehen entfernen
+WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip().strip("\"'")
 DATA_DIR = os.environ.get("DATA_DIR", "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -134,21 +133,9 @@ def price_cents(m):
 
 
 # ---------- String-Art-Berechnung (dein Algorithmus, pro Bestellung isoliert) ----------
-@lru_cache(maxsize=1)
-def wm_layer():
-    ov = Image.new("RGBA", (600, 600), (0, 0, 0, 0))
-    d = ImageDraw.Draw(ov)
-    try:
-        font = ImageFont.load_default(size=36)
-    except TypeError:
-        font = ImageFont.load_default()
-    for y in range(-20, 620, 120):
-        for x in range(-20, 620, 220):
-            d.text((x, y), "VORSCHAU", fill=(128, 128, 128, 110), font=font)
-    return ov
-
-def watermark(img):
-    return Image.alpha_composite(img.convert("RGB").resize((600, 600)).convert("RGBA"), wm_layer()).convert("RGB")
+def preview_img(img, size=800):
+    """Vorschau in 800 px (das gekaufte Bild und die Pinfolge haben volle Auflösung)."""
+    return img.convert("RGB").resize((size, size), Image.Resampling.LANCZOS)
 
 def compute_string_art(ref, m, key="a", pbase=0.0, pscale=1.0):
     """Gierige String-Art: pro Schritt wird die Sehne gewählt, die dem Bild am meisten fehlt.
@@ -206,7 +193,8 @@ def compute_string_art(ref, m, key="a", pbase=0.0, pscale=1.0):
     def save_live(pct):
         nonlocal live_n
         live_n += 1
-        watermark(live).save(os.path.join(d, f"live_{key}.jpg"), quality=78)
+        live.save(os.path.join(d, f"live_{key}.tmp.jpg"), quality=80)
+        os.replace(os.path.join(d, f"live_{key}.tmp.jpg"), os.path.join(d, f"live_{key}.jpg"))   # atomar: der Browser sieht nie halbe Bilder
         update_variant(ref, key, pct=pct, live=live_n)
 
     save_live(0)
@@ -281,7 +269,7 @@ def compute_string_art(ref, m, key="a", pbase=0.0, pscale=1.0):
     final = Image.new("RGB", (W, W), bg)
     final.paste(art, (0, 0), mask)
     final.save(os.path.join(d, f"final_{key}.png"))              # privat, nur nach Zahlung nutzbar
-    watermark(final).save(os.path.join(d, f"preview_{key}.png"))  # öffentlich, mit Wasserzeichen
+    preview_img(final).save(os.path.join(d, f"preview_{key}.png"))   # Vorschau ohne Wasserzeichen
     with open(os.path.join(d, f"pinfolge_{key}.txt"), "w") as f:
         f.write(",".join(map(str, seq)))
     write_instructions(ref, m, seq, px, py, rp, key)
@@ -373,6 +361,21 @@ def admin():
 <a style="color:#e6ca65" href="/admin/{{ r.ref }}/anleitung.txt?key={{ key }}">Anleitung mit Pinfolge</a> |
 <a style="color:#e6ca65" href="/admin/{{ r.ref }}/final.png?key={{ key }}">Bild in voller Größe</a></p>{% else %}<p>Noch keine Bestellungen.</p>{% endfor %}""",
         rows=rows, key=request.args.get("key"))
+
+@app.get("/admin/stripe-check")
+def stripe_check():
+    """Prüft, ob der Stripe-Schlüssel stimmt: /admin/stripe-check?key=DEIN_ADMIN_KEY"""
+    if not admin_ok():
+        abort(404)
+    k = stripe.api_key or ""
+    info = {"Stripe-Schlüssel gesetzt": bool(k), "beginnt mit": (k[:8] + "...") if k else "-",
+            "Webhook-Schlüssel gesetzt": bool(WEBHOOK_SECRET), "Webhook beginnt mit": (WEBHOOK_SECRET[:6] + "...") if WEBHOOK_SECRET else "-"}
+    try:
+        stripe.Balance.retrieve()
+        info["Verbindung zu Stripe"] = "OK"
+    except Exception as e:
+        info["Verbindung zu Stripe"] = "FEHLER: " + str(getattr(e, "user_message", None) or e)[:300]
+    return jsonify(info)
 
 @app.get("/admin/<ref>/<name>")
 def admin_file(ref, name):
@@ -572,7 +575,10 @@ def checkout():
     if not re.match(r"^\S+@\S+\.\S+$", email) or data.get("agb") is not True:
         return jsonify(message="E-Mail oder AGB-Zustimmung fehlt"), 400
     if not stripe.api_key:
-        return jsonify(message="Zahlung ist noch nicht eingerichtet"), 500
+        return jsonify(message="Zahlung ist noch nicht eingerichtet (STRIPE_SECRET_KEY fehlt bei Render)"), 500
+    if not stripe.api_key.startswith(("sk_", "rk_")):
+        return jsonify(message="Der Stripe-Schlüssel bei Render ist falsch: Er muss der GEHEIME Schlüssel sein und mit sk_test_ beginnen "
+                               "(nicht pk_ und nicht whsec_)"), 500
     try:
         s = stripe.checkout.Session.create(
             payment_method_types=["card"], mode="payment", locale="de", customer_email=email,
@@ -584,9 +590,12 @@ def checkout():
             success_url=request.host_url + "success",
             cancel_url=request.host_url + "warenkorb")
         return jsonify(url=s.url)
-    except Exception:
+    except Exception as e:
         app.logger.exception("Stripe-Fehler")
-        return jsonify(message="Checkout konnte nicht gestartet werden"), 500
+        detail = ""
+        if stripe.api_key.startswith(("sk_test", "rk_test")):     # nur im Testmodus die genaue Stripe-Meldung zeigen
+            detail = ": " + str(getattr(e, "user_message", None) or e)[:300]
+        return jsonify(message="Checkout konnte nicht gestartet werden" + detail), 500
 
 def notify_owner(ref):
     """Schickt dir bei jeder bezahlten Bestellung Anleitung und Bild per E-Mail (sichert die Daten, falls der Server-Speicher gelöscht wird)."""
