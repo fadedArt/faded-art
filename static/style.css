@@ -99,4 +99,5 @@ mark{background:rgba(212,175,55,.2);color:var(--gold-t);padding:0 .25rem;border-
 .vopt.wait img{visibility:hidden}
 .vopt.wait span::after{content:" …"}
 .vopt.sel{border-color:var(--gold);box-shadow:0 0 0 2px rgba(212,175,55,.35)}
+.vp{display:block;color:var(--muted);font-size:.7rem;min-height:1em}
 
