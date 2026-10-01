@@ -106,7 +106,7 @@ function show(n) {
     i + 1 === n ? li.setAttribute('aria-current', 'step') : li.removeAttribute('aria-current');
   });
   $('back').style.visibility = n > 1 ? 'visible' : 'hidden';
-  $('next').textContent = n === 5 ? 'Vorschau berechnen' : 'Weiter';
+  $('next').textContent = n === 5 ? 'Drei Varianten berechnen' : 'Weiter';
   cv.style.cursor = n === 1 ? 'grab' : 'default'; cv.style.touchAction = n === 1 ? 'none' : 'auto'; // Verschieben nur in Schritt 1
   msg(''); if (n >= 4 && lowContrast()) msg(MSG);
   draw();
@@ -139,15 +139,36 @@ async function fetchRetry(url, opts, tries = 4) {   // Server aufgeweckt/neu ges
   }
 }
 
+let variantKey = null, shown = {};
+function pick(k) {                                             // Variante wählen: großes Vorschaubild wechselt
+  const b = document.querySelector('.vopt[data-k="' + k + '"]');
+  if (!b || b.classList.contains('wait')) return;
+  variantKey = k;
+  document.querySelectorAll('.vopt').forEach(x => x.classList.toggle('sel', x === b));
+  $('result').src = b.querySelector('img').src; $('result').hidden = false; cv.hidden = true;
+}
+function showVariants(d) {                                     // fertige Varianten sofort anzeigen
+  if (!d.variants || !d.variants.length) return;
+  $('variants').hidden = false; $('spin').hidden = true;
+  d.variants.forEach(v => {
+    const b = document.querySelector('.vopt[data-k="' + v.key + '"]');
+    if (b && !shown[v.key]) { shown[v.key] = true; b.querySelector('img').src = v.url; b.classList.remove('wait'); }
+  });
+  if (!variantKey) pick(d.variants[0].key);
+}
+document.querySelectorAll('.vopt').forEach(b => b.addEventListener('click', () => pick(b.dataset.k)));
+
 async function generate() {
   if (busy) return;
   if (lowContrast()) return msg(MSG);
   busy = true; msg(''); $('next').disabled = true;
   $('wait').textContent = 'Berechnung läuft, das dauert meist unter einer Minute …';
-  $('spin').hidden = false; $('checkout').hidden = true;
+  $('spin').hidden = false; $('checkout').hidden = true; $('variants').hidden = true;
+  variantKey = null; shown = {};
+  document.querySelectorAll('.vopt').forEach(x => { x.classList.add('wait'); x.classList.remove('sel'); x.querySelector('img').removeAttribute('src'); });
   try {
     await fetchRetry('/health', {}, 10);                      // Server zuerst aufwecken
-    $('wait').textContent = 'Berechnung läuft, auf dem Server kann das 1 bis 3 Minuten dauern …';
+    $('wait').textContent = 'Berechnung läuft, für drei Varianten kann das einige Minuten dauern …';
     const c = cfg(), fd = new FormData();
     fd.append('image', await cropBlob(), 'crop.png');
     ['format', 'size', 'wood', 'color', 'disc', 'thick', 'pin', 'pins'].forEach(k => fd.append(k, c[k]));
@@ -161,11 +182,12 @@ async function generate() {
       try { d = await (await fetch('/status/' + jobId)).json(); fails = 0; }
       catch (e) { if (++fails > 40) throw new Error('Die Verbindung zum Server ist abgebrochen'); continue; }
       if (d.status === 'error') throw new Error(d.message || 'Berechnung fehlgeschlagen');
-      $('wait').textContent = 'Berechnung läuft … ' + (d.progress || 0) + ' % (bis zu 3 Minuten)';
+      $('wait').textContent = 'Berechnung läuft … ' + (d.progress || 0) + ' % (die Varianten erscheinen nacheinander)';
+      showVariants(d);
     }
-    if (!d.preview_url) throw new Error('Die Berechnung dauert ungewöhnlich lange');
+    if (!d.variants || !d.variants.length) throw new Error('Die Berechnung dauert ungewöhnlich lange');
     orderRef = d.order_ref;
-    $('result').src = d.preview_url; $('result').hidden = false; cv.hidden = true;
+    showVariants(d);
     $('checkout').hidden = false;
   } catch (err) { msg('Berechnung nicht möglich: ' + err.message + '. Bitte erneut versuchen.'); }
   finally { $('wait').textContent = ''; busy = false; $('next').disabled = false; $('spin').hidden = true; }
@@ -173,7 +195,7 @@ async function generate() {
 
 async function addToCart() {
   const res = await fetch('/cart/add', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ order_ref: orderRef }) });
+    body: JSON.stringify({ order_ref: orderRef, variant: variantKey }) });
   const d = await res.json();
   if (!res.ok) throw new Error(d.message || 'Unbekannt');
   return d;
