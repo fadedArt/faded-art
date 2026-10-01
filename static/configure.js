@@ -1,6 +1,6 @@
 (() => {
 const $ = id => document.getElementById(id);
-const S = 600, R = S * 0.47;
+const S = 600, R = S * 0.49;     // Nagelring sitzt fast am Rand des Bildkreises (wie im berechneten Ergebnis)
 const CFG = JSON.parse($('cfg').dataset.cfg), SIZES = CFG.sizes, PRICE = CFG.pricing;
 const cv = $('cv'), ctx = cv.getContext('2d');
 const img = new Image();
@@ -29,7 +29,7 @@ function price() {
 
 let threadTouched = false;
 function recommendThread() {                                   // größeres Bild = derselbe Faden wirkt feiner: dickeren Faden empfehlen
-  const c = cfg(), disc = 0.9 * Math.min(c.w, c.h), want = 0.20 * disc / 45;
+  const c = cfg(), disc = (c.format === 'rund' ? 0.95 : 0.9) * Math.min(c.w, c.h), want = 0.20 * disc / 45;
   const opts = [...$('thick').options].map(o => parseFloat(o.value));
   const rec = opts.reduce((a, b) => Math.abs(b - want) < Math.abs(a - want) ? b : a);
   if (!threadTouched) $('thick').value = rec.toFixed(2);
