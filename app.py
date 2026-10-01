@@ -3,6 +3,7 @@ from email.message import EmailMessage
 from datetime import datetime
 from datetime import timedelta
 from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
 
 import numpy as np
 import stripe
@@ -67,7 +68,7 @@ VARIANTS = {  # drei Stile, die bei jeder Berechnung erzeugt werden; der Kunde w
 LINE_W = 3.5                      # Fadenbreite in Pixeln (bei 1000 px Bildbreite)
 AUTOSTOP, MIN_GAP = True, 25        # Auto-Stopp; Mindestabstand in Nägeln (bei 360 Pins)
 TOPK = 1                          # 1 = immer die beste Sehne
-CELL, SAMPLES = 2, 300            # Rastergröße der Bewertung, Abtastpunkte je Sehne
+CELL, SAMPLES = 2, 160            # Rastergröße der Bewertung, Abtastpunkte je Sehne
 MIN_CONTRAST = 60
 
 def lum(rgb):
@@ -96,13 +97,34 @@ def load(ref):
     except OSError:
         return None
 
-def update(ref, **kw):
-    m = load(ref) or {}
-    m.update(kw)
+_meta_lock = threading.Lock()
+
+def _write(ref, m):
     p = os.path.join(odir(ref), "meta.json")
     with open(p + ".tmp", "w") as f:
         json.dump(m, f)
     os.replace(p + ".tmp", p)
+
+def update(ref, **kw):
+    with _meta_lock:
+        m = load(ref) or {}
+        m.update(kw)
+        _write(ref, m)
+
+def update_variant(ref, key, pct=None, live=None, ready=False):
+    """Fortschritt, Live-Bildnummer und Fertig-Meldung EINER Variante (drei laufen gleichzeitig)."""
+    with _meta_lock:
+        m = load(ref) or {}
+        if pct is not None:
+            m.setdefault("prog", {})[key] = pct
+        if live is not None:
+            m.setdefault("live", {})[key] = live
+        if ready and key not in (m.get("ready") or []):
+            m["ready"] = (m.get("ready") or []) + [key]
+        m["beat"] = time.time()
+        if m.get("prog"):
+            m["progress"] = int(sum(m["prog"].values()) / len(VARIANTS))
+        _write(ref, m)
 
 def price_cents(m):
     if TEST_QUAD_CENTS and m.get("fmt") == "quad":
@@ -112,9 +134,9 @@ def price_cents(m):
 
 
 # ---------- String-Art-Berechnung (dein Algorithmus, pro Bestellung isoliert) ----------
-def watermark(img):
-    img = img.convert("RGB").resize((600, 600))
-    ov = Image.new("RGBA", img.size, (0, 0, 0, 0))
+@lru_cache(maxsize=1)
+def wm_layer():
+    ov = Image.new("RGBA", (600, 600), (0, 0, 0, 0))
     d = ImageDraw.Draw(ov)
     try:
         font = ImageFont.load_default(size=36)
@@ -123,7 +145,10 @@ def watermark(img):
     for y in range(-20, 620, 120):
         for x in range(-20, 620, 220):
             d.text((x, y), "VORSCHAU", fill=(128, 128, 128, 110), font=font)
-    return Image.alpha_composite(img.convert("RGBA"), ov).convert("RGB")
+    return ov
+
+def watermark(img):
+    return Image.alpha_composite(img.convert("RGB").resize((600, 600)).convert("RGBA"), wm_layer()).convert("RGB")
 
 def compute_string_art(ref, m, key="a", pbase=0.0, pscale=1.0):
     """Gierige String-Art: pro Schritt wird die Sehne gewählt, die dem Bild am meisten fehlt.
@@ -166,6 +191,26 @@ def compute_string_art(ref, m, key="a", pbase=0.0, pscale=1.0):
         g += 0.05
     T = np.minimum(Tl ** g, 0.92).ravel()
 
+    # Live-Ansicht: Fäden werden parallel auf eine kleine Leinwand gezeichnet und regelmäßig als Bild gespeichert
+    LIVE = 600
+    lk = LIVE / W
+    live = Image.new("RGB", (LIVE, LIVE), disc)
+    ld = ImageDraw.Draw(live, "RGBA")
+    lwid = max(1, round(LW * lk))
+    lalpha = min(255, int(255 * a * LW * lk / lwid))
+    pcol = PINCOL[m.get("pin", "gold")][1]
+    for x0, y0 in zip(px, py):
+        ld.ellipse([x0 * lk - 2, y0 * lk - 2, x0 * lk + 2, y0 * lk + 2], fill=pcol)
+    live_n = 0
+
+    def save_live(pct):
+        nonlocal live_n
+        live_n += 1
+        watermark(live).save(os.path.join(d, f"live_{key}.jpg"), quality=78)
+        update_variant(ref, key, pct=pct, live=live_n)
+
+    save_live(0)
+
     # 3) Gierige Auswahl der Sehnen (alle Kandidaten pro Schritt gleichzeitig)
     cnt_c, cov, R = np.zeros(Wc * Wc, np.float32), np.zeros(Wc * Wc, np.float32), T.copy()
     s = np.linspace(0, 1, SAMPLES)
@@ -190,16 +235,19 @@ def compute_string_art(ref, m, key="a", pbase=0.0, pscale=1.0):
         ex, ey = px[cand[j]] - px[cur], py[cand[j]] - py[cur]
         tt = np.linspace(0, 1, int(np.hypot(ex, ey)) + 1)
         cells = (np.rint(py[cur] + ey * tt).astype(np.int32) // q) * Wc + np.rint(px[cur] + ex * tt).astype(np.int32) // q
-        u, k_ = np.unique(cells, return_counts=True)
+        starts = np.flatnonzero(np.r_[True, cells[1:] != cells[:-1]])      # Zellen einer Geraden sind lückenlos hintereinander
+        u, k_ = cells[starts], np.diff(np.r_[starts, len(cells)])
         cov_new = 1 - np.exp(logk * (cnt_c[u] + k_) * LW / (q * q))
         cnt_c[u] += k_
         cov[u] = cov_new
         R[u] = T[u] - cov[u]
         used[cur, cand[j]] = used[cand[j], cur] = True
+        p0 = (px[cur] * lk, py[cur] * lk)
         cur = int(cand[j])
         seq.append(cur)
-        if len(seq) % 200 == 0:                              # Fortschritt und Lebenszeichen für die Anzeige
-            update(ref, progress=min(99, int(pbase + pscale * 100 * len(seq) / n_lines)), beat=time.time())
+        ld.line([p0, (px[cur] * lk, py[cur] * lk)], fill=thread + (lalpha,), width=lwid)     # Faden live zeichnen
+        if len(seq) % 100 == 0:                              # Live-Bild, Fortschritt und Lebenszeichen
+            save_live(min(99, int(100 * len(seq) / n_lines)))
 
     # 4) Rendern in 2000 px: jeder Faden ~1 px (bei 1000 px) breit, Deckkraft überlagert sich physikalisch
     k = S / W
@@ -207,14 +255,14 @@ def compute_string_art(ref, m, key="a", pbase=0.0, pscale=1.0):
     cnt = np.zeros(S * S, np.uint16)
     lw = max(1, int(round(2 * LW)))
     for u, v in zip(seq[:-1], seq[1:]):
-        L = int(np.hypot(*(P[v] - P[u]))) + 1
-        t = np.linspace(0, 1, L)
-        x = np.clip(np.rint(P[u, 0] + (P[v, 0] - P[u, 0]) * t), 0, S - 2).astype(np.int64)
-        y = np.clip(np.rint(P[u, 1] + (P[v, 1] - P[u, 1]) * t), 0, S - 2).astype(np.int64)
+        dx, dy = P[v, 0] - P[u, 0], P[v, 1] - P[u, 1]
+        horiz = abs(dx) >= abs(dy)
+        t = np.linspace(0, 1, int(abs(dx if horiz else dy)) + 1)       # genau ein Punkt je Pixel der Hauptachse: keine Doppelzählung
+        x = np.clip(np.rint(P[u, 0] + dx * t), 0, S - 2).astype(np.int64)
+        y = np.clip(np.rint(P[u, 1] + dy * t), 0, S - 2).astype(np.int64)
         base = y * S + x                                      # Faden ist LW px breit (bei 1000 px), quer zur Richtung verbreitert
-        step = S if abs(P[v, 0] - P[u, 0]) >= abs(P[v, 1] - P[u, 1]) else 1
-        idx = (base[:, None] + (np.arange(lw) - lw // 2)[None, :] * step).ravel()
-        cnt[np.unique(idx[(idx >= 0) & (idx < S * S)])] += 1
+        idx = (base[:, None] + (np.arange(lw) - lw // 2)[None, :] * (S if horiz else 1)).ravel()
+        cnt[idx[(idx >= 0) & (idx < S * S)]] += 1
     d0, t0 = np.asarray(disc, np.float32), np.asarray(thread, np.float32)
     rgb = np.empty((S, S, 3), np.uint8)                     # streifenweise berechnen: spart Arbeitsspeicher (Render Free hat nur 512 MB)
     for r0 in range(0, S, 250):
@@ -282,15 +330,18 @@ Gesamtschritte: {len(seq)}
 
 def run_job(ref):
     try:
-        update(ref, status="running", beat=time.time(), progress=0, ready=[])
-        keys = list(VARIANTS)
-        for i, key in enumerate(keys):              # nacheinander; jede fertige Variante wird sofort angezeigt
+        update(ref, status="running", beat=time.time(), progress=0, ready=[], prog={}, live={})
+        meta = load(ref)
+
+        def one(key):                                # alle drei Varianten laufen gleichzeitig, jede mit Live-Bild
             try:
-                compute_string_art(ref, load(ref), key, pbase=100 * i / len(keys), pscale=1 / len(keys))
+                compute_string_art(ref, meta, key)
+                update_variant(ref, key, pct=100, ready=True)
             except Exception:
                 app.logger.exception("Variante %s fehlgeschlagen (%s)", key, ref)
-                continue
-            update(ref, ready=(load(ref).get("ready") or []) + [key], progress=int(100 * (i + 1) / len(keys)), beat=time.time())
+
+        with ThreadPoolExecutor(max_workers=len(VARIANTS)) as ex:
+            list(ex.map(one, list(VARIANTS)))
         if not load(ref).get("ready"):
             raise RuntimeError("keine Variante berechnet")
         update(ref, status="done", progress=100)
@@ -409,7 +460,8 @@ def status(ref):
     if m["status"] in ("queued", "running") and time.time() - max(m.get("beat", 0), m.get("created", 0)) > 300:
         update(ref, status="error", message="Die Berechnung wurde unterbrochen (Server-Neustart). Bitte erneut versuchen.")
         m = load(ref)
-    out = {"status": m["status"], "order_ref": ref, "job_id": ref, "progress": m.get("progress", 0)}
+    out = {"status": m["status"], "order_ref": ref, "job_id": ref, "progress": m.get("progress", 0),
+           "prog": m.get("prog", {}), "live": m.get("live", {})}
     if m["status"] == "error":
         out["message"] = m.get("message", "Die Berechnung ist fehlgeschlagen.")
     ready = m.get("ready") or []
@@ -417,6 +469,13 @@ def status(ref):
     if m["status"] == "done" and out["variants"]:
         out["preview_url"] = out["variants"][0]["url"]
     return jsonify(out)
+
+@app.get("/live/<ref>/<key>.jpg")
+def live_view(ref, key):
+    p = os.path.join(odir(ref), f"live_{key}.jpg")
+    if not load(ref) or key not in VARIANTS or not os.path.exists(p):
+        abort(404)
+    return send_file(p, mimetype="image/jpeg", max_age=0)
 
 @app.get("/preview/<ref>/<key>.png")
 def preview_variant(ref, key):
