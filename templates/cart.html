@@ -7,7 +7,7 @@
   <div class="cart">
     {% for i in items %}
     <div class="card cart-item" data-ref="{{ i.ref }}">
-      <img src="/preview/{{ i.ref }}.png" alt="Vorschau" width="88" height="88">
+      <img src="/preview/{{ i.ref }}/{{ i.variant }}.png" alt="Vorschau" width="88" height="88">
       <div><h3>{{ i.title }}</h3><p class="price">{{ i.cents|euro }}</p></div>
       <button type="button" class="btn rm">Entfernen</button>
     </div>
