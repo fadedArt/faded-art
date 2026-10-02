@@ -1,3 +1,4 @@
+:root{--build:"b21"}
 [hidden]{display:none!important}   /* sonst überschreiben display-Regeln das hidden-Attribut (z. B. Ergebnisbild im Kreis) */
 @font-face{font-family:Cinzel;src:url(fonts/cinzel.woff2) format("woff2");font-weight:400 700;font-display:swap}
 @font-face{font-family:"Plus Jakarta Sans";src:url(fonts/plus-jakarta-sans.woff2) format("woff2");font-weight:300 600;font-display:swap}
