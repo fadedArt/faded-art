@@ -1,4 +1,4 @@
-import hmac, json, math, os, re, shutil, smtplib, threading, time, uuid
+import hashlib, hmac, json, math, os, re, shutil, smtplib, threading, time, uuid
 from email.message import EmailMessage
 from datetime import datetime
 from datetime import timedelta
@@ -75,6 +75,7 @@ MIN_CONTRAST = 60
 def lum(rgb):
     return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 PINS = {240: 0, 360: 70}                       # Pins -> Aufpreis in €
+BUILD = "b21"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
 TEST_QUAD_CENTS = int(os.environ.get("TESTPREIS_QUAD_CENTS", "50"))   # Testpreis für ALLE quadratischen Bretter; 0 = aus (Live-Betrieb!)
 BASE_CENTS, BASE_AREA, CENTS_PER_CM2 = 50, 2500, 2.5  # 0,50 € ist noch der Testpreis!
 # Feste Größen (Breite x Höhe in cm) je Format. Einzige Quelle: Frontend liest sie von hier.
@@ -468,6 +469,19 @@ def generate():
            color=color, disc=disc, pin=pin, thick=thick, pins=pins, status="queued", paid=False, created=time.time())
     pool.submit(run_job, ref)
     return jsonify(order_ref=ref, job_id=ref, status="queued"), 202
+
+@app.get("/version")
+def version():
+    """Zeigt, welche Dateien auf dem Server liegen (Größe und Prüfsumme). Hilft, unvollständig kopierte Dateien zu finden."""
+    root, files = os.path.dirname(os.path.abspath(__file__)), {}
+    for rel in ("app.py", "static/style.css", "static/configure.js", "templates/configure.html", "templates/base.html", "templates/cart.html"):
+        try:
+            with open(os.path.join(root, rel), "rb") as f:
+                b = f.read()
+            files[rel] = {"bytes": len(b), "pruefsumme": hashlib.sha1(b).hexdigest()[:8]}
+        except OSError:
+            files[rel] = "FEHLT"
+    return jsonify(build=BUILD, dateien=files)
 
 @app.get("/health")
 def health():
