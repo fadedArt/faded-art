@@ -90,6 +90,7 @@
   <div class="board wide" id="board" data-wood="weiss">
     <div class="disc" id="disc">
       <canvas id="cv" width="600" height="600" hidden aria-label="Bildausschnitt, mit Maus oder Finger verschiebbar"></canvas>
+      <canvas id="big" width="600" height="600" hidden style="cursor:default;touch-action:auto" aria-label="Live-Ansicht der Fäden"></canvas>
       <img id="result" alt="Berechnete String-Art-Vorschau" hidden>
       <div class="ph" id="ph">Noch kein Bild gewählt</div>
     </div>
@@ -98,9 +99,9 @@
   <div id="variants" hidden>
     <p class="hint" id="vtext" style="margin-bottom:.6rem"></p>
     <div class="vgrid">
-      <button type="button" class="vopt wait" data-k="a"><img alt="Variante Ausgewogen"><span>Ausgewogen</span><small class="vp"></small></button>
-      <button type="button" class="vopt wait" data-k="b"><img alt="Variante Kontrastreich"><span>Kontrastreich</span><small class="vp"></small></button>
-      <button type="button" class="vopt wait" data-k="c"><img alt="Variante Weich"><span>Weich</span><small class="vp"></small></button>
+      <button type="button" class="vopt wait" data-k="a"><canvas width="600" height="600"></canvas><img alt="Variante Ausgewogen"><span>Ausgewogen</span><small class="vp"></small></button>
+      <button type="button" class="vopt wait" data-k="b"><canvas width="600" height="600"></canvas><img alt="Variante Kontrastreich"><span>Kontrastreich</span><small class="vp"></small></button>
+      <button type="button" class="vopt wait" data-k="c"><canvas width="600" height="600"></canvas><img alt="Variante Weich"><span>Weich</span><small class="vp"></small></button>
     </div>
   </div>
 </div>
