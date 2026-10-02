@@ -1,4 +1,7 @@
 (() => {
+const BUILD = 'b21';
+window.addEventListener('error', e => { const m = document.getElementById('msg'); if (m && !m.textContent && e.message) m.textContent = 'Technischer Fehler: ' + e.message; });
+window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); });   // Zurück-Taste: Seite frisch laden statt alten Zustand zeigen
 const $ = id => document.getElementById(id);
 const S = 600, R = S * 0.49;     // Nagelring sitzt fast am Rand des Bildkreises (wie im berechneten Ergebnis)
 const CFG = JSON.parse($('cfg').dataset.cfg), SIZES = CFG.sizes, PRICE = CFG.pricing;
@@ -199,7 +202,8 @@ function anim() {                                              // jede Linie ein
   KEYS.forEach(k => { if (L[k]) L[k].dirty = false; });
   requestAnimationFrame(anim);
 }
-function drawBig(s) {                                          // große Bühne: Kopie der Leinwand + die gerade gezogene Linie in Gold
+function drawBig(s) {
+  if (!$('big')) return;                                          // große Bühne: Kopie der Leinwand + die gerade gezogene Linie in Gold
   const b = $('big'), x = b.getContext('2d');
   x.globalAlpha = 1; x.drawImage(s.cvs, 0, 0);
   if (s.prev !== null && s.last !== null) {
@@ -305,5 +309,18 @@ $('buy').addEventListener('click', async () => {
 });
 
 show(1); board();
+
+async function checkBuild() {                                  // Selbsttest: passen alle vier Dateien zusammen?
+  const bad = [], html = ($('buildinfo') || { dataset: {} }).dataset.build;
+  if (html !== BUILD) bad.push('templates/configure.html');
+  if (getComputedStyle(document.documentElement).getPropertyValue('--build').replace(/["'\s]/g, '') !== BUILD) bad.push('static/style.css');
+  try { const v = await (await fetch('/version')).json(); if (v.build !== BUILD) bad.push('app.py'); } catch (e) { /* offline: nichts melden */ }
+  if (!bad.length) return;
+  const box = document.createElement('div');
+  box.style.cssText = 'border:1px solid #c0392b;border-radius:12px;margin:1rem 0;padding:1rem;color:#ffb4a8;background:#2a1210';
+  box.textContent = 'Versionsfehler: Diese Dateien sind veraltet oder unvollständig hochgeladen: ' + bad.join(', ') + '. Bitte mit der aktuellen Fassung ersetzen.';
+  $('steps').after(box);
+}
+checkBuild();
 })();
 
