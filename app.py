@@ -100,6 +100,7 @@ def load(ref):
         return None
 
 _meta_lock = threading.Lock()
+LIVE_SEQ = {}   # laufende Berechnungen: Pinfolge je Variante, damit der Browser jede Linie live zeichnen kann
 
 def _write(ref, m):
     p = os.path.join(odir(ref), "meta.json")
@@ -220,6 +221,9 @@ def compute_string_art(ref, m, key="a", pbase=0.0, pscale=1.0):
     KAPPA = -logk * LW / (q * q)
     used = np.zeros((n, n), bool)                                         # jede Sehne nur einmal
     seq, cur = [0], 0
+    for r in [r for r, v in list(LIVE_SEQ.items()) if time.time() - v.get("t", 0) > 3600]:
+        LIVE_SEQ.pop(r, None)
+    LIVE_SEQ.setdefault(ref, {"t": time.time()})[key] = {"seq": seq, "alpha": round(lalpha / 255, 4), "lw": lwid, "n": n}
     rng = np.random.default_rng(1)
     for _ in range(n_lines):
         gap = np.abs(allp - cur)
@@ -478,7 +482,11 @@ def status(ref):
         update(ref, status="error", message="Die Berechnung wurde unterbrochen (Server-Neustart). Bitte erneut versuchen.")
         m = load(ref)
     out = {"status": m["status"], "order_ref": ref, "job_id": ref, "progress": m.get("progress", 0),
-           "prog": m.get("prog", {}), "live": m.get("live", {})}
+           "prog": m.get("prog", {}), "live": m.get("live", {}), "lines": {}}
+    for k, v in (LIVE_SEQ.get(ref) or {}).items():           # neue Linien seit der letzten Abfrage (?sa=, ?sb=, ?sc=)
+        if k in VARIANTS:
+            since = max(0, request.args.get("s" + k, 0, type=int))
+            out["lines"][k] = {"from": since, "pins": v["seq"][since:since + 800], "alpha": v["alpha"], "lw": v["lw"], "n": v["n"]}
     if m["status"] == "error":
         out["message"] = m.get("message", "Die Berechnung ist fehlgeschlagen.")
     ready = m.get("ready") or []
