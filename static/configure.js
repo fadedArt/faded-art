@@ -153,12 +153,67 @@ async function fetchRetry(url, opts, tries = 4) {   // Server aufgeweckt/neu ges
   }
 }
 
-let variantKey = null, fin = {}, liveSeen = {};
+let variantKey = null, fin = {}, liveSeen = {}, L = {}, animOn = false;
+const KEYS = ['a', 'b', 'c'];
 const tile = k => document.querySelector('.vopt[data-k="' + k + '"]');
-function syncBig() {                                           // das große Bild zeigt die gewählte Variante (live oder fertig)
-  const t = variantKey && tile(variantKey);
-  if (!t) return;
-  $('result').src = t.querySelector('img').src; $('result').hidden = false; cv.hidden = true;
+const pinXY = (i, n) => { const t = 2 * Math.PI * i / n, r = 300 * 0.982; return [300 + r * Math.cos(t), 300 + r * Math.sin(t)]; };
+const statusUrl = id => '/status/' + id + '?' + KEYS.map(k => 's' + k + '=' + (L[k] ? L[k].got : 0)).join('&');
+
+function initLive() {                                          // leere Leinwände mit Kreisfarbe und Nägeln
+  const c = cfg();
+  KEYS.forEach(k => {
+    const cvs = tile(k).querySelector('canvas'), x = cvs.getContext('2d');
+    x.globalAlpha = 1; x.fillStyle = c.discHex; x.fillRect(0, 0, 600, 600); x.fillStyle = c.pinHex;
+    for (let i = 0; i < c.pins; i++) { const [px, py] = pinXY(i, c.pins); x.beginPath(); x.arc(px, py, 2, 0, 7); x.fill(); }
+    L[k] = { x, cvs, got: 0, queue: [], last: null, prev: null, n: c.pins, hex: c.hex, alpha: 0.08, lw: 2, dirty: false };
+  });
+  if (!animOn) { animOn = true; requestAnimationFrame(anim); }
+}
+function feed(d) {                                             // neue Linien aus der Statusantwort übernehmen
+  KEYS.forEach(k => {
+    const s = L[k], ln = d.lines && d.lines[k];
+    if (!s || !ln || ln.from > s.got) return;
+    s.alpha = ln.alpha; s.lw = ln.lw; s.n = ln.n || s.n;
+    const add = ln.pins.slice(s.got - ln.from);
+    s.got += add.length; s.queue.push(...add);
+  });
+}
+function anim() {                                              // jede Linie einzeln zeichnen, gleichmäßig verteilt
+  KEYS.forEach(k => {
+    const s = L[k];
+    if (!s || !s.queue.length) return;
+    const m = Math.max(1, Math.ceil(s.queue.length / 80));
+    s.x.strokeStyle = s.hex; s.x.globalAlpha = s.alpha; s.x.lineWidth = s.lw;
+    for (let i = 0; i < m && s.queue.length; i++) {
+      const p = s.queue.shift();
+      if (s.last !== null) {
+        const [x0, y0] = pinXY(s.last, s.n), [x1, y1] = pinXY(p, s.n);
+        s.x.beginPath(); s.x.moveTo(x0, y0); s.x.lineTo(x1, y1); s.x.stroke(); s.prev = s.last;
+      }
+      s.last = p;
+    }
+    s.dirty = true; tile(k).classList.remove('wait');
+  });
+  const s = variantKey && L[variantKey];
+  if (s && s.dirty && !fin[variantKey]) drawBig(s);
+  KEYS.forEach(k => { if (L[k]) L[k].dirty = false; });
+  requestAnimationFrame(anim);
+}
+function drawBig(s) {                                          // große Bühne: Kopie der Leinwand + die gerade gezogene Linie in Gold
+  const b = $('big'), x = b.getContext('2d');
+  x.globalAlpha = 1; x.drawImage(s.cvs, 0, 0);
+  if (s.prev !== null && s.last !== null) {
+    const [x0, y0] = pinXY(s.prev, s.n), [x1, y1] = pinXY(s.last, s.n);
+    x.strokeStyle = '#e6ca65'; x.globalAlpha = .95; x.lineWidth = 2.5; x.beginPath(); x.moveTo(x0, y0); x.lineTo(x1, y1); x.stroke();
+  }
+  b.hidden = false; $('result').hidden = true; cv.hidden = true;
+}
+window.__faLive = () => ({ lines: KEYS.map(k => L[k] ? L[k].got : 0), queued: KEYS.map(k => L[k] ? L[k].queue.length : 0), sel: variantKey });   // nur zur Fehlersuche
+function syncBig() {
+  const k = variantKey;
+  if (!k) return;
+  if (fin[k]) { $('result').src = tile(k).querySelector('img').src; $('result').hidden = false; $('big').hidden = true; cv.hidden = true; }
+  else if (L[k]) drawBig(L[k]);
 }
 function pick(k) {
   const b = tile(k);
@@ -167,22 +222,25 @@ function pick(k) {
   document.querySelectorAll('.vopt').forEach(x => x.classList.toggle('sel', x === b));
   syncBig();
 }
-function showVariants(d) {                                     // Live-Bilder der drei Varianten, später die fertigen
+function showVariants(d) {
   $('variants').hidden = false;
-  ['a', 'b', 'c'].forEach(k => {
-    const b = tile(k), img = b.querySelector('img'), vp = b.querySelector('.vp');
-    const done = (d.variants || []).find(v => v.key === k);
+  feed(d);
+  KEYS.forEach(k => {
+    const b = tile(k), vp = b.querySelector('.vp'), done = (d.variants || []).find(v => v.key === k);
     if (done) {
-      if (!fin[k]) { fin[k] = true; img.src = done.url; b.classList.remove('wait'); vp.textContent = 'fertig ✓'; if (variantKey === k) syncBig(); }
-    } else if (d.live && d.live[k] && liveSeen[k] !== d.live[k]) {
+      if (!fin[k]) { fin[k] = true; b.querySelector('img').src = done.url; b.classList.add('fin'); b.classList.remove('wait'); vp.textContent = 'fertig ✓'; if (variantKey === k) syncBig(); }
+      return;
+    }
+    vp.textContent = ((d.prog || {})[k] || 0) + ' %';
+    if (!(d.lines && d.lines[k]) && d.live && d.live[k] && liveSeen[k] !== d.live[k] && L[k]) {   // Ersatz ohne Liniendaten: Zwischenbild
       liveSeen[k] = d.live[k];
-      img.src = '/live/' + d.order_ref + '/' + k + '.jpg?v=' + d.live[k]; b.classList.remove('wait');
-      vp.textContent = ((d.prog || {})[k] || 0) + ' %';
-      if (variantKey === k) syncBig();
+      const im = new Image(), s = L[k];
+      im.onload = () => { s.x.globalAlpha = 1; s.x.drawImage(im, 0, 0, 600, 600); s.dirty = true; b.classList.remove('wait'); };
+      im.src = '/live/' + d.order_ref + '/' + k + '.jpg?v=' + d.live[k];
     }
   });
   if (!variantKey && !tile('a').classList.contains('wait')) pick('a');
-  if ((d.variants || []).length || Object.keys(d.live || {}).length) $('spin').hidden = true;
+  if ((d.variants || []).length || Object.keys(d.lines || {}).length || Object.keys(d.live || {}).length) $('spin').hidden = true;
 }
 document.querySelectorAll('.vopt').forEach(b => b.addEventListener('click', () => pick(b.dataset.k)));
 
@@ -194,8 +252,10 @@ async function generate() {
   $('spin').hidden = false; $('checkout').hidden = true; $('variants').hidden = false;
   $('vtext').textContent = 'Deine drei Varianten werden gerade live gezeichnet. Tippe auf eine, um sie groß zu sehen.';
   variantKey = null; fin = {}; liveSeen = {};
+  $('big').hidden = true;
   $('result').hidden = true; cv.hidden = false;
-  document.querySelectorAll('.vopt').forEach(x => { x.classList.add('wait'); x.classList.remove('sel'); x.querySelector('img').removeAttribute('src'); x.querySelector('.vp').textContent = ''; });
+  document.querySelectorAll('.vopt').forEach(x => { x.classList.add('wait'); x.classList.remove('sel'); x.classList.remove('fin'); x.querySelector('img').removeAttribute('src'); x.querySelector('.vp').textContent = ''; });
+  initLive();
   try {
     await fetchRetry('/health', {}, 10);                      // Server zuerst aufwecken
     $('wait').textContent = 'Berechnung läuft, für drei Varianten kann das einige Minuten dauern …';
@@ -209,10 +269,10 @@ async function generate() {
     const jobId = d.job_id;                                  // Job-ID merken: die Status-Antwort ersetzt d
     for (let i = 0; jobId && d.status !== 'done' && i < 480; i++) {   // Polling bis zu 12 Minuten
       await new Promise(r => setTimeout(r, 1500));
-      try { d = await (await fetch('/status/' + jobId)).json(); fails = 0; }
+      try { d = await (await fetch(statusUrl(jobId))).json(); fails = 0; }
       catch (e) { if (++fails > 40) throw new Error('Die Verbindung zum Server ist abgebrochen'); continue; }
       if (d.status === 'error') throw new Error(d.message || 'Berechnung fehlgeschlagen');
-      $('wait').textContent = 'Die Fäden werden gezogen … ' + (d.progress || 0) + ' %';
+      $('wait').textContent = 'Die Fäden werden gezogen, Linie für Linie … ' + (d.progress || 0) + ' %';
       showVariants(d);
     }
     if (!d.variants || !d.variants.length) throw new Error('Die Berechnung dauert ungewöhnlich lange');
