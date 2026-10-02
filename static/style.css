@@ -98,9 +98,12 @@ mark{background:rgba(212,175,55,.2);color:var(--gold-t);padding:0 .25rem;border-
 /* Varianten-Auswahl */
 .vgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem}
 .vopt{background:none;border:2px solid var(--line);border-radius:12px;padding:.4rem;color:var(--text);font:inherit;font-size:.78rem;cursor:pointer;text-align:center}
-.vopt img{display:block;width:100%;aspect-ratio:1;border-radius:50%;object-fit:cover;background:#222;margin-bottom:.35rem}
+.vopt img,.vopt canvas{display:block;width:100%;aspect-ratio:1;border-radius:50%;object-fit:cover;background:#222;margin-bottom:.35rem}
+.vopt img{display:none}
+.vopt.fin img{display:block}
+.vopt.fin canvas{display:none}
 .vopt.wait{opacity:.5;cursor:default}
-.vopt.wait img{visibility:hidden}
+.vopt.wait canvas{visibility:hidden}
 .vopt.wait span::after{content:" …"}
 .vopt.sel{border-color:var(--gold);box-shadow:0 0 0 2px rgba(212,175,55,.35)}
 .vp{display:block;color:var(--muted);font-size:.7rem;min-height:1em}
