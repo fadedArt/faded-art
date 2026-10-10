@@ -9,6 +9,7 @@ import stripe
 from flask import Flask, abort, jsonify, render_template, render_template_string, request, send_file, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
+from fpdf import FPDF
 from numba import njit
 
 app = Flask(__name__)
@@ -576,6 +577,129 @@ Gesamtschritte: {total}{f" in {len(runs)} Abschnitten" if multi else ""}
 """
     with open(os.path.join(odir(ref), f"anleitung_{key}.txt"), "w", encoding="utf-8") as f:
         f.write(txt)
+    write_pdf(ref, m, runs, pal, meters, total, n_lines, key)
+
+def write_pdf(ref, m, runs, pal, meters, total, n_lines, key):
+    """Fertigungsanleitung als PDF: Seite 1 Vorschau und alle Einstellungen, danach die Pinfolge zum Abhaken."""
+    n, disc_cm, multi = m["pins"], round(ring_cm(m)), m["color"] == MULTI
+    pdf = FPDF(format="A4")
+    pdf.set_auto_page_break(False)
+    pdf.set_title(f"Faded Art Anleitung {ref}")
+    gold, grey = (176, 141, 36), (110, 110, 110)
+
+    def footer():
+        pdf.set_xy(12, 287)
+        pdf.set_font("Helvetica", "", 8)
+        pdf.set_text_color(*grey)
+        pdf.cell(186, 4, f"Faded Art  |  Bestellnummer {ref}  |  Seite {pdf.page_no()}", align="C")
+        pdf.set_text_color(0, 0, 0)
+
+    # Seite 1: Vorschau und Einstellungen
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 20)
+    pdf.set_text_color(*gold)
+    pdf.cell(0, 10, "FADED ART", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Helvetica", "", 12)
+    pdf.cell(0, 6, f"Fertigungsanleitung  |  Stil: {VARIANTS[key]['name']}  |  erstellt am {datetime.now():%d.%m.%Y %H:%M}",
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.image(os.path.join(odir(ref), f"preview_{key}.png"), x=12, y=30, w=88)
+    if multi:
+        thread = ", ".join(thread_name(pal[k]) for k in sorted(meters))
+        length = "\n".join(f"{thread_name(pal[k])}: ca. {v:.0f} m" for k, v in sorted(meters.items()))
+    else:
+        thread, length = thread_name(m["color"]), f"ca. {sum(meters.values()):.0f} m"
+    rows = [("Brett", f"{board_label(m)}, Größe {m.get('size', '')}"), ("Untergrund", WOOD[m["wood"]][0]),
+            ("Kreis (Bildfläche)", f"{DISC[m['disc']][0]}, Nagelkreis ca. {disc_cm} cm Durchmesser"),
+            ("Nägel", f"{n} Stück, {PINCOL[m.get('pin', 'gold')][0]}, gleichmäßig auf dem Kreis"),
+            ("Faden" + ("farben" if multi else "farbe"), thread), ("Fadendicke", f"{m['thick'].replace('.', ',')} mm"),
+            ("Linien", f"{total} von max. {n_lines}" + (f", {len(runs)} Abschnitte" if multi else "")), ("Fadenlänge", length)]
+    pdf.set_xy(106, 30)
+    for label, val in rows:
+        pdf.set_x(106)
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_text_color(*grey)
+        pdf.cell(0, 5, label.upper(), new_x="LMARGIN", new_y="NEXT")
+        pdf.set_x(106)
+        pdf.set_font("Helvetica", "", 11)
+        pdf.set_text_color(0, 0, 0)
+        pdf.multi_cell(92, 5.5, val, new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(1.5)
+    if multi:
+        starts = {}
+        for k, p in runs:
+            starts.setdefault(k, p[0])
+        start = ("Jede Farbe ist ein eigener Faden. Startpins: "
+                 + ", ".join(f"{thread_name(pal[k])} an Pin {p}" for k, p in starts.items()) + ".")
+        work = ("Die Abschnitte der Reihe nach fädeln. Bei einem Farbwechsel den Faden am letzten Pin hängen lassen "
+                "(mit einer Klammer sichern) und die nächste Farbe dort aufnehmen, wo sie zuletzt aufgehört hat.")
+    else:
+        start = f"Faden an Pin {runs[0][1][0] if runs else 0} befestigen."
+        work = "Der Pinfolge Schritt für Schritt folgen: jeden Pin mit dem nächsten verbinden."
+    steps = [f"Nagelkreis mit {n} gleichmäßig verteilten Nägeln setzen (Durchmesser ca. {disc_cm} cm).",
+             f"Nägel von 0 bis {n - 1} nummerieren: Pin 0 sitzt rechts auf 3 Uhr, die Nummern steigen im Uhrzeigersinn.",
+             start, work, "Faden straff, aber nicht zu fest ziehen, damit sich das Brett nicht verzieht.",
+             f"Weitermachen, bis alle {total} Verbindungen fertig sind. Erledigte Schritte in der Liste abhaken."]
+    pdf.set_xy(12, max(pdf.get_y(), 124) + 4)
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.cell(0, 7, "Anleitung", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 10.5)
+    for i, t in enumerate(steps):
+        pdf.multi_cell(186, 5.5, f"{i + 1}.  {t}", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(1)
+    footer()
+
+    # Pinfolge: 8 Spalten, Kästchen zum Abhaken; bei Mehrfarbig je Abschnitt eine Überschrift in Fadenfarbe
+    cols, cw, rh, top, bottom = 8, 186 / 8, 5.2, 24, 282
+    y, c, step = bottom, 0, 0
+
+    def new_page():
+        nonlocal y, c
+        if pdf.page_no() > 1:
+            footer()
+        pdf.add_page()
+        pdf.set_xy(12, 12)
+        pdf.set_font("Helvetica", "B", 13)
+        pdf.cell(0, 7, "Pinfolge", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "", 8)
+        pdf.set_text_color(*grey)
+        pdf.cell(0, 4, "Kästchen  |  Schritt  |  nächster Pin (fett)", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_text_color(0, 0, 0)
+        y, c = top, 0
+
+    for b, (k, p) in enumerate(runs):
+        if multi:
+            if c:
+                y, c = y + rh, 0
+            if y + 2 * rh + 2 > bottom:
+                new_page()
+            y += 1.5
+            pdf.set_fill_color(*thread_rgb(pal[k]))
+            pdf.set_draw_color(150, 150, 150)
+            pdf.rect(12, y + 0.6, 6, 4, style="DF")
+            pdf.set_xy(20, y)
+            pdf.set_font("Helvetica", "B", 9.5)
+            pdf.cell(0, rh, f"Abschnitt {b + 1} von {len(runs)}: Faden {thread_name(pal[k])}, weiter ab Pin {p[0]}  ({len(p) - 1} Linien)")
+            y += rh + 0.5
+        for x in p[1:]:
+            step += 1
+            if y + rh > bottom:
+                new_page()
+            x0 = 12 + c * cw
+            pdf.set_draw_color(120, 120, 120)
+            pdf.rect(x0, y + 1.1, 2.8, 2.8)
+            pdf.set_xy(x0 + 3.6, y)
+            pdf.set_font("Helvetica", "", 7)
+            pdf.set_text_color(*grey)
+            pdf.cell(9, rh, str(step), align="R")
+            pdf.set_font("Helvetica", "B", 9.5)
+            pdf.set_text_color(0, 0, 0)
+            pdf.cell(9, rh, str(x))
+            c += 1
+            if c == cols:
+                y, c = y + rh, 0
+    footer()
+    pdf.output(os.path.join(odir(ref), f"anleitung_{key}.pdf"))
 
 def run_job(ref):
     try:
@@ -622,7 +746,8 @@ def admin():
 <body style="font-family:system-ui;background:#111;color:#eee;padding:1rem"><h1>Bestellungen</h1>
 {% for r in rows %}<p style="border-bottom:1px solid #333;padding:.6rem 0"><b>{{ "BEZAHLT" if r.paid else "nicht bezahlt" }}</b> {{ r.created }}<br>
 {{ r.title }}, {{ (r.cents / 100)|round(2) }} €<br>{{ r.email }}<br>
-<a style="color:#e6ca65" href="/admin/{{ r.ref }}/anleitung.txt?key={{ key }}">Anleitung mit Pinfolge</a> |
+<a style="color:#e6ca65" href="/admin/{{ r.ref }}/anleitung.pdf?key={{ key }}">Anleitung (PDF)</a> |
+<a style="color:#e6ca65" href="/admin/{{ r.ref }}/anleitung.txt?key={{ key }}">als Text</a> |
 <a style="color:#e6ca65" href="/admin/{{ r.ref }}/final.png?key={{ key }}">Bild in voller Größe</a></p>{% else %}<p>Noch keine Bestellungen.</p>{% endfor %}""",
         rows=rows, key=request.args.get("key"))
 
@@ -643,7 +768,7 @@ def stripe_check():
 
 @app.get("/admin/<ref>/<name>")
 def admin_file(ref, name):
-    if not admin_ok() or name not in ("anleitung.txt", "final.png", "pinfolge.txt") or not load(ref) or not os.path.exists(os.path.join(odir(ref), name)):
+    if not admin_ok() or name not in ("anleitung.pdf", "anleitung.txt", "final.png", "pinfolge.txt") or not load(ref) or not os.path.exists(os.path.join(odir(ref), name)):
         abort(404)
     return send_file(os.path.join(odir(ref), name), as_attachment=(name != "final.png"), max_age=0)
 
@@ -668,6 +793,12 @@ def about():
 @app.get("/success")
 def success():
     session.pop("cart", None)
+    sid = request.args.get("session_id", "")
+    if sid.startswith("cs_") and stripe.api_key:      # Zahlung direkt bei Stripe prüfen: klappt auch ohne eingerichteten Webhook
+        try:
+            handle_checkout(stripe.checkout.Session.retrieve(sid))
+        except Exception:
+            app.logger.exception("Stripe-Sitzung %s konnte nicht geprüft werden", sid)
     return render_template("success.html")
 
 for _p in ("impressum", "datenschutz", "agb", "widerruf"):
@@ -780,7 +911,7 @@ MAX_CART = 10
 def choose_variant(ref, key):
     """Die gewählte Variante wird zur Bestellung: Bild, Pinfolge und Anleitung erhalten die festen Dateinamen."""
     for src, dst in ((f"final_{key}.png", "final.png"), (f"pinfolge_{key}.txt", "pinfolge.txt"),
-                     (f"anleitung_{key}.txt", "anleitung.txt"), (f"preview_{key}.png", "preview.png")):
+                     (f"anleitung_{key}.txt", "anleitung.txt"), (f"anleitung_{key}.pdf", "anleitung.pdf"), (f"preview_{key}.png", "preview.png")):
         shutil.copyfile(os.path.join(odir(ref), src), os.path.join(odir(ref), dst))
     update(ref, variant=key)
 
@@ -877,7 +1008,7 @@ def checkout():
                 "product_data": {"name": i["title"]}}} for i in items],
             shipping_address_collection={"allowed_countries": ["DE", "AT", "CH"]},
             metadata={"order_refs": ",".join(i["ref"] for i in items)},
-            success_url=request.host_url + "success",
+            success_url=request.host_url + "success?session_id={CHECKOUT_SESSION_ID}",
             cancel_url=request.host_url + "warenkorb")
         return jsonify(url=s.url)
     except Exception as e:
@@ -898,8 +1029,9 @@ def notify_owner(ref):
         msg = EmailMessage()
         msg["Subject"], msg["To"], msg["From"] = f"Neue Bestellung: {item_title(m)}", to, os.environ.get("SMTP_USER", to)
         msg.set_content(f"Bezahlt: {price_cents(m) / 100:.2f} EUR\nKunden-E-Mail: {m.get('email')}\nBestellnummer: {ref}\n"
-                        "Anleitung mit Pinfolge und Bild im Anhang. Die Lieferadresse steht im Stripe-Dashboard.")
-        for name, kind in (("anleitung.txt", "text/plain"), ("final.png", "image/png")):
+                        "Im Anhang: Anleitung als PDF (Maße, Einstellungen, Pinfolge zum Abhaken), das Bild und die Anleitung als Text.\n"
+                        "Die Lieferadresse steht im Stripe-Dashboard.")
+        for name, kind in (("anleitung.pdf", "application/pdf"), ("final.png", "image/png"), ("anleitung.txt", "text/plain")):
             with open(os.path.join(odir(ref), name), "rb") as f:
                 msg.add_attachment(f.read(), maintype=kind.split("/")[0], subtype=kind.split("/")[1], filename=name)
         with smtplib.SMTP(host, int(os.environ.get("SMTP_PORT", "587")), timeout=30) as s:
@@ -917,16 +1049,25 @@ def stripe_webhook():
     except Exception:
         return "", 400
     if ev["type"] == "checkout.session.completed":
-        s = ev["data"]["object"]  # Klammer-Zugriff statt .get(): läuft mit alten und neuen stripe-Versionen
-        if s["payment_status"] == "paid":
-            meta = s["metadata"] if "metadata" in s else {}
-            refs = meta["order_refs"] if "order_refs" in meta else ""
-            email = s["customer_email"] if "customer_email" in s else None
-            for ref in refs.split(","):
-                if load(ref):
-                    update(ref, paid=True, stripe_session=s["id"], email=email)
-                    threading.Thread(target=notify_owner, args=(ref,), daemon=True).start()
+        handle_checkout(ev["data"]["object"])
     return "", 200
+
+def handle_checkout(s):
+    """Bezahlte Checkout-Sitzung: Bestellungen als bezahlt markieren und dir die Unterlagen schicken.
+    Webhook und Erfolgsseite können dieselbe Zahlung melden; gemailt wird nur beim ersten Mal."""
+    if s["payment_status"] != "paid":           # Klammer-Zugriff statt .get(): läuft mit alten und neuen stripe-Versionen
+        return
+    meta = s["metadata"] if "metadata" in s else {}
+    refs = meta["order_refs"] if "order_refs" in meta else ""
+    email = s["customer_email"] if "customer_email" in s else None
+    for ref in refs.split(","):
+        with _meta_lock:
+            m = load(ref)
+            if not m or m.get("paid"):
+                continue
+            m.update(paid=True, stripe_session=s["id"], email=email)
+            _write(ref, m)
+        threading.Thread(target=notify_owner, args=(ref,), daemon=True).start()
 
 
 if __name__ == "__main__":
