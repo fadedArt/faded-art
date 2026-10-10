@@ -1,5 +1,5 @@
 (() => {
-const BUILD = 'b22';
+const BUILD = 'b23';
 window.addEventListener('error', e => { const m = document.getElementById('msg'); if (m && !m.textContent && e.message) m.textContent = 'Technischer Fehler: ' + e.message; });
 window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); });   // Zurück-Taste: Seite frisch laden statt alten Zustand zeigen
 const $ = id => document.getElementById(id);
@@ -8,6 +8,7 @@ const CFG = JSON.parse($('cfg').dataset.cfg), SIZES = CFG.sizes, PRICE = CFG.pri
 const cv = $('cv'), ctx = cv.getContext('2d');
 const img = new Image();
 let step = 1, view = { x: S / 2, y: S / 2, s: 1, cover: 1 }, hasImg = false, orderRef = null, busy = false;
+let cut = null, segPromise = null, cutToken = 0;   // cut: freigestelltes Foto (Canvas mit transparentem Hintergrund)
 
 const cfg = () => { const fmt = $('format').value, size = $('size').value, [w, h] = SIZES[fmt][size];
   return { format: fmt, size, w, h, wood: $('wood').value, color: $('color').value,
@@ -71,7 +72,7 @@ function draw() {
   ctx.clearRect(0, 0, S, S);
   ctx.save(); ctx.beginPath(); ctx.arc(S / 2, S / 2, R, 0, 7); ctx.clip();
   ctx.fillStyle = step >= 4 ? c.discHex : '#fff'; ctx.fillRect(0, 0, S, S);   // ab Schritt 4: kein Bild, nur Kreisfarbe
-  if (step < 4) { const dw = img.width * view.s, dh = img.height * view.s; ctx.drawImage(img, view.x - dw / 2, view.y - dh / 2, dw, dh); }
+  if (step < 4) { const dw = img.width * view.s, dh = img.height * view.s; ctx.drawImage(cut || img, view.x - dw / 2, view.y - dh / 2, dw, dh); }
   ctx.restore();
   if (step >= 4) { // Beispiel-Sehnen in Fadenfarbe (nur Look, nicht das echte Ergebnis)
     ctx.save(); ctx.strokeStyle = c.hex; ctx.globalAlpha = .5; ctx.lineWidth = Math.max(1, c.thick * 5);
@@ -97,9 +98,49 @@ $('file').addEventListener('change', e => {
   const f = e.target.files[0]; if (!f) return;
   if (!/^image\/(jpeg|png)$/.test(f.type) || f.size > 15 * 1024 * 1024) { msg('Bitte JPG oder PNG bis 15 MB wählen.'); e.target.value = ''; return; }
   msg(''); const url = URL.createObjectURL(f);
-  img.onload = () => { hasImg = true; fit(); $('ph').hidden = true; cv.hidden = false; $('zoomBox').hidden = false; $('result').hidden = true; orderRef = null; draw(); URL.revokeObjectURL(url); };
+  img.onload = () => { hasImg = true; fit(); $('ph').hidden = true; cv.hidden = false; $('zoomBox').hidden = false; $('bgBox').hidden = false; $('result').hidden = true; orderRef = null;
+    cut = null; draw(); URL.revokeObjectURL(url); if ($('bgcut').checked) freistellen(); };
   img.onerror = () => msg('Das Bild konnte nicht gelesen werden.');
   img.src = url;
+});
+
+// Hintergrund entfernen: MediaPipe (Google, Apache 2.0) läuft nur hier im Browser, Dateien liegen auf unserem Server (static/mp)
+function segmenter() {
+  if (!segPromise) segPromise = (async () => {
+    const { ImageSegmenter } = await import('/static/mp/vision_bundle.mjs');
+    return ImageSegmenter.createFromOptions(
+      { wasmLoaderPath: '/static/mp/vision_wasm_internal.js', wasmBinaryPath: '/static/mp/vision_wasm_internal.wasm' },
+      { baseOptions: { modelAssetPath: '/static/mp/selfie_segmenter.tflite', delegate: 'CPU' }, runningMode: 'IMAGE', outputConfidenceMasks: true, outputCategoryMask: false });
+  })().catch(e => { segPromise = null; throw e; });
+  return segPromise;
+}
+async function freistellen() {
+  const token = ++cutToken, box = $('bgcut');
+  $('bgHint').dataset.text = $('bgHint').dataset.text || $('bgHint').textContent;
+  $('bgHint').textContent = 'Freistellen läuft …';
+  try {
+    const seg = await segmenter();
+    const sc = Math.min(1, 1024 / Math.max(img.width, img.height));          // große Fotos verkleinert auswerten
+    const c = document.createElement('canvas'); c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
+    const x = c.getContext('2d'); x.drawImage(img, 0, 0, c.width, c.height);
+    const r = seg.segment(c), m = r.confidenceMasks[0], a = m.getAsFloat32Array();
+    const mc = document.createElement('canvas'); mc.width = m.width; mc.height = m.height;
+    const mx = mc.getContext('2d'), id = mx.createImageData(m.width, m.height);
+    for (let i = 0; i < a.length; i++) id.data[4 * i + 3] = Math.round(255 * Math.min(1, Math.max(0, a[i])));
+    r.confidenceMasks.forEach(q => q.close());
+    mx.putImageData(id, 0, 0);
+    x.globalCompositeOperation = 'destination-in'; x.drawImage(mc, 0, 0, c.width, c.height);   // Maske = Deckung des Fotos
+    if (token !== cutToken || !box.checked) return;                          // inzwischen neues Foto oder ausgeschaltet
+    cut = c; $('bgHint').textContent = $('bgHint').dataset.text; draw();
+  } catch (e) {
+    if (token !== cutToken) return;
+    box.checked = false; cut = null; $('bgHint').textContent = $('bgHint').dataset.text; draw();
+    msg('Freistellen ist auf diesem Gerät leider nicht möglich (' + (e.message || e) + ').');
+  }
+}
+$('bgcut').addEventListener('change', e => {
+  if (e.target.checked) return freistellen();
+  cutToken++; cut = null; if ($('bgHint').dataset.text) $('bgHint').textContent = $('bgHint').dataset.text; draw();
 });
 
 let drag = null;
@@ -141,11 +182,11 @@ $('next').addEventListener('click', () => {
   generate();
 });
 
-function cropBlob() { // exakt der sichtbare Kreisausschnitt, ohne Pins
+function cropBlob() { // exakt der sichtbare Kreisausschnitt, ohne Pins; freigestellt: Hintergrund bleibt transparent
   const k = 1200 / S, o = document.createElement('canvas'); o.width = o.height = Math.round(2 * R * k);
-  const c = o.getContext('2d'); c.fillStyle = '#fff'; c.fillRect(0, 0, o.width, o.height);
+  const c = o.getContext('2d'); if (!cut) { c.fillStyle = '#fff'; c.fillRect(0, 0, o.width, o.height); }
   const dw = img.width * view.s, dh = img.height * view.s, off = S / 2 - R;
-  c.drawImage(img, (view.x - dw / 2 - off) * k, (view.y - dh / 2 - off) * k, dw * k, dh * k);
+  c.drawImage(cut || img, (view.x - dw / 2 - off) * k, (view.y - dh / 2 - off) * k, dw * k, dh * k);
   return new Promise(r => o.toBlob(r, 'image/png'));
 }
 

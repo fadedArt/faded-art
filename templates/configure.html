@@ -6,7 +6,7 @@
   <li><b>1</b><span>Bild</span></li><li><b>2</b><span>Format</span></li><li><b>3</b><span>Untergrund</span></li><li><b>4</b><span>Faden</span></li><li><b>5</b><span>Pins</span></li>
 </ol>
 
-<div id="buildinfo" data-build="b22" hidden></div>
+<div id="buildinfo" data-build="b23" hidden></div>
 <form id="cfg" class="cfg" novalidate data-cfg='{{ cfg|tojson }}'>
 <div class="card panel">
   <section data-step="1">
@@ -15,6 +15,8 @@
     <div class="field" id="zoomBox" hidden><label for="zoom">Ausschnitt: zoomen, Bild im Kreis ziehen</label>
       <div class="row"><button type="button" class="btn zbtn" id="zout" aria-label="Wegzoomen">−</button><input type="range" id="zoom"><button type="button" class="btn zbtn" id="zin" aria-label="Näher heranzoomen">+</button></div>
       <button type="button" class="btn" id="center" style="margin-top:.75rem">Zentrieren</button></div>
+    <div class="field" id="bgBox" hidden><label style="text-transform:none;font-weight:400"><input type="checkbox" id="bgcut">Hintergrund entfernen (für Fotos von Personen)</label>
+      <p class="hint" id="bgHint" style="margin-top:.4rem">Die Person wird freigestellt und hebt sich im Fadenbild klar ab. Das passiert direkt auf deinem Gerät, dein Foto wird dafür nirgends hochgeladen. Bei Tieren oder Landschaften besser ausgeschaltet lassen.</p></div>
   </section>
   <section data-step="2" hidden>
     <h2>Format und Größe</h2>

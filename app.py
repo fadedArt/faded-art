@@ -1,4 +1,4 @@
-import hashlib, hmac, json, math, os, re, shutil, smtplib, threading, time, uuid
+import hashlib, hmac, json, math, mimetypes, os, re, shutil, smtplib, threading, time, uuid
 from email.message import EmailMessage
 from datetime import datetime
 from datetime import timedelta
@@ -12,6 +12,8 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 from fpdf import FPDF
 from numba import njit
 
+mimetypes.add_type("application/wasm", ".wasm")          # Freisteller im Browser (static/mp): Browser verlangen diese Typen
+mimetypes.add_type("text/javascript", ".mjs")
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)   # hinter Render: richtige https-Adresse für Stripe
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
@@ -83,6 +85,7 @@ PINCOL = {  # Farbe der Nägel
 LINES = {240: 3500, 360: 4500}   # Fäden je Pin-Zahl (Einfarbig)
 LINES_MULTI = {240: 8000, 360: 10000}   # Höchstzahl für Mehrfarbig
 MAX_USE = 1                   # Einfarbig: so oft darf dieselbe Sehne gezogen werden
+BG_KEEP_CLEAN = 0.15          # freigestellter Hintergrund: so stark weichen Linien ihm aus
 SMOOTH = 3                    # Einfarbig: Glättung des Zielbilds in px (bei 1000 px)
 WEIGHT = 0.9                  # Einfarbig: wie viel Dunkelheit eine Linie im Zielbild "abarbeitet" (relativ zur Fadendeckung)
 VARIANTS = {  # drei Stile, die bei jeder Berechnung erzeugt werden; der Kunde wählt seinen Favoriten
@@ -99,7 +102,7 @@ MIN_CONTRAST = 60
 def lum(rgb):
     return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 PINS = {240: 0, 360: 70}                       # Pins -> Aufpreis in €
-BUILD = "b22"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
+BUILD = "b23"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
 TEST_QUAD_CENTS = int(os.environ.get("TESTPREIS_QUAD_CENTS", "50"))   # Testpreis für ALLE quadratischen Bretter; 0 = aus (Live-Betrieb!)
 BASE_CENTS, BASE_AREA, CENTS_PER_CM2 = 50, 2500, 2.5  # 0,50 € ist noch der Testpreis!
 # Feste Größen (Breite x Höhe in cm) je Format. Einzige Quelle: Frontend liest sie von hier.
@@ -355,7 +358,7 @@ def clahe(g, clip, tiles=8):
 def pick_palette(path, disc):
     """Mehrfarbig: wählt nacheinander die Fäden, die das Foto am besten nachmischen (höchstens MULTI_MAX).
     Eine weitere Farbe kommt nur dazu, wenn sie das Ergebnis deutlich verbessert: weniger Farben = weniger Fadenwechsel."""
-    img = np.asarray(Image.open(path).convert("RGB").resize((32, 32), Image.Resampling.BOX), np.float32)
+    img = np.asarray(load_input(path, 32)[0], np.float32)
     yy, xx = np.mgrid[:32, :32]
     P = opp(img[(xx - 15.5) ** 2 + (yy - 15.5) ** 2 <= 16 ** 2])
     d0 = opp(disc)
@@ -384,6 +387,15 @@ def color_runs(seq, cseq):
         last[k] = p
     return out
 
+def load_input(path, size):
+    """Hochgeladenes Bild auf size x size: (RGB auf Weiß, Deckung 0..1 oder None). Transparenz = im Browser freigestellter Hintergrund."""
+    src = Image.open(path)
+    if src.mode not in ("RGBA", "LA"):
+        return src.convert("RGB").resize((size, size), Image.Resampling.LANCZOS), None
+    src = src.convert("RGBA").resize((size, size), Image.Resampling.LANCZOS)
+    alpha = np.asarray(src.getchannel("A"), np.float32) / 255
+    return Image.alpha_composite(Image.new("RGBA", src.size, (255, 255, 255, 255)), src).convert("RGB"), alpha
+
 def compute_string_art(ref, m, key="a"):
     """Gierige String-Art: pro Schritt wird ab dem aktuellen Nagel die beste Sehne gewählt.
     Einfarbig (lineares Modell, liefert die erkennbarsten Gesichter): Zielbild = gewünschte Dunkelheit je Rasterzelle;
@@ -409,7 +421,7 @@ def compute_string_art(ref, m, key="a"):
     ln = ((geo["L"] if K > 1 else 1) / nsc).astype(np.float32)   # Mehrfarbig: Gewinn über die ganze Sehne, Einfarbig: Durchschnitt
 
     # 1) Bild vorbereiten, Ziel je Rasterzelle (2x2 px: so sieht das Auge das Bild aus Distanz)
-    rgb = Image.open(os.path.join(d, "input.png")).convert("RGB").resize((W, W), Image.Resampling.LANCZOS)
+    rgb, alpha = load_input(os.path.join(d, "input.png"), W)
     gray = ImageOps.autocontrast(rgb.convert("L"), cutoff=1.5)
     yy, xx = np.ogrid[:W, :W]
     inside = (xx - W / 2) ** 2 + (yy - W / 2) ** 2 <= (W / 2 - 2) ** 2
@@ -423,6 +435,8 @@ def compute_string_art(ref, m, key="a"):
             nrm = np.asarray(Image.fromarray((nrm * 255 + 0.5).astype(np.uint8)).filter(ImageFilter.GaussianBlur(SMOOTH)), np.float32) / 255
         c = 1.0 - nrm if lum(cols[0]) < lum(disc) else nrm    # heller Faden auf dunklem Grund: helle Stellen = Faden
         c = 1.0 - (1.0 - c) ** var["tone"]
+        if alpha is not None:                                # Hintergrund sauber halten: Linien dort kosten etwas
+            c = alpha * c - (1 - alpha) * BG_KEEP_CLEAN
         Gk = cells(np.where(inside, c, 0).astype(np.float32))[None].copy()   # restliche Dunkelheit je Zelle
         C = T = np.zeros((1, 3), np.float32)                 # (nur im Farbmodell gebraucht)
         lin = WEIGHT * B
@@ -846,7 +860,8 @@ def generate():
     try:
         Image.open(f.stream).verify()
         f.stream.seek(0)
-        img = Image.open(f.stream).convert("RGB")
+        img = Image.open(f.stream)
+        img = img.convert("RGBA" if img.mode in ("RGBA", "LA") or "transparency" in img.info else "RGB")   # Transparenz = freigestellt
     except Exception:
         return jsonify(message="Ungültiges Bild"), 400
 
