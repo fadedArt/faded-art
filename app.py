@@ -1,4 +1,4 @@
-import hashlib, hmac, json, math, mimetypes, os, re, shutil, smtplib, threading, time, uuid
+import base64, hashlib, hmac, json, math, mimetypes, os, re, shutil, smtplib, threading, time, urllib.error, urllib.request, uuid
 from email.message import EmailMessage
 from datetime import datetime
 from datetime import timedelta
@@ -1100,25 +1100,43 @@ def checkout():
         return jsonify(message="Checkout konnte nicht gestartet werden" + detail), 500
 
 def notify_owner(ref):
-    """Schickt dir bei jeder bezahlten Bestellung Anleitung und Bild per E-Mail (sichert die Daten, falls der Server-Speicher gelöscht wird)."""
+    """Schickt dir bei jeder bezahlten Bestellung Anleitung und Bild per E-Mail (sichert die Daten, falls der Server-Speicher gelöscht wird).
+    Mit RESEND_API_KEY über die Resend-API (HTTPS, funktioniert auch auf Render Free), sonst über SMTP (blockiert Render Free)."""
     try:
-        host, to = os.environ.get("SMTP_HOST"), os.environ.get("ORDER_MAIL_TO")
-        if not (host and to):
-            app.logger.warning("Bestellung %s bezahlt. SMTP_HOST/ORDER_MAIL_TO fehlen, keine E-Mail. Daten liegen in %s", ref, odir(ref))
+        to = os.environ.get("ORDER_MAIL_TO")
+        key = os.environ.get("RESEND_API_KEY", "").strip()
+        if not to or not (key or os.environ.get("SMTP_HOST")):
+            app.logger.warning("Bestellung %s bezahlt. ORDER_MAIL_TO bzw. RESEND_API_KEY/SMTP_HOST fehlen, keine E-Mail. Daten liegen in %s", ref, odir(ref))
             return
         m = load(ref)
-        msg = EmailMessage()
-        msg["Subject"], msg["To"], msg["From"] = f"Neue Bestellung: {item_title(m)}", to, os.environ.get("SMTP_USER", to)
-        msg.set_content(f"Bezahlt: {price_cents(m) / 100:.2f} EUR\nKunden-E-Mail: {m.get('email')}\nBestellnummer: {ref}\n"
-                        "Im Anhang: Anleitung als PDF (Maße, Einstellungen, Pinfolge zum Abhaken), das Bild und die Anleitung als Text.\n"
-                        "Die Lieferadresse steht im Stripe-Dashboard.")
+        subject = f"Neue Bestellung: {item_title(m)}"
+        text = (f"Bezahlt: {price_cents(m) / 100:.2f} EUR\nKunden-E-Mail: {m.get('email')}\nBestellnummer: {ref}\n"
+                "Im Anhang: Anleitung als PDF (Maße, Einstellungen, Pinfolge zum Abhaken), das Bild und die Anleitung als Text.\n"
+                "Die Lieferadresse steht im Stripe-Dashboard.")
+        files = []
         for name, kind in (("anleitung.pdf", "application/pdf"), ("final.png", "image/png"), ("anleitung.txt", "text/plain")):
             with open(os.path.join(odir(ref), name), "rb") as f:
-                msg.add_attachment(f.read(), maintype=kind.split("/")[0], subtype=kind.split("/")[1], filename=name)
-        with smtplib.SMTP(host, int(os.environ.get("SMTP_PORT", "587")), timeout=30) as s:
-            s.starttls()
-            s.login(os.environ["SMTP_USER"], os.environ["SMTP_PASS"])
-            s.send_message(msg)
+                files.append((name, kind, f.read()))
+        if key:
+            body = json.dumps({"from": os.environ.get("MAIL_FROM", "Faded Art <onboarding@resend.dev>"), "to": [to], "subject": subject,
+                               "text": text, "attachments": [{"filename": n, "content": base64.b64encode(b).decode()} for n, _, b in files]})
+            req = urllib.request.Request("https://api.resend.com/emails", data=body.encode(), method="POST",
+                                         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json", "User-Agent": "faded-art"})
+            try:
+                urllib.request.urlopen(req, timeout=60).read()
+            except urllib.error.HTTPError as e:
+                raise RuntimeError(f"Resend {e.code}: {e.read().decode(errors='replace')[:300]}") from None
+        else:
+            msg = EmailMessage()
+            msg["Subject"], msg["To"], msg["From"] = subject, to, os.environ.get("SMTP_USER", to)
+            msg.set_content(text)
+            for name, kind, data in files:
+                msg.add_attachment(data, maintype=kind.split("/")[0], subtype=kind.split("/")[1], filename=name)
+            with smtplib.SMTP(os.environ["SMTP_HOST"], int(os.environ.get("SMTP_PORT", "587")), timeout=30) as s:
+                s.starttls()
+                s.login(os.environ["SMTP_USER"], os.environ["SMTP_PASS"])
+                s.send_message(msg)
+        app.logger.warning("Bestell-E-Mail für %s an %s gesendet", ref, to)
     except Exception:
         app.logger.exception("Bestell-E-Mail konnte nicht gesendet werden (%s)", ref)
 
