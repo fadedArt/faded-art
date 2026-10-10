@@ -1,5 +1,5 @@
 (() => {
-const BUILD = 'b21';
+const BUILD = 'b22';
 window.addEventListener('error', e => { const m = document.getElementById('msg'); if (m && !m.textContent && e.message) m.textContent = 'Technischer Fehler: ' + e.message; });
 window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); });   // Zurück-Taste: Seite frisch laden statt alten Zustand zeigen
 const $ = id => document.getElementById(id);
@@ -13,10 +13,12 @@ const cfg = () => { const fmt = $('format').value, size = $('size').value, [w, h
   return { format: fmt, size, w, h, wood: $('wood').value, color: $('color').value,
     hex: $('color').selectedOptions[0].dataset.hex,
     pin: $('pincolor').value, pinHex: $('pincolor').selectedOptions[0].dataset.hex,
-    disc: $('circle').value, discHex: $('circle').selectedOptions[0].dataset.hex, thick: $('thick').value, pins: parseInt($('pins').value) }; };
+    disc: $('circle').value, discHex: $('circle').selectedOptions[0].dataset.hex, thick: $('thick').value, pins: parseInt($('pins').value),
+    multi: $('color').value === 'mehrfarbig' }; };
+const DEMO = ['#111111', '#b91c24', '#f2c416', '#1c3a96'];   // Beispielfarben für die Vorschau "Mehrfarbig" (echte Farben wählt der Server)
 const lum = h => { const n = parseInt(h.slice(1), 16); return .299 * (n >> 16) + .587 * ((n >> 8) & 255) + .114 * (n & 255); };
 const MSG = 'Fadenfarbe und Kreisfarbe sind zu ähnlich. Bitte wähle einen stärkeren Kontrast.';
-const lowContrast = () => { const c = cfg(); return Math.abs(lum(c.hex) - lum(c.discHex)) < 60; };
+const lowContrast = () => { const c = cfg(); return !c.multi && Math.abs(lum(c.hex) - lum(c.discHex)) < 60; };   // mehrfarbig: Server wählt passende Farben
 const msg = t => { $('msg').textContent = t || ''; };
 
 function price() {
@@ -26,7 +28,7 @@ function price() {
   }
   const area = c.w * c.h * (c.format === 'rund' ? PRICE.round_factor : 1);
   const cents = PRICE.base_cents + Math.max(0, area - PRICE.base_area) * PRICE.cents_per_cm2;
-  const p = Math.round(cents) / 100 + PRICE.wood[c.wood] + PRICE.pins[c.pins];
+  const p = Math.round(cents) / 100 + PRICE.wood[c.wood] + PRICE.pins[c.pins] + (c.multi ? PRICE.multi || 0 : 0);
   $('price').textContent = 'Preis: ' + p.toFixed(2).replace('.', ',') + ' €';
 }
 
@@ -48,6 +50,7 @@ function board() {
   b.classList.toggle('round', c.format === 'rund');
   b.dataset.wood = c.wood;
   $('disc').style.background = c.discHex;
+  $('multiHint').hidden = !c.multi;
   if (step >= 4) msg(lowContrast() ? MSG : '');
   [...$('size').options].forEach(o => { const [w, h] = SIZES[c.format][o.value]; o.textContent = o.value + ' (' + w + ' × ' + h + ' cm)'; });
   recommendThread();
@@ -74,6 +77,7 @@ function draw() {
     ctx.save(); ctx.strokeStyle = c.hex; ctx.globalAlpha = .5; ctx.lineWidth = Math.max(1, c.thick * 5);
     for (let i = 0; i < 120; i++) {
       const a = 2 * Math.PI * i / 120, b = a + 2.6;
+      if (c.multi) ctx.strokeStyle = DEMO[i % DEMO.length];
       ctx.beginPath(); ctx.moveTo(S / 2 + R * Math.cos(a), S / 2 + R * Math.sin(a));
       ctx.lineTo(S / 2 + R * Math.cos(b), S / 2 + R * Math.sin(b)); ctx.stroke();
     }
@@ -168,7 +172,7 @@ function initLive() {                                          // leere Leinwän
     const cvs = tile(k).querySelector('canvas'), x = cvs.getContext('2d');
     x.globalAlpha = 1; x.fillStyle = c.discHex; x.fillRect(0, 0, 600, 600); x.fillStyle = c.pinHex;
     for (let i = 0; i < c.pins; i++) { const [px, py] = pinXY(i, c.pins); x.beginPath(); x.arc(px, py, 2, 0, 7); x.fill(); }
-    L[k] = { x, cvs, got: 0, queue: [], last: null, prev: null, n: c.pins, hex: c.hex, alpha: 0.08, lw: 2, dirty: false };
+    L[k] = { x, cvs, got: 0, queue: [], last: {}, prev: null, n: c.pins, hex: [c.hex], alpha: 0.08, lw: 2, dirty: false };   // last: letzter Pin je Fadenfarbe
   });
   if (!animOn) { animOn = true; requestAnimationFrame(anim); }
 }
@@ -176,9 +180,9 @@ function feed(d) {                                             // neue Linien au
   KEYS.forEach(k => {
     const s = L[k], ln = d.lines && d.lines[k];
     if (!s || !ln || ln.from > s.got) return;
-    s.alpha = ln.alpha; s.lw = ln.lw; s.n = ln.n || s.n;
-    const add = ln.pins.slice(s.got - ln.from);
-    s.got += add.length; s.queue.push(...add);
+    s.alpha = ln.alpha; s.lw = ln.lw; s.n = ln.n || s.n; if (ln.hex) s.hex = ln.hex;
+    const off = s.got - ln.from, add = ln.pins.slice(off), cols = (ln.cols || []).slice(off);
+    s.got += add.length; s.queue.push(...add.map((p, i) => [p, cols[i] || 0]));   // [Pin, Fadenfarbe]
   });
 }
 function anim() {                                              // jede Linie einzeln zeichnen, gleichmäßig verteilt
@@ -186,14 +190,15 @@ function anim() {                                              // jede Linie ein
     const s = L[k];
     if (!s || !s.queue.length) return;
     const m = Math.max(1, Math.ceil(s.queue.length / 80));
-    s.x.strokeStyle = s.hex; s.x.globalAlpha = s.alpha; s.x.lineWidth = s.lw;
+    s.x.globalAlpha = s.alpha; s.x.lineWidth = s.lw;
     for (let i = 0; i < m && s.queue.length; i++) {
-      const p = s.queue.shift();
-      if (s.last !== null) {
-        const [x0, y0] = pinXY(s.last, s.n), [x1, y1] = pinXY(p, s.n);
-        s.x.beginPath(); s.x.moveTo(x0, y0); s.x.lineTo(x1, y1); s.x.stroke(); s.prev = s.last;
+      const [p, col] = s.queue.shift(), last = s.last[col];   // jede Farbe ist ein eigener Faden mit eigenem letzten Pin
+      if (last !== undefined) {
+        const [x0, y0] = pinXY(last, s.n), [x1, y1] = pinXY(p, s.n);
+        s.x.strokeStyle = s.hex[col] || s.hex[0];
+        s.x.beginPath(); s.x.moveTo(x0, y0); s.x.lineTo(x1, y1); s.x.stroke(); s.prev = [last, p];
       }
-      s.last = p;
+      s.last[col] = p;
     }
     s.dirty = true; tile(k).classList.remove('wait');
   });
@@ -206,8 +211,8 @@ function drawBig(s) {
   if (!$('big')) return;                                          // große Bühne: Kopie der Leinwand + die gerade gezogene Linie in Gold
   const b = $('big'), x = b.getContext('2d');
   x.globalAlpha = 1; x.drawImage(s.cvs, 0, 0);
-  if (s.prev !== null && s.last !== null) {
-    const [x0, y0] = pinXY(s.prev, s.n), [x1, y1] = pinXY(s.last, s.n);
+  if (s.prev) {
+    const [x0, y0] = pinXY(s.prev[0], s.n), [x1, y1] = pinXY(s.prev[1], s.n);
     x.strokeStyle = '#e6ca65'; x.globalAlpha = .95; x.lineWidth = 2.5; x.beginPath(); x.moveTo(x0, y0); x.lineTo(x1, y1); x.stroke();
   }
   b.hidden = false; $('result').hidden = true; cv.hidden = true;

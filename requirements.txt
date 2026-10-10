@@ -3,4 +3,5 @@ numpy
 Pillow>=10.1
 stripe
 gunicorn
+numba
 

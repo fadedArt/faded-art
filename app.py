@@ -8,7 +8,8 @@ import numpy as np
 import stripe
 from flask import Flask, abort, jsonify, render_template, render_template_string, request, send_file, session
 from werkzeug.middleware.proxy_fix import ProxyFix
-from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
+from numba import njit
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)   # hinter Render: richtige https-Adresse für Stripe
@@ -25,7 +26,6 @@ WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip().strip("\"'"
 DATA_DIR = os.environ.get("DATA_DIR", "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
-IMAGE_SIZE = 1000
 pool = ThreadPoolExecutor(max_workers=1)   # eine Berechnung gleichzeitig (schont den Arbeitsspeicher)
 REF_RE = re.compile(r"^[0-9a-f]{32}$")
 
@@ -44,6 +44,27 @@ COLORS = {
     "gold": ("Champagner Gold", (212, 175, 55)),
     "silber": ("Silber", (195, 195, 195)),
 }
+MULTI = "mehrfarbig"   # Wert im Konfigurator: Fadenfarben werden automatisch aus dem Foto gewählt
+MULTI_COLORS = {       # Fäden, aus denen die Mehrfarb-Berechnung wählt (nur echte, kaufbare Garnfarben eintragen)
+    "schwarz": ("Tiefschwarz", (12, 12, 12)),
+    "weiss": ("Reinweiß", (250, 250, 250)),
+    "rot": ("Rot", (185, 28, 36)),
+    "gelb": ("Gelb", (242, 196, 22)),
+    "blau": ("Königsblau", (28, 58, 150)),
+    "gruen": ("Grün", (24, 120, 62)),
+    "hautton": ("Apricot", (228, 168, 128)),
+    "braun": ("Braun", (110, 66, 36)),
+}
+MULTI_MAX, MULTI_EUR = 4, 0   # höchstens so viele Fadenfarben; Aufpreis für Mehrfarbig in € (noch festlegen!)
+BLOCK = 150                   # Mehrfarbig: so viele Linien am Stück mit einer Farbe, dann wird ggf. gewechselt
+CHROMA = 0.7                  # Gewicht der Farbabweichung gegenüber der Helligkeit (Mehrfarbig)
+
+def thread_name(k):
+    return (COLORS.get(k) or MULTI_COLORS[k])[0]
+
+def thread_rgb(k):
+    return (COLORS.get(k) or MULTI_COLORS[k])[1]
+
 DISC = {  # Farbe des Kreises in der Mitte
     "weiss": ("Weiß", (250, 250, 250)), "creme": ("Creme", (236, 224, 200)),
     "braun": ("Braun", (110, 74, 45)), "anthrazit": ("Anthrazit", (45, 45, 48)),
@@ -58,24 +79,24 @@ PINCOL = {  # Farbe der Nägel
     "kupfer": ("Kupfer", (184, 115, 51)),
 }
 LINES = {240: 8000, 360: 10000}   # Anzahl Fäden je Pin-Zahl
-LENPOW, BUDGET, GAMMA0, TONE = 0.25, 3.0, 1.0, 1.0
-TONE_LIGHT, GAMMA_LIGHT = 1.0, 1.0   # helle Fäden auf dunklem Kreis: Fäden addieren sich optisch, daher sparsamer       # Gewicht der Sehnenlänge, Faden-Budget für die Tonwerte
-LOCAL, LC_R = 0.0, 40         # Stärke und Radius des lokalen Kontrasts
+BUDGET, GAMMA0 = 3.0, 1.0      # Faden-Budget für die Tonwerte, Gamma für dunkle Fäden
+GAMMA_LIGHT = 1.0             # Gamma für helle Fäden auf dunklem Kreis
+LC_R = 40                     # Radius des lokalen Kontrasts
 VARIANTS = {  # drei Stile, die bei jeder Berechnung erzeugt werden; der Kunde wählt seinen Favoriten
     "a": dict(name="Ausgewogen", local=0.0, tone=1.0, tone_light=1.0, line_w=3.5),
     "b": dict(name="Kontrastreich", local=0.6, tone=1.4, tone_light=1.3, line_w=3.5),
     "c": dict(name="Weich", local=0.0, tone=0.8, tone_light=0.8, line_w=3.0),
 }
 LINE_W = 3.5                      # Fadenbreite in Pixeln (bei 1000 px Bildbreite)
-AUTOSTOP, MIN_GAP = True, 25        # Auto-Stopp; Mindestabstand in Nägeln (bei 360 Pins)
-TOPK = 1                          # 1 = immer die beste Sehne
+MIN_GAP = 25                      # Mindestabstand in Nägeln (bei 360 Pins)
 CELL, SAMPLES = 2, 160            # Rastergröße der Bewertung, Abtastpunkte je Sehne
+OVERSHOOT = 0.6                   # Strafe für Fäden durch Stellen, die schon fertig sind (< 1: mehr Linien, mehr Kontrast)
 MIN_CONTRAST = 60
 
 def lum(rgb):
     return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 PINS = {240: 0, 360: 70}                       # Pins -> Aufpreis in €
-BUILD = "b21"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
+BUILD = "b22"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
 TEST_QUAD_CENTS = int(os.environ.get("TESTPREIS_QUAD_CENTS", "50"))   # Testpreis für ALLE quadratischen Bretter; 0 = aus (Live-Betrieb!)
 BASE_CENTS, BASE_AREA, CENTS_PER_CM2 = 50, 2500, 2.5  # 0,50 € ist noch der Testpreis!
 # Feste Größen (Breite x Höhe in cm) je Format. Einzige Quelle: Frontend liest sie von hier.
@@ -115,10 +136,12 @@ def update(ref, **kw):
         m.update(kw)
         _write(ref, m)
 
-def update_variant(ref, key, pct=None, live=None, ready=False):
-    """Fortschritt, Live-Bildnummer und Fertig-Meldung EINER Variante (drei laufen gleichzeitig)."""
+def update_variant(ref, key, pct=None, live=None, ready=False, used=None):
+    """Fortschritt, Live-Bildnummer, verwendete Fadenfarben und Fertig-Meldung EINER Variante (drei laufen gleichzeitig)."""
     with _meta_lock:
         m = load(ref) or {}
+        if used is not None:
+            m.setdefault("used", {})[key] = used
         if pct is not None:
             m.setdefault("prog", {})[key] = pct
         if live is not None:
@@ -142,57 +165,241 @@ def price_cents(m):
         return TEST_QUAD_CENTS
     area = m["w"] * m["h"] * (ROUND_AREA if m.get("fmt") in ROUND_FORMATS else 1)
     extra = max(0, area - BASE_AREA) * CENTS_PER_CM2
-    return BASE_CENTS + round(extra) + (WOOD[m["wood"]][2] + PINS[m["pins"]]) * 100
+    return BASE_CENTS + round(extra) + (WOOD[m["wood"]][2] + PINS[m["pins"]] + (MULTI_EUR if m.get("color") == MULTI else 0)) * 100
 
 
 # ---------- String-Art-Berechnung (dein Algorithmus, pro Bestellung isoliert) ----------
+W_IMG, S_RENDER = 1000, 2000      # Rechenauflösung, Render-Auflösung (danach auf 1000 px verkleinert)
+_GEOM, _geom_lock = {}, threading.Lock()
+_OPP = (np.array([[.299, .587, .114], [-.169, -.331, .5], [.5, -.419, -.081]]) * [[1], [CHROMA], [CHROMA]]).astype(np.float32)
+
 def preview_img(img, size=800):
     """Vorschau in 800 px (das gekaufte Bild und die Pinfolge haben volle Auflösung)."""
     return img.convert("RGB").resize((size, size), Image.Resampling.LANCZOS)
 
-def compute_string_art(ref, m, key="a", pbase=0.0, pscale=1.0):
-    """Gierige String-Art: pro Schritt wird die Sehne gewählt, die dem Bild am meisten fehlt.
-    Alles vektorisiert (numpy), Rendering mit echter Deckkraft-Überlagerung in doppelter Auflösung."""
+def opp(rgb):
+    """RGB (0..255) -> Helligkeit + gewichtete Farbanteile. Abstände hier entsprechen grob dem, was das Auge als Unterschied sieht."""
+    return (np.asarray(rgb, np.float32) / 255) @ _OPP.T
+
+def geometry(n):
+    """Nagelkreis, Sehnenlängen und erlaubte Sehnen (Mindestabstand der Nägel); einmal je Pin-Zahl berechnet."""
+    with _geom_lock:
+        if n not in _GEOM:
+            rp = W_IMG / 2 - 9
+            ang = 2 * np.pi * np.arange(n) / n
+            px, py = W_IMG / 2 + rp * np.cos(ang), W_IMG / 2 + rp * np.sin(ang)
+            ln = (np.hypot(px[:, None] - px, py[:, None] - py) / SAMPLES).astype(np.float32)   # Fadenweg je Abtastpunkt
+            gap = np.abs(np.arange(n)[:, None] - np.arange(n))
+            ok = np.minimum(gap, n - gap) > max(8, round(MIN_GAP * n / 360) - 1)
+            _GEOM[n] = dict(px=px, py=py, rp=rp, ln=ln, ok=ok)
+        return _GEOM[n]
+
+# Rechenkerne mit numba: werden beim ersten Aufruf in Maschinencode übersetzt (gespeichert in __pycache__) und sind dann
+# um ein Vielfaches schneller als numpy, weil pro Faden nur wenige Hundert Zellen angefasst werden.
+@njit(cache=True, nogil=True)
+def _cell_gain(c, C, T, Co, Gk, B, ov, q):
+    """Gewinn (Fehlerverringerung je Pixel Fadenweg) von Zelle c für jede Fadenfarbe, siehe compute_string_art Schritt 2."""
+    for k in range(Co.shape[0]):
+        dr = dd = 0.0
+        for ch in range(3):
+            dk = Co[k, ch] - C[c, ch]
+            dr += dk * (T[c, ch] - C[c, ch])
+            dd += dk * dk
+        if dr < 0:
+            dr *= ov                                   # Faden durch schon fertige Stellen: mildere Strafe
+        Gk[k, c] = (2 * B * dr - B * B * dd) / q
+
+@njit(cache=True, nogil=True)
+def _init_gain(C, T, Co, Gk, B, ov, q):
+    for c in range(C.shape[0]):
+        _cell_gain(c, C, T, Co, Gk, B, ov, q)
+
+@njit(cache=True, nogil=True)
+def _best(k, p, px, py, ln, ok, used, Gk, q, Wc, ns):
+    """Beste Sehne der Farbe k ab Pin p: (Pin, Gewinn), Pin = -1, wenn keine das Bild verbessert.
+    Der Gewinn einer Sehne ist die Summe über ns gleichmäßig verteilte Abtastpunkte mal Fadenweg je Punkt."""
+    best, bg = -1, 0.0
+    for c in range(len(px)):
+        if ok[p, c] and not used[k, p, c]:
+            iq = 1.0 / q                               # Zelle = Pixel (gerundet) / q, als eine Multiplikation
+            x0, y0 = (px[p] + 0.5) * iq, (py[p] + 0.5) * iq
+            dx, dy = (px[c] - px[p]) * iq / (ns - 1), (py[c] - py[p]) * iq / (ns - 1)
+            g = 0.0
+            for j in range(ns):
+                g += Gk[k, int(y0 + dy * j) * Wc + int(x0 + dx * j)]
+            g *= ln[p, c]
+            if g > bg:
+                best, bg = c, g
+    return best, bg
+
+@njit(cache=True, nogil=True)
+def _lines(k, p, count, out, ln, ok, used, Gk, C, T, Co, px, py, B, ov, q, Wc, ns, coef):
+    """Zieht bis zu count Fäden der Farbe k ab Pin p, jeweils die beste Sehne; die Pins landen in out.
+    Gibt die Anzahl zurück (weniger als count = kein Faden verbessert das Bild mehr)."""
+    for i in range(count):
+        nxt, g = _best(k, p, px, py, ln, ok, used, Gk, q, Wc, ns)
+        if nxt < 0:
+            return i
+        ex, ey = px[nxt] - px[p], py[nxt] - py[p]
+        N = max(1, int(math.sqrt(ex * ex + ey * ey)))
+        prev, run = -1, 0
+        for s in range(N + 2):                         # Zellen der Geraden pixelgenau, je Zelle Länge des Fadenwegs
+            c = -2
+            if s <= N:
+                c = (int(py[p] + 0.5 + ey * s / N) // q) * Wc + int(px[p] + 0.5 + ex * s / N) // q
+            if c != prev:
+                if prev >= 0:
+                    beta = 1 - math.exp(coef * run)    # Deckung dieses Fadens in der Zelle
+                    for ch in range(3):
+                        C[prev, ch] += beta * (Co[k, ch] - C[prev, ch])
+                    _cell_gain(prev, C, T, Co, Gk, B, ov, q)
+                prev, run = c, 0
+            run += 1
+        used[k, p, nxt] = used[k, nxt, p] = True
+        out[i] = nxt
+        p = nxt
+    return count
+
+@njit(cache=True, nogil=True)
+def _render_run(P, pins, S, lw, lut, col, cnt, canvas):
+    """Malt einen Abschnitt (eine Farbe) auf die Leinwand: Fäden zählen, dann Deckung 1 - (1 - a)^Anzahl überlagern.
+    Je Pixel der Hauptachse ein Punkt, quer zur Richtung auf lw px verbreitert (keine Doppelzählung innerhalb eines Fadens)."""
+    for i in range(len(pins) - 1):
+        u, v = pins[i], pins[i + 1]
+        dx, dy = P[v, 0] - P[u, 0], P[v, 1] - P[u, 1]
+        horiz = abs(dx) >= abs(dy)
+        N = int(abs(dx)) if horiz else int(abs(dy))
+        step = S if horiz else 1
+        for s in range(N + 1):
+            t = s / max(1, N)
+            x = min(max(int(round(P[u, 0] + dx * t)), 0), S - 2)
+            y = min(max(int(round(P[u, 1] + dy * t)), 0), S - 2)
+            for o in range(-(lw // 2), lw - lw // 2):
+                j = y * S + x + o * step
+                if 0 <= j < S * S:
+                    cnt[j] += 1
+    for j in range(S * S):
+        if cnt[j]:
+            cov = lut[min(cnt[j], len(lut) - 1)]
+            for ch in range(3):
+                canvas[j, ch] = int(canvas[j, ch] + (col[ch] - canvas[j, ch]) * cov + 0.5)
+            cnt[j] = 0
+
+def _warmup():
+    """Übersetzt die Rechenkerne gleich beim Serverstart (im Hintergrund), nicht erst bei der ersten Bestellung."""
+    try:
+        n, K = 4, 2
+        ln, ok, used = np.ones((n, n), np.float32), np.ones((n, n), bool), np.zeros((K, n, n), bool)
+        C, T, Co, Gk = np.zeros((4, 3), np.float32), np.ones((4, 3), np.float32), np.ones((K, 3), np.float32), np.zeros((K, 4), np.float32)
+        _init_gain(C, T, Co, Gk, 0.1, 0.5, 2)
+        _lines(0, 0, 1, np.empty(1, np.int64), ln, ok, used, Gk, C, T, Co, np.arange(n) * 3.0, np.zeros(n), 0.1, 0.5, 2, 2, 4, -0.1)
+        _render_run(np.ones((n, 2)), np.arange(2, dtype=np.int64), 4, 3, np.ones(4, np.float32), np.ones(3, np.float32), np.zeros(16, np.uint16), np.zeros((16, 3), np.uint8))
+    except Exception:
+        app.logger.exception("numba-Vorübersetzung fehlgeschlagen")
+
+_warm = []
+
+def warm_up_once():
+    if not _warm:
+        _warm.append(pool.submit(_warmup))   # über die Rechen-Warteschlange: die erste Bestellung wartet ggf. kurz dahinter
+
+def _simplex(v):
+    """Projiziert jede Zeile auf 'alle Werte >= 0, Summe 1'."""
+    u = -np.sort(-v, axis=1)
+    css = np.cumsum(u, 1) - 1
+    rho = (u - css / np.arange(1, v.shape[1] + 1) > 0).sum(1)
+    return np.maximum(v - (css[np.arange(len(v)), rho - 1] / rho)[:, None], 0)
+
+def mix_error(P, V):
+    """Wie gut lassen sich die Farben P aus den Farben V mischen? (aus der Ferne mischt das Auge Fäden und Untergrund)"""
+    V = np.asarray(V, np.float32)
+    lam = np.full((len(P), len(V)), 1 / len(V), np.float32)
+    step = 1 / (np.linalg.norm(V @ V.T, 2) + 1e-6)
+    for _ in range(100):
+        lam = _simplex(lam - step * ((lam @ V - P) @ V.T))
+    return float(((lam @ V - P) ** 2).sum(1).mean())
+
+def pick_palette(path, disc):
+    """Mehrfarbig: wählt nacheinander die Fäden, die das Foto am besten nachmischen (höchstens MULTI_MAX).
+    Eine weitere Farbe kommt nur dazu, wenn sie das Ergebnis deutlich verbessert: weniger Farben = weniger Fadenwechsel."""
+    img = np.asarray(Image.open(path).convert("RGB").resize((32, 32), Image.Resampling.BOX), np.float32)
+    yy, xx = np.mgrid[:32, :32]
+    P = opp(img[(xx - 15.5) ** 2 + (yy - 15.5) ** 2 <= 16 ** 2])
+    d0 = opp(disc)
+    keys = [k for k, v in MULTI_COLORS.items() if np.abs(opp(v[1]) - d0).sum() > 0.25]   # zu nah an der Kreisfarbe: unsichtbar
+    chosen, err = [], mix_error(P, [d0])
+    while len(chosen) < MULTI_MAX:
+        errs = {k: mix_error(P, [d0] + [opp(thread_rgb(c)) for c in chosen + [k]]) for k in keys if k not in chosen}
+        if not errs:
+            break
+        k = min(errs, key=errs.get)
+        if chosen and errs[k] > 0.85 * err:
+            break
+        chosen.append(k)
+        err = errs[k]
+    return chosen or [max(MULTI_COLORS, key=lambda c: np.abs(opp(thread_rgb(c)) - d0).sum())]
+
+def color_runs(seq, cseq):
+    """Abschnitte [(Farbe, [Pins])] in Fädel-Reihenfolge. Jede Farbe ist ein eigener durchgehender Faden:
+    ein Abschnitt beginnt an dem Pin, an dem diese Farbe zuletzt aufgehört hat."""
+    last, out = {}, []
+    for p, k in zip(seq, cseq):
+        if k in last:
+            if not out or out[-1][0] != k:
+                out.append((k, [last[k]]))
+            out[-1][1].append(p)
+        last[k] = p
+    return out
+
+def compute_string_art(ref, m, key="a"):
+    """Gierige String-Art: pro Schritt wird die Sehne gewählt, die den Bildfehler am stärksten senkt.
+    Farbmodell: jede Rasterzelle hat eine Farbe, jeder Faden mischt seine Farbe mit Deckkraft a hinein
+    (Einfarbig ist der Sonderfall mit nur einer Fadenfarbe). Für jede Zelle und Fadenfarbe wird der Gewinn
+    (Fehlerverringerung je Pixel Fadenweg) mitgeführt: pro Schritt wird er nur entlang der Kandidaten-Sehnen
+    aufsummiert, nach jeder Linie werden nur die Zellen dieser Linie neu bewertet."""
     var = VARIANTS[key]                        # Stil: Kontrast, Tonwerte, Fadenbreite
     LW = var["line_w"]
     d, n = odir(ref), m["pins"]
-    thread, disc = COLORS[m["color"]][1], DISC[m["disc"]][1]
-    bg = WOOD[m["wood"]][1]
-    W, S = 1000, 2000
+    pal = m["palette"] if m["color"] == MULTI else [m["color"]]
+    cols = [thread_rgb(c) for c in pal]
+    K, disc, bg = len(cols), DISC[m["disc"]][1], WOOD[m["wood"]][1]
+    W, S, q = W_IMG, S_RENDER, CELL
+    Wc = W // q
     # Maßstab: derselbe Faden wirkt auf einem größeren Bild feiner, auf einem kleineren kräftiger
     disc_cm = max(10.0, ring_cm(m))
     t_mm = float(m["thick"])
     a = min(0.4, max(0.02, E_REF * (t_mm / 0.20) * (D0_CM / disc_cm) / LW))     # Deckkraft pro Faden
     n_lines = int(LINES[n] * min(1.6, max(1.0, (0.20 / t_mm) * (disc_cm / D0_CM))))   # feinerer Faden braucht mehr Linien
+    geo = geometry(n)
+    px, py, rp, ln, ok = geo["px"], geo["py"], geo["rp"], geo["ln"], geo["ok"]
 
-    # 1) Bild vorbereiten: Kontrast, Schärfe, dann "gewünschte Fadendichte" c (0..1)
-    img = Image.open(os.path.join(d, "input.png")).convert("L").resize((W, W), Image.Resampling.LANCZOS)
-    img = ImageOps.autocontrast(img, cutoff=1.5).filter(ImageFilter.UnsharpMask(radius=3, percent=140, threshold=2))
+    # 1) Bild vorbereiten: Kontrast, Schärfe, dann Zielfarbe T je Rasterzelle (2x2 px: so sieht das Auge das Bild aus Distanz)
+    rgb = Image.open(os.path.join(d, "input.png")).convert("RGB").resize((W, W), Image.Resampling.LANCZOS)
+    img = ImageOps.autocontrast(rgb.convert("L"), cutoff=1.5).filter(ImageFilter.UnsharpMask(radius=3, percent=140, threshold=2))
     nrm = np.asarray(img, dtype=np.float32) / 255.0
     if var["local"]:                                            # lokaler Kontrast: hebt Streifen, Augen, Ohren hervor
         blur = np.asarray(img.filter(ImageFilter.GaussianBlur(LC_R)), dtype=np.float32) / 255.0
         nrm = np.clip(nrm + var["local"] * (nrm - blur), 0, 1)
-    dark_thread = lum(thread) < lum(disc)
-    c = 1.0 - nrm if dark_thread else nrm    # heller Faden auf dunklem Grund: helle Stellen = Faden
-    c = 1.0 - (1.0 - c) ** (var["tone"] if dark_thread else var["tone_light"])                          # TONE > 1: Mitteltöne bekommen mehr Fäden, das Bild wirkt plastischer
-    yy, xx = np.mgrid[:W, :W]
-    c = np.where((xx - W / 2) ** 2 + (yy - W / 2) ** 2 <= (W / 2 - 2) ** 2, c, 0).astype(np.float32)
-
-    # 2) Pin-Positionen und Zielwerte im groben Raster (4x4 px Zellen): Fäden werden nach dem
-    #    lokalen Durchschnittston bewertet, so wie das Auge das Bild aus Distanz sieht.
-    rp = W / 2 - 9
-    ang = 2 * np.pi * np.arange(n) / n
-    px, py = W / 2 + rp * np.cos(ang), W / 2 + rp * np.sin(ang)
-    q = CELL
-    Wc = W // q
-    logk = np.log1p(-a)
-    Tl = c.reshape(Wc, q, Wc, q).mean(axis=(1, 3)).astype(np.float32)
-    budget = BUDGET * n_lines * 0.65 * W * LW                   # verfügbare Faden-Pixel
-    need = lambda t: float(-np.log1p(-np.minimum(t, .92)).sum() / -logk * q * q)   # benötigte Faden-Pixel
-    g = GAMMA0 if dark_thread else GAMMA_LIGHT
-    while need(Tl ** g) > budget and g < 4:             # Gamma: Lichter bleiben, Mitteltöne werden lichter -> mehr Kontrast
-        g += 0.05
-    T = np.minimum(Tl ** g, 0.92).ravel()
+    yy, xx = np.ogrid[:W, :W]
+    inside = (xx - W / 2) ** 2 + (yy - W / 2) ** 2 <= (W / 2 - 2) ** 2
+    cells = lambda x: x.reshape(Wc, q, Wc, q, *x.shape[2:]).mean(axis=(1, 3)).reshape(Wc * Wc, *x.shape[2:])
+    d0, Co = opp(disc), opp(cols)
+    if K == 1:
+        dark_thread = lum(cols[0]) < lum(disc)
+        c = 1.0 - nrm if dark_thread else nrm    # heller Faden auf dunklem Grund: helle Stellen = Faden
+        c = 1.0 - (1.0 - c) ** (var["tone"] if dark_thread else var["tone_light"])   # tone > 1: Mitteltöne bekommen mehr Fäden, das Bild wirkt plastischer
+        Tl = cells(np.where(inside, c, 0).astype(np.float32))
+        logk = np.log1p(-a)
+        budget = BUDGET * n_lines * 0.65 * W * LW                   # verfügbare Faden-Pixel
+        need = lambda t: float(-np.log1p(-np.minimum(t, .92)).sum() / -logk * q * q)   # benötigte Faden-Pixel
+        g = GAMMA0 if dark_thread else GAMMA_LIGHT
+        while need(Tl ** g) > budget and g < 4:             # Gamma: Lichter bleiben, Mitteltöne werden lichter -> mehr Kontrast
+            g += 0.05
+        T = d0 + np.minimum(Tl ** g, 0.92)[:, None] * (Co[0] - d0)
+    else:                                                    # Mehrfarbig: Helligkeit wie oben, Farbe aus dem Foto (etwas kräftiger)
+        x = opp(np.asarray(ImageEnhance.Color(rgb).enhance(1.25).resize((Wc, Wc), Image.Resampling.BOX), np.float32)).reshape(-1, 3)
+        x[:, 0] = cells(nrm ** var["tone"])                # gleich in Rasterauflösung: spart Arbeitsspeicher
+        T = np.where(cells(inside.astype(np.float32))[:, None] > 0.5, x, d0)
 
     # Live-Ansicht: Fäden werden parallel auf eine kleine Leinwand gezeichnet und regelmäßig als Bild gespeichert
     LIVE = 600
@@ -215,67 +422,71 @@ def compute_string_art(ref, m, key="a", pbase=0.0, pscale=1.0):
 
     save_live(0)
 
-    # 3) Gierige Auswahl der Sehnen (alle Kandidaten pro Schritt gleichzeitig)
-    cnt_c, cov, R = np.zeros(Wc * Wc, np.float32), np.zeros(Wc * Wc, np.float32), T.copy()
-    s = np.linspace(0, 1, SAMPLES)
-    skip, allp = max(8, round(MIN_GAP * n / 360) - 1), np.arange(n)     # Mindestabstand der Nägel je Sehne
-    KAPPA = -logk * LW / (q * q)
-    used = np.zeros((n, n), bool)                                         # jede Sehne nur einmal
-    seq, cur = [0], 0
+    # 2) Gewinn je Zelle und Fadenfarbe. Ein Faden, der eine Zelle quert, mischt seine Farbe mit Anteil B hinein;
+    #    Gewinn = Verringerung des Fehlers |T - C|², umgerechnet auf ein Pixel Fadenweg.
+    logk = math.log1p(-a)
+    B = -math.expm1(logk * LW / q)
+    C = np.repeat(d0[None], Wc * Wc, 0)                   # aktuelle Farbe jeder Zelle
+
+    T = np.ascontiguousarray(T, np.float32)
+    Gk = np.empty((K, Wc * Wc), np.float32)
+    _init_gain(C, T, Co, Gk, B, OVERSHOOT, q)
+    used = np.zeros((K, n, n), bool)                      # jede Sehne nur einmal je Farbe
+
+    # 3) Gierige Auswahl. Mehrfarbig: in Abschnitten von BLOCK Linien mit der Farbe, die gerade am meisten bringt.
+    cur = [round(i * n / K) % n for i in range(K)]       # jede Farbe beginnt an einem anderen Pin
+    seq, cseq, started = [], [], set()
     for r in [r for r, v in list(LIVE_SEQ.items()) if time.time() - v.get("t", 0) > 3600]:
         LIVE_SEQ.pop(r, None)
-    LIVE_SEQ.setdefault(ref, {"t": time.time()})[key] = {"seq": seq, "alpha": round(lalpha / 255, 4), "lw": lwid, "n": n}
-    rng = np.random.default_rng(1)
-    for _ in range(n_lines):
-        gap = np.abs(allp - cur)
-        cand = allp[(np.minimum(gap, n - gap) > skip) & ~used[cur]]
-        if len(cand) == 0:
-            break
-        X = px[cur] + (px[cand, None] - px[cur]) * s
-        Y = py[cur] + (py[cand, None] - py[cur]) * s
-        ix = (np.rint(Y).astype(np.int32) // q) * Wc + np.rint(X).astype(np.int32) // q
-        dc = (1 - cov[ix]) * KAPPA                            # Deckungszuwachs pro Pixel Fadenweg
-        gain = (2 * R[ix] * dc - dc * dc).sum(axis=1) * np.hypot(px[cand] - px[cur], py[cand] - py[cur])   # echte Fehlerverringerung
-        j = int(gain.argmax())
-        if gain[j] <= 0:
-            break                                          # Auto-Stopp: kein Faden verbessert das Bild mehr
-        ex, ey = px[cand[j]] - px[cur], py[cand[j]] - py[cur]
-        tt = np.linspace(0, 1, int(np.hypot(ex, ey)) + 1)
-        cells = (np.rint(py[cur] + ey * tt).astype(np.int32) // q) * Wc + np.rint(px[cur] + ex * tt).astype(np.int32) // q
-        starts = np.flatnonzero(np.r_[True, cells[1:] != cells[:-1]])      # Zellen einer Geraden sind lückenlos hintereinander
-        u, k_ = cells[starts], np.diff(np.r_[starts, len(cells)])
-        cov_new = 1 - np.exp(logk * (cnt_c[u] + k_) * LW / (q * q))
-        cnt_c[u] += k_
-        cov[u] = cov_new
-        R[u] = T[u] - cov[u]
-        used[cur, cand[j]] = used[cand[j], cur] = True
-        p0 = (px[cur] * lk, py[cur] * lk)
-        cur = int(cand[j])
-        seq.append(cur)
-        ld.line([p0, (px[cur] * lk, py[cur] * lk)], fill=thread + (lalpha,), width=lwid)     # Faden live zeichnen
-        if len(seq) % 100 == 0:                              # Live-Bild, Fortschritt und Lebenszeichen
-            save_live(min(99, int(100 * len(seq) / n_lines)))
+    LIVE_SEQ.setdefault(ref, {"t": time.time()})[key] = {"seq": seq, "cseq": cseq, "hex": ["#%02x%02x%02x" % c for c in cols],
+                                                         "alpha": round(lalpha / 255, 4), "lw": lwid, "n": n}
+    buf, coef = np.empty(100, np.int64), logk * LW / (q * q)
 
-    # 4) Rendern in 2000 px: jeder Faden ~1 px (bei 1000 px) breit, Deckkraft überlagert sich physikalisch
-    k = S / W
-    P = np.stack([px, py], 1) * k
-    cnt = np.zeros(S * S, np.uint16)
+    def draw(k, count):                                  # count Fäden der Farbe k ziehen und live zeichnen
+        got = _lines(k, cur[k], count, buf, ln, ok, used, Gk, C, T, Co, px, py, B, OVERSHOOT, q, Wc, SAMPLES, coef)
+        if got and k not in started:                      # Startpin dieser Farbe
+            started.add(k)
+            seq.append(cur[k])
+            cseq.append(k)
+        for nxt in buf[:got].tolist():
+            p0 = cur[k]
+            ld.line([(px[p0] * lk, py[p0] * lk), (px[nxt] * lk, py[nxt] * lk)], fill=cols[k] + (lalpha,), width=lwid)
+            seq.append(nxt)
+            cseq.append(k)
+            cur[k] = nxt
+        return got
+
+    k, left, lines = 0, n_lines if K == 1 else 0, 0
+    while lines < n_lines:
+        if left <= 0:                                     # nächster Abschnitt: Farbe mit dem größten Gewinn
+            gains = [_best(i, cur[i], px, py, ln, ok, used, Gk, q, Wc, SAMPLES)[1] for i in range(K)]
+            k = int(np.argmax(gains))
+            if gains[k] <= 0:
+                break                                     # Auto-Stopp: kein Faden verbessert das Bild mehr
+            left = BLOCK
+        want = min(100 - lines % 100, left, n_lines - lines)
+        got = draw(k, want)
+        lines, left = lines + got, left - got
+        if got and lines % 100 == 0:                      # Live-Bild, Fortschritt und Lebenszeichen
+            save_live(min(99, int(100 * lines / n_lines)))
+        if got < want:
+            if K == 1:
+                break
+            left = 0
+
+    # 4) Rendern in 2000 px, Abschnitt für Abschnitt (spätere Fäden liegen oben); Deckkraft überlagert sich physikalisch
+    runs = color_runs(seq, cseq)
+    P = np.ascontiguousarray(np.stack([px, py], 1) * (S / W))
     lw = max(1, int(round(2 * LW)))
-    for u, v in zip(seq[:-1], seq[1:]):
-        dx, dy = P[v, 0] - P[u, 0], P[v, 1] - P[u, 1]
-        horiz = abs(dx) >= abs(dy)
-        t = np.linspace(0, 1, int(abs(dx if horiz else dy)) + 1)       # genau ein Punkt je Pixel der Hauptachse: keine Doppelzählung
-        x = np.clip(np.rint(P[u, 0] + dx * t), 0, S - 2).astype(np.int64)
-        y = np.clip(np.rint(P[u, 1] + dy * t), 0, S - 2).astype(np.int64)
-        base = y * S + x                                      # Faden ist LW px breit (bei 1000 px), quer zur Richtung verbreitert
-        idx = (base[:, None] + (np.arange(lw) - lw // 2)[None, :] * (S if horiz else 1)).ravel()
-        cnt[idx[(idx >= 0) & (idx < S * S)]] += 1
-    d0, t0 = np.asarray(disc, np.float32), np.asarray(thread, np.float32)
-    rgb = np.empty((S, S, 3), np.uint8)                     # streifenweise berechnen: spart Arbeitsspeicher (Render Free hat nur 512 MB)
-    for r0 in range(0, S, 250):
-        cov_s = (1 - np.power(1 - a, cnt[r0 * S:(r0 + 250) * S].astype(np.float32))).reshape(-1, S, 1)
-        rgb[r0:r0 + 250] = (d0 + (t0 - d0) * cov_s).astype(np.uint8)
-    art = Image.fromarray(rgb, "RGB")
+    canvas = np.empty((S * S, 3), np.uint8)                # 8 Bit je Farbe: wenig Speicher (Render Free hat nur 512 MB)
+    canvas[:] = disc
+    cnt = np.zeros(S * S, np.uint16)
+    lut = (1 - (1 - a) ** np.arange(4096)).astype(np.float32)   # Deckung bei n Fäden übereinander
+    for k, pins_ in runs:
+        _render_run(P, np.asarray(pins_, np.int64), S, lw, lut, np.asarray(cols[k], np.float32), cnt, canvas)
+    del cnt
+    art = Image.fromarray(canvas.reshape(S, S, 3))
+    del canvas
     pin_col = PINCOL[m.get("pin", "gold")][1]
     edge = (40, 40, 40) if lum(pin_col) > 90 else (170, 170, 170)
     dr = ImageDraw.Draw(art)
@@ -287,18 +498,50 @@ def compute_string_art(ref, m, key="a", pbase=0.0, pscale=1.0):
     ImageDraw.Draw(mask).ellipse([0, 0, W, W], fill=255)
     final = Image.new("RGB", (W, W), bg)
     final.paste(art, (0, 0), mask)
-    final.save(os.path.join(d, f"final_{key}.png"))              # privat, nur nach Zahlung nutzbar
-    preview_img(final).save(os.path.join(d, f"preview_{key}.png"))   # Vorschau ohne Wasserzeichen
+    final.save(os.path.join(d, f"final_{key}.png"), compress_level=3)              # privat, nur nach Zahlung nutzbar (Stufe 3: schneller und kleiner als Standard)
+    preview_img(final).save(os.path.join(d, f"preview_{key}.png"), compress_level=3)   # Vorschau ohne Wasserzeichen
     with open(os.path.join(d, f"pinfolge_{key}.txt"), "w") as f:
-        f.write(",".join(map(str, seq)))
-    write_instructions(ref, m, seq, px, py, rp, key)
+        if K == 1:
+            f.write(",".join(map(str, seq)))
+        else:                                                 # Mehrfarbig: eine Zeile je Abschnitt
+            f.write("\n".join(f"{thread_name(pal[k])}: " + ",".join(map(str, p)) for k, p in runs))
+    update_variant(ref, key, used=[pal[k] for k in sorted(set(cseq))])   # Mehrfarbig: nicht jede gewählte Farbe wird gebraucht
+    write_instructions(ref, m, runs, pal, px, py, rp, key, n_lines)
 
-def write_instructions(ref, m, seq, px, py, rp, key="a"):
+def write_instructions(ref, m, runs, pal, px, py, rp, key, n_lines):
     """Anleitung mit allen Einstellungen und der kompletten Pinfolge (für die Fertigung)."""
     n, disc_cm = m["pins"], round(ring_cm(m))
-    sq = np.array(seq)
-    meters = float(np.hypot(np.diff(px[sq]), np.diff(py[sq])).sum()) * (disc_cm / 2 / rp) / 100
-    steps = "\n".join(f"Schritt {i + 1}: Pin {p}" for i, p in enumerate(seq))
+    multi = m["color"] == MULTI
+    scale = (disc_cm / 2 / rp) / 100
+    meters = {}
+    for k, p in runs:
+        p = np.array(p)
+        meters[k] = meters.get(k, 0.0) + float(np.hypot(np.diff(px[p]), np.diff(py[p])).sum()) * scale
+    total = sum(len(p) - 1 for _, p in runs)
+    if multi:
+        colors = ", ".join(thread_name(pal[k]) for k in sorted(meters))
+        length = "\n".join(f"  {thread_name(pal[k])}: ca. {v:.2f} Meter" for k, v in sorted(meters.items()))
+        starts = {}
+        for k, p in runs:
+            starts.setdefault(k, p[0])
+        blocks, i = [], 0
+        for b, (k, p) in enumerate(runs):
+            lines = "\n".join(f"Schritt {i + j + 1}: Pin {x}" for j, x in enumerate(p[1:]))
+            blocks.append(f"--- Abschnitt {b + 1} von {len(runs)}: Faden {thread_name(pal[k])}, weiter ab Pin {p[0]} ({len(p) - 1} Linien) ---\n{lines}")
+            i += len(p) - 1
+        steps = "\n\n".join(blocks)
+        how = ("3. Jede Farbe ist ein eigener Faden. Startpins: "
+               + ", ".join(f"{thread_name(pal[k])} an Pin {p}" for k, p in starts.items()) + "\n"
+               "4. Die Abschnitte der Reihe nach fädeln. Bei einem Farbwechsel den Faden am letzten Pin hängen lassen\n"
+               "   (mit einer Klammer sichern) und die nächste Farbe dort aufnehmen, wo sie zuletzt aufgehört hat")
+        plain = "\n".join(f"{thread_name(pal[k])}: " + ",".join(map(str, p)) for k, p in runs)
+    else:
+        colors = thread_name(m["color"])
+        length = f"ca. {sum(meters.values()):.2f} Meter"
+        seq = runs[0][1] if runs else [0]
+        steps = "\n".join(f"Schritt {i + 1}: Pin {p}" for i, p in enumerate(seq))
+        how = f"3. Faden an Pin {seq[0]} befestigen\n4. Der Pinfolge oben Schritt für Schritt folgen: jeden Pin mit dem nächsten verbinden"
+        plain = ",".join(map(str, seq))
     txt = f"""FADED ART - Pinfolge und Anleitung
 Erstellt am: {datetime.now():%d.%m.%Y um %H:%M:%S}
 Bestellnummer: {ref}
@@ -306,31 +549,30 @@ Stil der Berechnung: {VARIANTS[key]['name']}
 
 === PROJEKT-EINSTELLUNGEN ===
 Anzahl Pins: {n}
-Maximale Linien: {LINES[n]}
-Verwendete Linien: {len(seq) - 1} (Auto-Stopp, sobald kein Faden das Bild mehr verbessert)
+Maximale Linien: {n_lines}
+Verwendete Linien: {total} ({"Maximum erreicht" if total >= n_lines else "Auto-Stopp, sobald kein Faden das Bild mehr verbessert"})
 Fadendicke: {m['thick'].replace('.', ',')} mm (Maßstab: Bild {disc_cm} cm)
-Fadenfarbe: {COLORS[m['color']][0]}
+Fadenfarbe{"n" if multi else ""}: {colors}
 Farbe des Kreises: {DISC[m['disc']][0]}
 Nagelfarbe: {PINCOL[m.get('pin', 'gold')][0]}
 Untergrund: {WOOD[m['wood']][0]}, {board_label(m)}
 Kreisdurchmesser (Pins): ca. {disc_cm} cm
-Fadenlänge: ca. {meters:.2f} Meter
+Fadenlänge: {length}
 
 === PINFOLGE ===
-Gesamtschritte: {len(seq)}
+Gesamtschritte: {total}{f" in {len(runs)} Abschnitten" if multi else ""}
 
 {steps}
 
 === ANLEITUNG ===
 1. Nagelkreis mit {n} gleichmäßig verteilten Nägeln setzen (Durchmesser ca. {disc_cm} cm)
 2. Nägel von 0 bis {n - 1} nummerieren: Pin 0 sitzt rechts auf 3 Uhr, die Nummern steigen im Uhrzeigersinn
-3. Faden an Pin 0 befestigen
-4. Der Pinfolge oben Schritt für Schritt folgen: jeden Pin mit dem nächsten verbinden
+{how}
 5. Faden straff, aber nicht zu fest ziehen, damit sich das Brett nicht verzieht
-6. Weitermachen, bis alle {len(seq) - 1} Verbindungen fertig sind
+6. Weitermachen, bis alle {total} Verbindungen fertig sind
 
 === PINFOLGE ALS ZAHLENLISTE ===
-{",".join(map(str, seq))}
+{plain}
 """
     with open(os.path.join(odir(ref), f"anleitung_{key}.txt"), "w", encoding="utf-8") as f:
         f.write(txt)
@@ -339,6 +581,9 @@ def run_job(ref):
     try:
         update(ref, status="running", beat=time.time(), progress=0, ready=[], prog={}, live={})
         meta = load(ref)
+        if meta["color"] == MULTI:                   # Fadenfarben einmal für alle drei Varianten wählen
+            update(ref, palette=pick_palette(os.path.join(odir(ref), "input.png"), DISC[meta["disc"]][1]))
+            meta = load(ref)
 
         def one(key):                                # alle drei Varianten laufen gleichzeitig, jede mit Live-Bild
             try:
@@ -410,9 +655,10 @@ def index():
 
 @app.get("/configure")
 def configure():
+    warm_up_once()                          # Rechenkerne übersetzen, während der Kunde sein Foto auswählt
     cfg = {"sizes": SIZES, "pricing": {
         "test_quad_cents": TEST_QUAD_CENTS, "round_factor": ROUND_AREA, "base_cents": BASE_CENTS, "base_area": BASE_AREA, "cents_per_cm2": CENTS_PER_CM2,
-        "wood": {k: v[2] for k, v in WOOD.items()}, "pins": PINS}}
+        "wood": {k: v[2] for k, v in WOOD.items()}, "pins": PINS, "multi": MULTI_EUR}}
     return render_template("configure.html", cfg=cfg)
 
 @app.get("/ueber-uns")
@@ -454,12 +700,12 @@ def generate():
         return jsonify(message="Ungültige Nagelfarbe"), 400
     if disc not in DISC:
         return jsonify(message="Ungültige Kreisfarbe"), 400
-    if color in COLORS and abs(lum(COLORS[color][1]) - lum(DISC[disc][1])) < MIN_CONTRAST:
+    if color in COLORS and abs(lum(COLORS[color][1]) - lum(DISC[disc][1])) < MIN_CONTRAST:   # mehrfarbig: Farben passend zum Kreis gewählt
         return jsonify(message="Fadenfarbe und Kreisfarbe sind zu ähnlich"), 400
     fmt, size = form.get("format") or "quad", form.get("size") or "M"
     if fmt not in SIZES or size not in SIZES[fmt]:
         return jsonify(message="Ungültige Größe"), 400
-    if wood not in WOOD or color not in COLORS or thick not in THICKS or pins not in PINS:
+    if wood not in WOOD or (color not in COLORS and color != MULTI) or thick not in THICKS or pins not in PINS:
         return jsonify(message="Ungültige Auswahl"), 400
 
     ref = uuid.uuid4().hex
@@ -500,7 +746,9 @@ def status(ref):
     for k, v in (LIVE_SEQ.get(ref) or {}).items():           # neue Linien seit der letzten Abfrage (?sa=, ?sb=, ?sc=)
         if k in VARIANTS:
             since = max(0, request.args.get("s" + k, 0, type=int))
-            out["lines"][k] = {"from": since, "pins": v["seq"][since:since + 800], "alpha": v["alpha"], "lw": v["lw"], "n": v["n"]}
+            end = min(len(v["cseq"]), since + 800)           # cseq wird nach seq ergänzt: so passen beide immer zusammen
+            out["lines"][k] = {"from": since, "pins": v["seq"][since:end], "cols": v["cseq"][since:end], "hex": v["hex"],
+                               "alpha": v["alpha"], "lw": v["lw"], "n": v["n"]}
     if m["status"] == "error":
         out["message"] = m.get("message", "Die Berechnung ist fehlgeschlagen.")
     ready = m.get("ready") or []
@@ -536,9 +784,15 @@ def choose_variant(ref, key):
         shutil.copyfile(os.path.join(odir(ref), src), os.path.join(odir(ref), dst))
     update(ref, variant=key)
 
+def thread_label(m):
+    if m["color"] == MULTI:                  # Farben der gewählten Variante (oder alle vorgeschlagenen, solange keine gewählt ist)
+        cols = (m.get("used") or {}).get(m.get("variant")) or m.get("palette")
+        return "Mehrfarbig" + (f" ({', '.join(thread_name(c) for c in cols)})" if cols else "")
+    return COLORS[m["color"]][0]
+
 def item_title(m):
     return (f"String Art {m.get('size', '')} ({board_label(m)}), {WOOD[m['wood']][0]}, "
-            f"{COLORS[m['color']][0]} auf {DISC[m['disc']][0]}, {m['pins']} Pins ({PINCOL[m.get('pin', 'gold')][0]})"
+            f"{thread_label(m)} auf {DISC[m['disc']][0]}, {m['pins']} Pins ({PINCOL[m.get('pin', 'gold')][0]})"
             + (f", Stil {VARIANTS[m['variant']]['name']}" if m.get("variant") in VARIANTS else ""))
 
 def cart_items():
