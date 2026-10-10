@@ -45,6 +45,7 @@ COLORS = {
     "gold": ("Champagner Gold", (212, 175, 55)),
     "silber": ("Silber", (195, 195, 195)),
 }
+SHOP_COLORS = ("schwarz", "weiss")   # Fadenfarben, die der Shop gerade anbietet (Gold, Silber, Mehrfarbig: hier ergänzen)
 MULTI = "mehrfarbig"   # Wert im Konfigurator: Fadenfarben werden automatisch aus dem Foto gewählt
 MULTI_COLORS = {       # Fäden, aus denen die Mehrfarb-Berechnung wählt (nur echte, kaufbare Garnfarben eintragen)
     "schwarz": ("Tiefschwarz", (12, 12, 12)),
@@ -861,7 +862,7 @@ def generate():
     fmt, size = form.get("format") or "quad", form.get("size") or "M"
     if fmt not in SIZES or size not in SIZES[fmt]:
         return jsonify(message="Ungültige Größe"), 400
-    if wood not in WOOD or (color not in COLORS and color != MULTI) or thick not in THICKS or pins not in PINS:
+    if wood not in WOOD or color not in SHOP_COLORS or thick not in THICKS or pins not in PINS:
         return jsonify(message="Ungültige Auswahl"), 400
 
     ref = uuid.uuid4().hex
