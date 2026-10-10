@@ -59,6 +59,8 @@ MULTI_COLORS = {       # Fäden, aus denen die Mehrfarb-Berechnung wählt (nur e
     "hautton": ("Apricot", (228, 168, 128)),
     "braun": ("Braun", (110, 66, 36)),
 }
+MULTI_SAT, MULTI_CHROMA = 1.8, 2.5        # Mehrfarbig: Sättigung des Fotos, Gewicht der Farbe beim Zerlegen
+MULTI_LINEAR, MULTI_LINES_F = True, 1.3   # Mehrfarbig nach dem linearen Modell (wie Einfarbig); Linien = LINES x Faktor
 MULTI_MAX, MULTI_EUR = 4, 0   # höchstens so viele Fadenfarben; Aufpreis für Mehrfarbig in € (noch festlegen!)
 BLOCK = 150                   # Mehrfarbig: so viele Linien am Stück mit einer Farbe, dann wird ggf. gewechselt
 CHROMA = 0.7                  # Gewicht der Farbabweichung gegenüber der Helligkeit (Mehrfarbig)
@@ -323,14 +325,20 @@ def _simplex(v):
     rho = (u - css / np.arange(1, v.shape[1] + 1) > 0).sum(1)
     return np.maximum(v - (css[np.arange(len(v)), rho - 1] / rho)[:, None], 0)
 
-def mix_error(P, V):
-    """Wie gut lassen sich die Farben P aus den Farben V mischen? (aus der Ferne mischt das Auge Fäden und Untergrund)"""
+def mix(P, V, iters=100):
+    """Mischanteile (>= 0, Summe 1) der Farben V, die jede Farbe in P am besten nachmischen.
+    Aus der Ferne mischt das Auge Fäden und Untergrund wie Farben (Mischung = gewichteter Mittelwert)."""
     V = np.asarray(V, np.float32)
     lam = np.full((len(P), len(V)), 1 / len(V), np.float32)
     step = 1 / (np.linalg.norm(V @ V.T, 2) + 1e-6)
-    for _ in range(100):
+    for _ in range(iters):
         lam = _simplex(lam - step * ((lam @ V - P) @ V.T))
-    return float(((lam @ V - P) ** 2).sum(1).mean())
+    return lam
+
+def mix_error(P, V):
+    """Wie gut lassen sich die Farben P aus den Farben V mischen?"""
+    lam = mix(P, V)
+    return float(((lam @ np.asarray(V, np.float32) - P) ** 2).sum(1).mean())
 
 def clahe(g, clip, tiles=8):
     """Lokaler Kontrast (CLAHE): Histogramm-Angleichung je Kachel, Spitzen auf clip gekappt, Kacheln weich überblendet.
@@ -415,10 +423,10 @@ def compute_string_art(ref, m, key="a"):
     disc_cm = max(10.0, ring_cm(m))
     t_mm = float(m["thick"])
     a = min(0.4, max(0.02, E_REF * (t_mm / 0.20) * (D0_CM / disc_cm) / LW))     # Deckkraft pro Faden
-    n_lines = int((LINES if K == 1 else LINES_MULTI)[n] * min(1.6, max(1.0, (0.20 / t_mm) * (disc_cm / D0_CM))))   # feinerer Faden braucht mehr Linien
+    n_lines = int((LINES[n] * MULTI_LINES_F if K > 1 and MULTI_LINEAR else (LINES if K == 1 else LINES_MULTI)[n]) * min(1.6, max(1.0, (0.20 / t_mm) * (disc_cm / D0_CM))))   # feinerer Faden braucht mehr Linien
     geo = geometry(n)
     px, py, rp, ok, nsc = geo["px"], geo["py"], geo["rp"], geo["ok"], geo["nsc"]
-    ln = ((geo["L"] if K > 1 else 1) / nsc).astype(np.float32)   # Mehrfarbig: Gewinn über die ganze Sehne, Einfarbig: Durchschnitt
+    ln = ((1 if K == 1 or MULTI_LINEAR else geo["L"]) / nsc).astype(np.float32)   # lineares Modell: Durchschnitt, Farbmodell: Summe
 
     # 1) Bild vorbereiten, Ziel je Rasterzelle (2x2 px: so sieht das Auge das Bild aus Distanz)
     rgb, alpha = load_input(os.path.join(d, "input.png"), W)
@@ -440,7 +448,22 @@ def compute_string_art(ref, m, key="a"):
         Gk = cells(np.where(inside, c, 0).astype(np.float32))[None].copy()   # restliche Dunkelheit je Zelle
         C = T = np.zeros((1, 3), np.float32)                 # (nur im Farbmodell gebraucht)
         lin = WEIGHT * B
-    else:                                                    # Mehrfarbig: Helligkeit wie oben, Farbe aus dem Foto (etwas kräftiger)
+    elif MULTI_LINEAR:                                       # Mehrfarbig: jede Zelle in Fadenanteile zerlegen, je Farbe wie Einfarbig
+        Wh = Wc // 2                                         # Zerlegung in halber Rasterauflösung (Farben ändern sich langsam)
+        x = opp(np.asarray(ImageEnhance.Color(rgb).enhance(MULTI_SAT).resize((Wh, Wh), Image.Resampling.BOX), np.float32)).reshape(-1, 3)
+        y = clahe(np.asarray(gray), var["clahe"]) if var["clahe"] else np.asarray(gray, np.float32) / 255
+        x[:, 0] = np.asarray(Image.fromarray((y ** var["tone"] * 255).astype(np.uint8)).resize((Wh, Wh), Image.Resampling.BOX), np.float32).ravel() / 255
+        wch = np.array([1, MULTI_CHROMA, MULTI_CHROMA], np.float32)          # Farbtreue stärker gewichten als beim Paletten-Vergleich
+        lam = mix(x * wch, np.vstack([d0[None], Co]) * wch, 150)[:, 1:].reshape(Wh, Wh, K)   # Anteil je Fadenfarbe (ohne Untergrund)
+        amt = lam.repeat(2, 0).repeat(2, 1).reshape(Wc * Wc, K) * cells(inside.astype(np.float32))[:, None]
+        if alpha is not None:
+            amt = amt * cells(alpha)[:, None] - (1 - cells(alpha))[:, None] * BG_KEEP_CLEAN
+        Gk = np.ascontiguousarray(amt.T, np.float32)         # restlicher Anteil je Farbe und Zelle
+        C = T = np.zeros((1, 3), np.float32)
+        lin = WEIGHT * B
+        quota = np.maximum(Gk, 0).sum(1)
+        quota = quota / max(quota.sum(), 1e-6) * n_lines     # Linien je Farbe nach ihrem Anteil am Bild
+    else:                                                    # Mehrfarbig (Farbmodell): Helligkeit wie oben, Farbe aus dem Foto (etwas kräftiger)
         nrm = np.asarray(gray.filter(ImageFilter.UnsharpMask(radius=3, percent=140, threshold=2)), np.float32) / 255
         x = opp(np.asarray(ImageEnhance.Color(rgb).enhance(1.25).resize((Wc, Wc), Image.Resampling.BOX), np.float32)).reshape(-1, 3)
         x[:, 0] = cells(nrm ** var["tone"])                # gleich in Rasterauflösung: spart Arbeitsspeicher
@@ -471,7 +494,7 @@ def compute_string_art(ref, m, key="a"):
 
     save_live(0)
     used = np.zeros((K, n, n), np.uint8)                  # wie oft jede Sehne schon gezogen wurde (je Farbe)
-    maxuse = MAX_USE if K == 1 else 1
+    maxuse = MAX_USE
 
     # 2) Gierige Auswahl. Mehrfarbig: in Abschnitten von BLOCK Linien mit der Farbe, die gerade am meisten bringt.
     cur = [round(i * n / K) % n for i in range(K)]       # jede Farbe beginnt an einem anderen Pin
@@ -481,7 +504,7 @@ def compute_string_art(ref, m, key="a"):
     LIVE_SEQ.setdefault(ref, {"t": time.time()})[key] = {"seq": seq, "cseq": cseq, "hex": ["#%02x%02x%02x" % c for c in cols],
                                                          "alpha": round(lalpha / 255, 4), "lw": lwid, "n": n}
     buf, coef = np.empty(100, np.int64), logk * LW / (q * q)
-    floor = -1e30 if K == 1 else 0.0                     # Einfarbig: immer die volle Linienzahl (das Bild entsteht aus der Dichte)
+    floor = -1e30 if lin else 0.0                        # lineares Modell: immer die volle Linienzahl (das Bild entsteht aus der Dichte)
 
     def draw(k, count):                                  # count Fäden der Farbe k ziehen und live zeichnen
         got = _lines(k, cur[k], count, buf, ln, ok, used, Gk, C, T, Co, px, py, B, OVERSHOOT, q, Wc, nsc, coef, floor, lin, maxuse)
@@ -498,8 +521,16 @@ def compute_string_art(ref, m, key="a"):
         return got
 
     k, left, lines = 0, n_lines if K == 1 else 0, 0
+    done = np.zeros(K)
+    if K == 1:
+        quota = np.array([n_lines])
     while lines < n_lines:
-        if left <= 0:                                     # nächster Abschnitt: Farbe mit dem größten Gewinn
+        if left <= 0 and lin:                             # nächster Abschnitt: Farbe, die am weitesten hinter ihrem Anteil liegt
+            k = int(np.argmin(done / np.maximum(quota, 1e-6) + (done >= quota) * 1e9))
+            if done[k] >= quota[k]:
+                break
+            left = BLOCK
+        elif left <= 0:                                   # nächster Abschnitt: Farbe mit dem größten Gewinn
             gains = [_best(i, cur[i], px, py, ln, ok, used, Gk, q, Wc, nsc, -1e30, maxuse)[1] for i in range(K)]
             k = int(np.argmax(gains))
             if gains[k] <= 0:
@@ -508,6 +539,7 @@ def compute_string_art(ref, m, key="a"):
         want = min(100 - lines % 100, left, n_lines - lines)
         got = draw(k, want)
         lines, left = lines + got, left - got
+        done[k] += got
         if got and lines % 100 == 0:                      # Live-Bild, Fortschritt und Lebenszeichen
             save_live(min(99, int(100 * lines / n_lines)))
         if got < want:
