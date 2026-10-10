@@ -1027,7 +1027,7 @@ def checkout():
                                "(nicht pk_ und nicht whsec_)"), 500
     try:
         s = stripe.checkout.Session.create(
-            payment_method_types=["card"], mode="payment", locale="de", customer_email=email,
+            mode="payment", locale="de", customer_email=email,   # Zahlarten legt das Stripe-Dashboard fest (payment_method_types gibt es nicht mehr)
             line_items=[{"quantity": 1, "price_data": {
                 "currency": "eur", "unit_amount": i["cents"],   # Preise kommen nur vom Server
                 "product_data": {"name": i["title"]}}} for i in items],
