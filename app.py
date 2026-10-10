@@ -87,7 +87,9 @@ PINCOL = {  # Farbe der Nägel
 LINES = {240: 3500, 360: 4500}   # Fäden je Pin-Zahl (Einfarbig)
 LINES_MULTI = {240: 8000, 360: 10000}   # Höchstzahl für Mehrfarbig
 MAX_USE = 1                   # Einfarbig: so oft darf dieselbe Sehne gezogen werden
-BG_KEEP_CLEAN = 0.15          # freigestellter Hintergrund: so stark weichen Linien ihm aus
+BG_TONE = 0.0                 # freigestellter Hintergrund: gleichmäßige Dunkelheit (0 = neutral; < 0: Linien meiden ihn, wirkt fleckig)
+BG_EDGE = 0.3                 # freigestellt: zusätzliche Dunkelheit entlang der Umrisslinie der Figur (klare Kontur)
+BG_KEEP_CLEAN = 0.15          # (Mehrfarbig) freigestellter Hintergrund: so stark weichen Linien ihm aus
 SMOOTH = 3                    # Einfarbig: Glättung des Zielbilds in px (bei 1000 px)
 WEIGHT = 0.9                  # Einfarbig: wie viel Dunkelheit eine Linie im Zielbild "abarbeitet" (relativ zur Fadendeckung)
 VARIANTS = {  # drei Stile, die bei jeder Berechnung erzeugt werden; der Kunde wählt seinen Favoriten
@@ -395,6 +397,12 @@ def color_runs(seq, cseq):
         last[k] = p
     return out
 
+def edge_of(alpha, width=4):
+    """Weicher Streifen (0..1) entlang des Umrisses einer Freistell-Maske."""
+    m = Image.fromarray((alpha * 255).astype(np.uint8))
+    e = np.abs(np.asarray(m.filter(ImageFilter.GaussianBlur(width)), np.float32) / 255 - alpha)
+    return np.minimum(1, e * 4).astype(np.float32)
+
 def load_input(path, size):
     """Hochgeladenes Bild auf size x size: (RGB auf Weiß, Deckung 0..1 oder None). Transparenz = im Browser freigestellter Hintergrund."""
     src = Image.open(path)
@@ -443,8 +451,8 @@ def compute_string_art(ref, m, key="a"):
             nrm = np.asarray(Image.fromarray((nrm * 255 + 0.5).astype(np.uint8)).filter(ImageFilter.GaussianBlur(SMOOTH)), np.float32) / 255
         c = 1.0 - nrm if lum(cols[0]) < lum(disc) else nrm    # heller Faden auf dunklem Grund: helle Stellen = Faden
         c = 1.0 - (1.0 - c) ** var["tone"]
-        if alpha is not None:                                # Hintergrund sauber halten: Linien dort kosten etwas
-            c = alpha * c - (1 - alpha) * BG_KEEP_CLEAN
+        if alpha is not None:                                # freigestellt: Hintergrund gleichmäßig, Kontur der Figur betont
+            c = alpha * c + (1 - alpha) * BG_TONE + BG_EDGE * edge_of(alpha)
         Gk = cells(np.where(inside, c, 0).astype(np.float32))[None].copy()   # restliche Dunkelheit je Zelle
         C = T = np.zeros((1, 3), np.float32)                 # (nur im Farbmodell gebraucht)
         lin = WEIGHT * B
