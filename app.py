@@ -79,19 +79,20 @@ PINCOL = {  # Farbe der Nägel
     "schwarz": ("Schwarz", (30, 30, 30)), "weiss": ("Weiß", (245, 245, 245)),
     "kupfer": ("Kupfer", (184, 115, 51)),
 }
-LINES = {240: 8000, 360: 10000}   # Anzahl Fäden je Pin-Zahl
-BUDGET, GAMMA0 = 3.0, 1.0      # Faden-Budget für die Tonwerte, Gamma für dunkle Fäden
-GAMMA_LIGHT = 1.0             # Gamma für helle Fäden auf dunklem Kreis
-LC_R = 40                     # Radius des lokalen Kontrasts
+LINES = {240: 3500, 360: 4500}   # Fäden je Pin-Zahl (Einfarbig)
+LINES_MULTI = {240: 8000, 360: 10000}   # Höchstzahl für Mehrfarbig
+MAX_USE = 1                   # Einfarbig: so oft darf dieselbe Sehne gezogen werden
+SMOOTH = 3                    # Einfarbig: Glättung des Zielbilds in px (bei 1000 px)
+WEIGHT = 0.9                  # Einfarbig: wie viel Dunkelheit eine Linie im Zielbild "abarbeitet" (relativ zur Fadendeckung)
 VARIANTS = {  # drei Stile, die bei jeder Berechnung erzeugt werden; der Kunde wählt seinen Favoriten
-    "a": dict(name="Ausgewogen", local=0.0, tone=1.0, tone_light=1.0, line_w=3.5),
-    "b": dict(name="Kontrastreich", local=0.6, tone=1.4, tone_light=1.3, line_w=3.5),
-    "c": dict(name="Weich", local=0.0, tone=0.8, tone_light=0.8, line_w=3.0),
+    "a": dict(name="Ausgewogen", clahe=0.02, tone=1.0),      # clahe: Stärke des lokalen Kontrasts (Augen, Mund, Konturen)
+    "b": dict(name="Kontrastreich", clahe=0.035, tone=1.25),  # tone > 1: Mitteltöne bekommen mehr Fäden
+    "c": dict(name="Weich", clahe=0.01, tone=0.85),
 }
 LINE_W = 3.5                      # Fadenbreite in Pixeln (bei 1000 px Bildbreite)
 MIN_GAP = 25                      # Mindestabstand in Nägeln (bei 360 Pins)
-CELL, SAMPLES = 2, 160            # Rastergröße der Bewertung, Abtastpunkte je Sehne
-OVERSHOOT = 0.6                   # Strafe für Fäden durch Stellen, die schon fertig sind (< 1: mehr Linien, mehr Kontrast)
+CELL = 2                          # Rastergröße der Bewertung in px (bei 1000 px)
+OVERSHOOT = 0.6                   # Mehrfarbig: Strafe für Fäden durch Stellen, die schon fertig sind (< 1: mehr Linien, mehr Kontrast)
 MIN_CONTRAST = 60
 
 def lum(rgb):
@@ -189,10 +190,12 @@ def geometry(n):
             rp = W_IMG / 2 - 9
             ang = 2 * np.pi * np.arange(n) / n
             px, py = W_IMG / 2 + rp * np.cos(ang), W_IMG / 2 + rp * np.sin(ang)
-            ln = (np.hypot(px[:, None] - px, py[:, None] - py) / SAMPLES).astype(np.float32)   # Fadenweg je Abtastpunkt
+            L = np.hypot(px[:, None] - px, py[:, None] - py).astype(np.float32)   # Sehnenlängen
+            nsc = np.maximum(2, (L / CELL).astype(np.int32) + 1)     # Abtastpunkte je Sehne: einer je Rasterzelle
+            # (feste Punktzahl wäre schneller, legt die Punkte aller Durchmesser aber auf dieselben Ringe um die Mitte -> Ringmuster)
             gap = np.abs(np.arange(n)[:, None] - np.arange(n))
             ok = np.minimum(gap, n - gap) > max(8, round(MIN_GAP * n / 360) - 1)
-            _GEOM[n] = dict(px=px, py=py, rp=rp, ln=ln, ok=ok)
+            _GEOM[n] = dict(px=px, py=py, rp=rp, L=L, nsc=nsc, ok=ok)
         return _GEOM[n]
 
 # Rechenkerne mit numba: werden beim ersten Aufruf in Maschinencode übersetzt (gespeichert in __pycache__) und sind dann
@@ -216,13 +219,14 @@ def _init_gain(C, T, Co, Gk, B, ov, q):
         _cell_gain(c, C, T, Co, Gk, B, ov, q)
 
 @njit(cache=True, nogil=True)
-def _best(k, p, px, py, ln, ok, used, Gk, q, Wc, ns):
-    """Beste Sehne der Farbe k ab Pin p: (Pin, Gewinn), Pin = -1, wenn keine das Bild verbessert.
-    Der Gewinn einer Sehne ist die Summe über ns gleichmäßig verteilte Abtastpunkte mal Fadenweg je Punkt."""
-    best, bg = -1, 0.0
+def _best(k, p, px, py, ln, ok, used, Gk, q, Wc, nsc, floor, maxuse):
+    """Beste Sehne der Farbe k ab Pin p: (Pin, Gewinn), Pin = -1, wenn keine einen Gewinn über floor bringt.
+    Gewinn = Summe über nsc[p, c] Abtastpunkte (etwa einer je Rasterzelle) mal Gewicht ln[p, c] je Punkt."""
+    best, bg = -1, floor
     for c in range(len(px)):
-        if ok[p, c] and not used[k, p, c]:
+        if ok[p, c] and used[k, p, c] < maxuse:
             iq = 1.0 / q                               # Zelle = Pixel (gerundet) / q, als eine Multiplikation
+            ns = nsc[p, c]
             x0, y0 = (px[p] + 0.5) * iq, (py[p] + 0.5) * iq
             dx, dy = (px[c] - px[p]) * iq / (ns - 1), (py[c] - py[p]) * iq / (ns - 1)
             g = 0.0
@@ -234,11 +238,12 @@ def _best(k, p, px, py, ln, ok, used, Gk, q, Wc, ns):
     return best, bg
 
 @njit(cache=True, nogil=True)
-def _lines(k, p, count, out, ln, ok, used, Gk, C, T, Co, px, py, B, ov, q, Wc, ns, coef):
+def _lines(k, p, count, out, ln, ok, used, Gk, C, T, Co, px, py, B, ov, q, Wc, nsc, coef, floor, lin, maxuse):
     """Zieht bis zu count Fäden der Farbe k ab Pin p, jeweils die beste Sehne; die Pins landen in out.
-    Gibt die Anzahl zurück (weniger als count = kein Faden verbessert das Bild mehr)."""
+    lin > 0: lineares Modell (Einfarbig), Gk ist die restliche Dunkelheit, jede Linie zieht lin je Zelle ab.
+    lin = 0: Farbmodell (Mehrfarbig), siehe _cell_gain. Gibt die Anzahl zurück (weniger als count = Auto-Stopp)."""
     for i in range(count):
-        nxt, g = _best(k, p, px, py, ln, ok, used, Gk, q, Wc, ns)
+        nxt, g = _best(k, p, px, py, ln, ok, used, Gk, q, Wc, nsc, floor, maxuse)
         if nxt < 0:
             return i
         ex, ey = px[nxt] - px[p], py[nxt] - py[p]
@@ -249,14 +254,17 @@ def _lines(k, p, count, out, ln, ok, used, Gk, C, T, Co, px, py, B, ov, q, Wc, n
             if s <= N:
                 c = (int(py[p] + 0.5 + ey * s / N) // q) * Wc + int(px[p] + 0.5 + ex * s / N) // q
             if c != prev:
-                if prev >= 0:
+                if prev >= 0 and lin > 0:
+                    Gk[k, prev] -= lin
+                elif prev >= 0:
                     beta = 1 - math.exp(coef * run)    # Deckung dieses Fadens in der Zelle
                     for ch in range(3):
                         C[prev, ch] += beta * (Co[k, ch] - C[prev, ch])
                     _cell_gain(prev, C, T, Co, Gk, B, ov, q)
                 prev, run = c, 0
             run += 1
-        used[k, p, nxt] = used[k, nxt, p] = True
+        used[k, p, nxt] += 1
+        used[k, nxt, p] += 1
         out[i] = nxt
         p = nxt
     return count
@@ -290,10 +298,10 @@ def _warmup():
     """Übersetzt die Rechenkerne gleich beim Serverstart (im Hintergrund), nicht erst bei der ersten Bestellung."""
     try:
         n, K = 4, 2
-        ln, ok, used = np.ones((n, n), np.float32), np.ones((n, n), bool), np.zeros((K, n, n), bool)
+        ln, ok, used = np.ones((n, n), np.float32), np.ones((n, n), bool), np.zeros((K, n, n), np.uint8)
         C, T, Co, Gk = np.zeros((4, 3), np.float32), np.ones((4, 3), np.float32), np.ones((K, 3), np.float32), np.zeros((K, 4), np.float32)
         _init_gain(C, T, Co, Gk, 0.1, 0.5, 2)
-        _lines(0, 0, 1, np.empty(1, np.int64), ln, ok, used, Gk, C, T, Co, np.arange(n) * 3.0, np.zeros(n), 0.1, 0.5, 2, 2, 4, -0.1)
+        _lines(0, 0, 1, np.empty(1, np.int64), ln, ok, used, Gk, C, T, Co, np.arange(n) * 3.0, np.zeros(n), 0.1, 0.5, 2, 2, np.full((n, n), 4, np.int32), -0.1, 0.0, 0.0, 1)
         _render_run(np.ones((n, 2)), np.arange(2, dtype=np.int64), 4, 3, np.ones(4, np.float32), np.ones(3, np.float32), np.zeros(16, np.uint16), np.zeros((16, 3), np.uint8))
     except Exception:
         app.logger.exception("numba-Vorübersetzung fehlgeschlagen")
@@ -319,6 +327,29 @@ def mix_error(P, V):
     for _ in range(100):
         lam = _simplex(lam - step * ((lam @ V - P) @ V.T))
     return float(((lam @ V - P) ** 2).sum(1).mean())
+
+def clahe(g, clip, tiles=8):
+    """Lokaler Kontrast (CLAHE): Histogramm-Angleichung je Kachel, Spitzen auf clip gekappt, Kacheln weich überblendet.
+    Holt Augen, Mund und Konturen aus flauen Bereichen heraus, ohne dass helle Flächen ausbrennen. g: uint8 -> float 0..1."""
+    H, W_ = g.shape
+    th, tw = H // tiles, W_ // tiles
+    luts = np.empty((tiles, tiles, 256), np.float32)
+    for i in range(tiles):
+        for j in range(tiles):
+            t = g[i * th:(i + 1) * th, j * tw:(j + 1) * tw]
+            h = np.bincount(t.ravel(), minlength=256).astype(np.float64)
+            lim = max(1.0, clip * t.size)
+            h = np.minimum(h, lim) + np.maximum(h - lim, 0).sum() / 256   # Überschuss gleichmäßig verteilen
+            c = np.cumsum(h)
+            luts[i, j] = (c - c[0]) / max(c[-1] - c[0], 1)
+    yc, xc = (np.arange(H) + 0.5) / th - 0.5, (np.arange(W_) + 0.5) / tw - 0.5
+    y0, x0 = np.clip(np.floor(yc).astype(int), 0, tiles - 1), np.clip(np.floor(xc).astype(int), 0, tiles - 1)
+    y1, x1 = np.minimum(y0 + 1, tiles - 1), np.minimum(x0 + 1, tiles - 1)
+    wy, wx = np.clip(yc - y0, 0, 1)[:, None], np.clip(xc - x0, 0, 1)[None, :]
+    Y0, X0, Y1, X1 = y0[:, None], x0[None, :], y1[:, None], x1[None, :]
+    top = (1 - wx) * luts[Y0, X0, g] + wx * luts[Y0, X1, g]
+    bot = (1 - wx) * luts[Y1, X0, g] + wx * luts[Y1, X1, g]
+    return ((1 - wy) * top + wy * bot).astype(np.float32)
 
 def pick_palette(path, disc):
     """Mehrfarbig: wählt nacheinander die Fäden, die das Foto am besten nachmischen (höchstens MULTI_MAX).
@@ -353,13 +384,14 @@ def color_runs(seq, cseq):
     return out
 
 def compute_string_art(ref, m, key="a"):
-    """Gierige String-Art: pro Schritt wird die Sehne gewählt, die den Bildfehler am stärksten senkt.
-    Farbmodell: jede Rasterzelle hat eine Farbe, jeder Faden mischt seine Farbe mit Deckkraft a hinein
-    (Einfarbig ist der Sonderfall mit nur einer Fadenfarbe). Für jede Zelle und Fadenfarbe wird der Gewinn
-    (Fehlerverringerung je Pixel Fadenweg) mitgeführt: pro Schritt wird er nur entlang der Kandidaten-Sehnen
-    aufsummiert, nach jeder Linie werden nur die Zellen dieser Linie neu bewertet."""
-    var = VARIANTS[key]                        # Stil: Kontrast, Tonwerte, Fadenbreite
-    LW = var["line_w"]
+    """Gierige String-Art: pro Schritt wird ab dem aktuellen Nagel die beste Sehne gewählt.
+    Einfarbig (lineares Modell, liefert die erkennbarsten Gesichter): Zielbild = gewünschte Dunkelheit je Rasterzelle;
+    gewählt wird die Sehne mit der größten durchschnittlichen Rest-Dunkelheit, danach zieht sie WEIGHT x Fadendeckung ab.
+    Dunkle Stellen bekommen so Fäden proportional zu ihrer Dunkelheit, und kurze Sehnen können Details (Augen) treffen.
+    Mehrfarbig (Farbmodell): jede Zelle hat eine Farbe, jeder Faden mischt seine Farbe hinein; gewählt wird der größte
+    Fehlerrückgang. In beiden Fällen werden nach jeder Linie nur die Zellen dieser Linie neu bewertet."""
+    var = VARIANTS[key]                        # Stil: lokaler Kontrast, Tonwerte
+    LW = LINE_W
     d, n = odir(ref), m["pins"]
     pal = m["palette"] if m["color"] == MULTI else [m["color"]]
     cols = [thread_rgb(c) for c in pal]
@@ -370,37 +402,38 @@ def compute_string_art(ref, m, key="a"):
     disc_cm = max(10.0, ring_cm(m))
     t_mm = float(m["thick"])
     a = min(0.4, max(0.02, E_REF * (t_mm / 0.20) * (D0_CM / disc_cm) / LW))     # Deckkraft pro Faden
-    n_lines = int(LINES[n] * min(1.6, max(1.0, (0.20 / t_mm) * (disc_cm / D0_CM))))   # feinerer Faden braucht mehr Linien
+    n_lines = int((LINES if K == 1 else LINES_MULTI)[n] * min(1.6, max(1.0, (0.20 / t_mm) * (disc_cm / D0_CM))))   # feinerer Faden braucht mehr Linien
     geo = geometry(n)
-    px, py, rp, ln, ok = geo["px"], geo["py"], geo["rp"], geo["ln"], geo["ok"]
+    px, py, rp, ok, nsc = geo["px"], geo["py"], geo["rp"], geo["ok"], geo["nsc"]
+    ln = ((geo["L"] if K > 1 else 1) / nsc).astype(np.float32)   # Mehrfarbig: Gewinn über die ganze Sehne, Einfarbig: Durchschnitt
 
-    # 1) Bild vorbereiten: Kontrast, Schärfe, dann Zielfarbe T je Rasterzelle (2x2 px: so sieht das Auge das Bild aus Distanz)
+    # 1) Bild vorbereiten, Ziel je Rasterzelle (2x2 px: so sieht das Auge das Bild aus Distanz)
     rgb = Image.open(os.path.join(d, "input.png")).convert("RGB").resize((W, W), Image.Resampling.LANCZOS)
-    img = ImageOps.autocontrast(rgb.convert("L"), cutoff=1.5).filter(ImageFilter.UnsharpMask(radius=3, percent=140, threshold=2))
-    nrm = np.asarray(img, dtype=np.float32) / 255.0
-    if var["local"]:                                            # lokaler Kontrast: hebt Streifen, Augen, Ohren hervor
-        blur = np.asarray(img.filter(ImageFilter.GaussianBlur(LC_R)), dtype=np.float32) / 255.0
-        nrm = np.clip(nrm + var["local"] * (nrm - blur), 0, 1)
+    gray = ImageOps.autocontrast(rgb.convert("L"), cutoff=1.5)
     yy, xx = np.ogrid[:W, :W]
     inside = (xx - W / 2) ** 2 + (yy - W / 2) ** 2 <= (W / 2 - 2) ** 2
     cells = lambda x: x.reshape(Wc, q, Wc, q, *x.shape[2:]).mean(axis=(1, 3)).reshape(Wc * Wc, *x.shape[2:])
     d0, Co = opp(disc), opp(cols)
+    logk = math.log1p(-a)
+    B = -math.expm1(logk * LW / q)                           # Deckung, die ein Faden beim Queren einer Zelle bringt
     if K == 1:
-        dark_thread = lum(cols[0]) < lum(disc)
-        c = 1.0 - nrm if dark_thread else nrm    # heller Faden auf dunklem Grund: helle Stellen = Faden
-        c = 1.0 - (1.0 - c) ** (var["tone"] if dark_thread else var["tone_light"])   # tone > 1: Mitteltöne bekommen mehr Fäden, das Bild wirkt plastischer
-        Tl = cells(np.where(inside, c, 0).astype(np.float32))
-        logk = np.log1p(-a)
-        budget = BUDGET * n_lines * 0.65 * W * LW                   # verfügbare Faden-Pixel
-        need = lambda t: float(-np.log1p(-np.minimum(t, .92)).sum() / -logk * q * q)   # benötigte Faden-Pixel
-        g = GAMMA0 if dark_thread else GAMMA_LIGHT
-        while need(Tl ** g) > budget and g < 4:             # Gamma: Lichter bleiben, Mitteltöne werden lichter -> mehr Kontrast
-            g += 0.05
-        T = d0 + np.minimum(Tl ** g, 0.92)[:, None] * (Co[0] - d0)
+        nrm = clahe(np.asarray(gray), var["clahe"]) if var["clahe"] else np.asarray(gray, np.float32) / 255
+        if SMOOTH:                                           # winzige Glanzlichter glätten: sonst weichen ihnen alle Linien aus (weiße "Löcher")
+            nrm = np.asarray(Image.fromarray((nrm * 255 + 0.5).astype(np.uint8)).filter(ImageFilter.GaussianBlur(SMOOTH)), np.float32) / 255
+        c = 1.0 - nrm if lum(cols[0]) < lum(disc) else nrm    # heller Faden auf dunklem Grund: helle Stellen = Faden
+        c = 1.0 - (1.0 - c) ** var["tone"]
+        Gk = cells(np.where(inside, c, 0).astype(np.float32))[None].copy()   # restliche Dunkelheit je Zelle
+        C = T = np.zeros((1, 3), np.float32)                 # (nur im Farbmodell gebraucht)
+        lin = WEIGHT * B
     else:                                                    # Mehrfarbig: Helligkeit wie oben, Farbe aus dem Foto (etwas kräftiger)
+        nrm = np.asarray(gray.filter(ImageFilter.UnsharpMask(radius=3, percent=140, threshold=2)), np.float32) / 255
         x = opp(np.asarray(ImageEnhance.Color(rgb).enhance(1.25).resize((Wc, Wc), Image.Resampling.BOX), np.float32)).reshape(-1, 3)
         x[:, 0] = cells(nrm ** var["tone"])                # gleich in Rasterauflösung: spart Arbeitsspeicher
-        T = np.where(cells(inside.astype(np.float32))[:, None] > 0.5, x, d0)
+        T = np.ascontiguousarray(np.where(cells(inside.astype(np.float32))[:, None] > 0.5, x, d0), np.float32)
+        C = np.repeat(d0[None], Wc * Wc, 0)                  # aktuelle Farbe jeder Zelle
+        Gk = np.empty((K, Wc * Wc), np.float32)              # Gewinn je Zelle und Fadenfarbe (Fehlerverringerung |T - C|²)
+        _init_gain(C, T, Co, Gk, B, OVERSHOOT, q)
+        lin = 0.0
 
     # Live-Ansicht: Fäden werden parallel auf eine kleine Leinwand gezeichnet und regelmäßig als Bild gespeichert
     LIVE = 600
@@ -422,19 +455,10 @@ def compute_string_art(ref, m, key="a"):
         update_variant(ref, key, pct=pct, live=live_n)
 
     save_live(0)
+    used = np.zeros((K, n, n), np.uint8)                  # wie oft jede Sehne schon gezogen wurde (je Farbe)
+    maxuse = MAX_USE if K == 1 else 1
 
-    # 2) Gewinn je Zelle und Fadenfarbe. Ein Faden, der eine Zelle quert, mischt seine Farbe mit Anteil B hinein;
-    #    Gewinn = Verringerung des Fehlers |T - C|², umgerechnet auf ein Pixel Fadenweg.
-    logk = math.log1p(-a)
-    B = -math.expm1(logk * LW / q)
-    C = np.repeat(d0[None], Wc * Wc, 0)                   # aktuelle Farbe jeder Zelle
-
-    T = np.ascontiguousarray(T, np.float32)
-    Gk = np.empty((K, Wc * Wc), np.float32)
-    _init_gain(C, T, Co, Gk, B, OVERSHOOT, q)
-    used = np.zeros((K, n, n), bool)                      # jede Sehne nur einmal je Farbe
-
-    # 3) Gierige Auswahl. Mehrfarbig: in Abschnitten von BLOCK Linien mit der Farbe, die gerade am meisten bringt.
+    # 2) Gierige Auswahl. Mehrfarbig: in Abschnitten von BLOCK Linien mit der Farbe, die gerade am meisten bringt.
     cur = [round(i * n / K) % n for i in range(K)]       # jede Farbe beginnt an einem anderen Pin
     seq, cseq, started = [], [], set()
     for r in [r for r, v in list(LIVE_SEQ.items()) if time.time() - v.get("t", 0) > 3600]:
@@ -442,9 +466,10 @@ def compute_string_art(ref, m, key="a"):
     LIVE_SEQ.setdefault(ref, {"t": time.time()})[key] = {"seq": seq, "cseq": cseq, "hex": ["#%02x%02x%02x" % c for c in cols],
                                                          "alpha": round(lalpha / 255, 4), "lw": lwid, "n": n}
     buf, coef = np.empty(100, np.int64), logk * LW / (q * q)
+    floor = -1e30 if K == 1 else 0.0                     # Einfarbig: immer die volle Linienzahl (das Bild entsteht aus der Dichte)
 
     def draw(k, count):                                  # count Fäden der Farbe k ziehen und live zeichnen
-        got = _lines(k, cur[k], count, buf, ln, ok, used, Gk, C, T, Co, px, py, B, OVERSHOOT, q, Wc, SAMPLES, coef)
+        got = _lines(k, cur[k], count, buf, ln, ok, used, Gk, C, T, Co, px, py, B, OVERSHOOT, q, Wc, nsc, coef, floor, lin, maxuse)
         if got and k not in started:                      # Startpin dieser Farbe
             started.add(k)
             seq.append(cur[k])
@@ -460,7 +485,7 @@ def compute_string_art(ref, m, key="a"):
     k, left, lines = 0, n_lines if K == 1 else 0, 0
     while lines < n_lines:
         if left <= 0:                                     # nächster Abschnitt: Farbe mit dem größten Gewinn
-            gains = [_best(i, cur[i], px, py, ln, ok, used, Gk, q, Wc, SAMPLES)[1] for i in range(K)]
+            gains = [_best(i, cur[i], px, py, ln, ok, used, Gk, q, Wc, nsc, -1e30, maxuse)[1] for i in range(K)]
             k = int(np.argmax(gains))
             if gains[k] <= 0:
                 break                                     # Auto-Stopp: kein Faden verbessert das Bild mehr
@@ -475,16 +500,16 @@ def compute_string_art(ref, m, key="a"):
                 break
             left = 0
 
-    # 4) Rendern in 2000 px, Abschnitt für Abschnitt (spätere Fäden liegen oben); Deckkraft überlagert sich physikalisch
+    # 3) Rendern in 2000 px, Abschnitt für Abschnitt (spätere Fäden liegen oben); Deckkraft überlagert sich physikalisch
     runs = color_runs(seq, cseq)
     P = np.ascontiguousarray(np.stack([px, py], 1) * (S / W))
-    lw = max(1, int(round(2 * LW)))
+    ra = min(0.95, 2 * a * LW)                               # Deckung je Pixel einer 1 px breiten Linie: wirkt wie echter Faden
     canvas = np.empty((S * S, 3), np.uint8)                # 8 Bit je Farbe: wenig Speicher (Render Free hat nur 512 MB)
     canvas[:] = disc
     cnt = np.zeros(S * S, np.uint16)
-    lut = (1 - (1 - a) ** np.arange(4096)).astype(np.float32)   # Deckung bei n Fäden übereinander
+    lut = (1 - (1 - ra) ** np.arange(4096)).astype(np.float32)   # Deckung bei n Fäden übereinander
     for k, pins_ in runs:
-        _render_run(P, np.asarray(pins_, np.int64), S, lw, lut, np.asarray(cols[k], np.float32), cnt, canvas)
+        _render_run(P, np.asarray(pins_, np.int64), S, 1, lut, np.asarray(cols[k], np.float32), cnt, canvas)
     del cnt
     art = Image.fromarray(canvas.reshape(S, S, 3))
     del canvas
