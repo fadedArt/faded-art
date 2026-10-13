@@ -138,7 +138,7 @@ MIN_CONTRAST = 60
 def lum(rgb):
     return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 PINS = {240: 0, 360: 70}                       # Pins -> Aufpreis in €
-BUILD = "b29"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
+BUILD = "b30"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
 TEST_QUAD_CENTS = int(os.environ.get("TESTPREIS_QUAD_CENTS", "0"))   # Testpreis für ALLE quadratischen Bretter; 0 = aus (Live-Betrieb)
 BASE_CENTS, BASE_AREA, CENTS_PER_CM2 = 14900, 2500, 2.5   # Vorschlag: 149 € bis 50 x 50 cm, darüber 2,5 Cent je cm² (70 x 70 = 209 €, 100 x 100 = 336 €)
 PREORDER_NOTE = os.environ.get("VORBESTELL_HINWEIS", "Vorbestellung: Wir fertigen ab Februar 2027 in der Reihenfolge der Bestellungen.")
@@ -619,9 +619,14 @@ def compute_string_art(ref, m, key="a"):
         ld.ellipse([x0 * lk - 2, y0 * lk - 2, x0 * lk + 2, y0 * lk + 2], fill=pcol)
     live_n = 0
 
+    last_save = [0.0]
+
     def save_live(pct):
         nonlocal live_n
         check_cancel(ref)
+        if pct and time.time() - last_save[0] < 2.0:          # Disk nur alle 2 s (Linien gehen über LIVE_SEQ)
+            return
+        last_save[0] = time.time()
         live_n += 1
         live.save(os.path.join(d, f"live_{key}.tmp.jpg"), quality=80)
         os.replace(os.path.join(d, f"live_{key}.tmp.jpg"), os.path.join(d, f"live_{key}.jpg"))   # atomar: der Browser sieht nie halbe Bilder
@@ -728,7 +733,11 @@ def compute_sw(ref, m, key):
             seq.append(p1); cseq.append(k)
             ld.line([(px[p0] * lk, py[p0] * lk), (px[p1] * lk, py[p1] * lk)], fill=cols[k] + (lalpha,), width=1)
         state["drawn"] = len(order)
-        if state["drawn"] // 1000 > state["n"] or f == 0:
+        now = time.time()
+        if now - state.get("saved", 0) < 2.0 and f < 1.0:   # Disk nur alle 2 s: die Linien gehen über den Speicher (LIVE_SEQ)
+            return
+        state["saved"] = now
+        if state["drawn"] // 1000 > state["n"]:
             state["n"] += 1
             live.save(os.path.join(d, f"live_{key}.tmp.jpg"), quality=80)
             os.replace(os.path.join(d, f"live_{key}.tmp.jpg"), os.path.join(d, f"live_{key}.jpg"))
@@ -736,7 +745,9 @@ def compute_sw(ref, m, key):
         else:
             update_variant(ref, key, pct=min(99, int(100 * f)))
 
+    t0 = time.time()
     order = engine2.solve(t, w, L, [lum(c) / 255 for c in cols], lum(disc) / 255, a_r, max_lines, progress, board_mm=disc_cm * 10)
+    app.logger.warning("Engine 2 %s/%s: %d Fäden in %.1f s (numba %s)", ref[:6], key, len(order), time.time() - t0, engine2._NUMBA)
     progress(1.0, order)
     runs = engine2.runs_of(order)
     update_variant(ref, key, lines=len(order))
