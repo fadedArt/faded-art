@@ -31,6 +31,15 @@ DATA_DIR = os.environ.get("DATA_DIR", "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 pool = ThreadPoolExecutor(max_workers=1)   # eine Berechnung gleichzeitig (schont den Arbeitsspeicher)
+sugg_pool = ThreadPoolExecutor(max_workers=1)   # Vorschläge separat: blockieren nicht die nächste Berechnung
+CANCEL = set()                             # abgebrochene Vorab-Berechnungen (Kunde hat Einstellungen geändert)
+
+class Cancelled(Exception):
+    pass
+
+def check_cancel(ref):
+    if ref in CANCEL:
+        raise Cancelled()
 REF_RE = re.compile(r"^[0-9a-f]{32}$")
 
 # Schlüssel = Werte aus dem Konfigurator; (Anzeigename, RGB, Aufpreis in €)
@@ -127,7 +136,7 @@ MIN_CONTRAST = 60
 def lum(rgb):
     return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 PINS = {240: 0, 360: 70}                       # Pins -> Aufpreis in €
-BUILD = "b26"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
+BUILD = "b27"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
 TEST_QUAD_CENTS = int(os.environ.get("TESTPREIS_QUAD_CENTS", "0"))   # Testpreis für ALLE quadratischen Bretter; 0 = aus (Live-Betrieb)
 BASE_CENTS, BASE_AREA, CENTS_PER_CM2 = 14900, 2500, 2.5   # Vorschlag: 149 € bis 50 x 50 cm, darüber 2,5 Cent je cm² (70 x 70 = 209 €, 100 x 100 = 336 €)
 PREORDER_NOTE = os.environ.get("VORBESTELL_HINWEIS", "Vorbestellung: Wir fertigen ab Februar 2027 in der Reihenfolge der Bestellungen.")
@@ -595,6 +604,7 @@ def compute_string_art(ref, m, key="a"):
 
     def save_live(pct):
         nonlocal live_n
+        check_cancel(ref)
         live_n += 1
         live.save(os.path.join(d, f"live_{key}.tmp.jpg"), quality=80)
         os.replace(os.path.join(d, f"live_{key}.tmp.jpg"), os.path.join(d, f"live_{key}.jpg"))   # atomar: der Browser sieht nie halbe Bilder
@@ -694,6 +704,7 @@ def compute_sw(ref, m, key):
                                                          "bg": "#%02x%02x%02x" % disc}
 
     def progress(f, order):
+        check_cancel(ref)
         for k, p0, p1 in order[state["drawn"]:]:
             if k not in started:
                 started.add(k); seq.append(p0); cseq.append(k)
@@ -940,6 +951,9 @@ def write_pdf(ref, m, runs, pal, meters, total, n_lines, key):
     pdf.output(os.path.join(odir(ref), f"anleitung_{key}.pdf"))
 
 def run_job(ref):
+    if ref in CANCEL:
+        update(ref, status="cancelled")
+        return
     try:
         update(ref, status="running", beat=time.time(), progress=0, ready=[], prog={}, live={})
         meta = load(ref)
@@ -951,11 +965,17 @@ def run_job(ref):
             try:
                 (compute_sw if meta["color"] == SW else compute_string_art)(ref, meta, key)
                 update_variant(ref, key, pct=100, ready=True)
+            except Cancelled:
+                pass
             except Exception:
                 app.logger.exception("Variante %s fehlgeschlagen (%s)", key, ref)
 
         with ThreadPoolExecutor(max_workers=len(VARIANTS)) as ex:
             list(ex.map(one, list(VARIANTS)))
+        if ref in CANCEL:
+            update(ref, status="cancelled")
+            LIVE_SEQ.pop(ref, None)
+            return
         if not load(ref).get("ready"):
             raise RuntimeError("keine Variante berechnet")
         update(ref, status="done", progress=100, sugg="running")
@@ -963,10 +983,18 @@ def run_job(ref):
         app.logger.exception("Berechnung fehlgeschlagen (%s)", ref)
         update(ref, status="error", message="Die Berechnung ist fehlgeschlagen.")
         return
-    for key in SUGGEST:                              # danach die Vorschläge, einer nach dem anderen (Kunde kann schon kaufen)
+    sugg_pool.submit(run_suggestions, ref, meta)
+
+def run_suggestions(ref, meta):
+    """Die drei Vorschläge, einer nach dem anderen (Kunde kann schon kaufen)."""
+    for key in SUGGEST:
+        if ref in CANCEL:
+            break
         try:
             compute_sw(ref, meta, key)
             update_variant(ref, key, pct=100, ready=True)
+        except Cancelled:
+            break
         except Exception:
             app.logger.exception("Vorschlag %s fehlgeschlagen (%s)", key, ref)
     update(ref, sugg="done")
@@ -1281,6 +1309,16 @@ def generate():
            color=color, disc=disc, pin=pin, thick=thick, pins=pins, status="queued", paid=False, created=time.time())
     pool.submit(run_job, ref)
     return jsonify(order_ref=ref, job_id=ref, status="queued"), 202
+
+@app.post("/cancel/<ref>")
+def cancel(ref):
+    """Vorab-Berechnung abbrechen (Kunde hat Einstellungen geändert). Bezahlte Bestellungen bleiben unberührt."""
+    m = load(ref)
+    if m and not m.get("paid") and m.get("status") in ("queued", "running", "done"):
+        CANCEL.add(ref)
+        if m.get("status") != "done":
+            update(ref, status="cancelled")
+    return jsonify(ok=True)
 
 @app.get("/version")
 def version():
