@@ -138,7 +138,7 @@ MIN_CONTRAST = 60
 def lum(rgb):
     return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 PINS = {240: 0, 360: 70}                       # Pins -> Aufpreis in €
-BUILD = "b28"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
+BUILD = "b29"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
 TEST_QUAD_CENTS = int(os.environ.get("TESTPREIS_QUAD_CENTS", "0"))   # Testpreis für ALLE quadratischen Bretter; 0 = aus (Live-Betrieb)
 BASE_CENTS, BASE_AREA, CENTS_PER_CM2 = 14900, 2500, 2.5   # Vorschlag: 149 € bis 50 x 50 cm, darüber 2,5 Cent je cm² (70 x 70 = 209 €, 100 x 100 = 336 €)
 PREORDER_NOTE = os.environ.get("VORBESTELL_HINWEIS", "Vorbestellung: Wir fertigen ab Februar 2027 in der Reihenfolge der Bestellungen.")
@@ -415,18 +415,32 @@ def _warmup():
 
 _warm = []
 
-def _prebuild():
-    """Gleich beim Serverstart: Rechenkerne übersetzen und Sehnen-Tabellen laden (sonst wartet die erste Berechnung darauf)."""
-    _warmup()
-    for n in (360, 240):
-        try:
-            engine2.lines_for(n)
-        except Exception:
-            app.logger.exception("Sehnen-Tabelle %s fehlgeschlagen", n)
-    engine2.warmup()
+WARM = threading.Event()                     # gesetzt, sobald Rechenkerne und Tabellen bereit sind
 
-if not os.environ.get("FADED_NO_PREBUILD"):
-    threading.Thread(target=_prebuild, daemon=True).start()
+def _prebuild():
+    """Rechenkerne übersetzen und Sehnen-Tabellen laden, bevor die erste Berechnung startet (nacheinander, nie parallel)."""
+    t0 = time.time()
+    app.logger.warning("Vorbereitung startet")
+    try:
+        _warmup()
+        app.logger.warning("Rechenkerne Engine 1 bereit nach %.1f s", time.time() - t0)
+        for n in (360, 240):
+            engine2.lines_for(n)
+        engine2.warmup()
+        app.logger.warning("Vorbereitung fertig nach %.1f s", time.time() - t0)
+    except Exception:
+        app.logger.exception("Vorbereitung fehlgeschlagen")
+    finally:
+        WARM.set()
+
+_prebuild_started = []
+
+@app.before_request
+def _start_prebuild():
+    """Erst nach dem Import starten (Threads während des Imports können numba blockieren)."""
+    if not _prebuild_started:
+        _prebuild_started.append(1)
+        threading.Thread(target=_prebuild, daemon=True).start()
 
 def warm_up_once():
     pass                                     # passiert jetzt direkt beim Serverstart (_prebuild), nicht erst beim Besuch
@@ -957,6 +971,12 @@ def run_job(ref):
     if ref in CANCEL:
         update(ref, status="cancelled")
         return
+    if not WARM.wait(180):                           # erst rechnen, wenn die Vorbereitung durch ist
+        app.logger.warning("Vorbereitung dauert > 180 s, rechne trotzdem (%s)", ref)
+    if ref in CANCEL:
+        update(ref, status="cancelled")
+        return
+    app.logger.warning("Berechnung startet (%s, Farbe %s)", ref[:6], (load(ref) or {}).get("color"))
     try:
         update(ref, status="running", beat=time.time(), progress=0, ready=[], prog={}, live={})
         meta = load(ref)
@@ -982,6 +1002,7 @@ def run_job(ref):
         if not load(ref).get("ready"):
             raise RuntimeError("keine Variante berechnet")
         update(ref, status="done", progress=100, sugg="running")
+        app.logger.warning("Varianten fertig (%s)", ref[:6])
     except Exception:
         app.logger.exception("Berechnung fehlgeschlagen (%s)", ref)
         update(ref, status="error", message="Die Berechnung ist fehlgeschlagen.")

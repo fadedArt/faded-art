@@ -1,5 +1,5 @@
 (() => {
-const BUILD = 'b28';
+const BUILD = 'b29';
 window.addEventListener('error', e => { const m = document.getElementById('msg'); if (m && !m.textContent && e.message) m.textContent = 'Technischer Fehler: ' + e.message; });
 const $ = id => document.getElementById(id);
 const S = 600, R = S * 0.49;     // Nagelring sitzt fast am Rand des Bildkreises (wie im berechneten Ergebnis)
