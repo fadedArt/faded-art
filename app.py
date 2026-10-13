@@ -10,6 +10,8 @@ from flask import Flask, abort, jsonify, render_template, render_template_string
 from werkzeug.middleware.proxy_fix import ProxyFix
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 from fpdf import FPDF
+os.environ.setdefault("NUMBA_CACHE_DIR", os.path.join(os.environ.get("DATA_DIR", "data"), ".numba"))   # übersetzte Rechenkerne überleben Neustarts
+os.environ.setdefault("FADED_CACHE", os.environ.get("DATA_DIR", "data"))                              # Sehnen-Tabellen von engine2 ebenso
 from numba import njit
 import engine2
 
@@ -136,7 +138,7 @@ MIN_CONTRAST = 60
 def lum(rgb):
     return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 PINS = {240: 0, 360: 70}                       # Pins -> Aufpreis in €
-BUILD = "b27"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
+BUILD = "b28"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
 TEST_QUAD_CENTS = int(os.environ.get("TESTPREIS_QUAD_CENTS", "0"))   # Testpreis für ALLE quadratischen Bretter; 0 = aus (Live-Betrieb)
 BASE_CENTS, BASE_AREA, CENTS_PER_CM2 = 14900, 2500, 2.5   # Vorschlag: 149 € bis 50 x 50 cm, darüber 2,5 Cent je cm² (70 x 70 = 209 €, 100 x 100 = 336 €)
 PREORDER_NOTE = os.environ.get("VORBESTELL_HINWEIS", "Vorbestellung: Wir fertigen ab Februar 2027 in der Reihenfolge der Bestellungen.")
@@ -414,7 +416,8 @@ def _warmup():
 _warm = []
 
 def _prebuild():
-    """Sehnen-Tabellen für Engine 2 gleich beim Start bauen (sonst wartet die erste Berechnung darauf)."""
+    """Gleich beim Serverstart: Rechenkerne übersetzen und Sehnen-Tabellen laden (sonst wartet die erste Berechnung darauf)."""
+    _warmup()
     for n in (360, 240):
         try:
             engine2.lines_for(n)
@@ -426,8 +429,7 @@ if not os.environ.get("FADED_NO_PREBUILD"):
     threading.Thread(target=_prebuild, daemon=True).start()
 
 def warm_up_once():
-    if not _warm:
-        _warm.append(pool.submit(_warmup))   # über die Rechen-Warteschlange: die erste Bestellung wartet ggf. kurz dahinter
+    pass                                     # passiert jetzt direkt beim Serverstart (_prebuild), nicht erst beim Besuch
 
 def _simplex(v):
     """Projiziert jede Zeile auf 'alle Werte >= 0, Summe 1'."""
@@ -528,6 +530,7 @@ def compute_string_art(ref, m, key="a"):
     Dunkle Stellen bekommen so Fäden proportional zu ihrer Dunkelheit, und kurze Sehnen können Details (Augen) treffen.
     Mehrfarbig (Farbmodell): jede Zelle hat eine Farbe, jeder Faden mischt seine Farbe hinein; gewählt wird der größte
     Fehlerrückgang. In beiden Fällen werden nach jeder Linie nur die Zellen dieser Linie neu bewertet."""
+    check_cancel(ref)
     var = VARIANTS[key]                        # Stil: lokaler Kontrast, Tonwerte
     LW = LINE_W
     d, n = odir(ref), m["pins"]
