@@ -127,7 +127,7 @@ MIN_CONTRAST = 60
 def lum(rgb):
     return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 PINS = {240: 0, 360: 70}                       # Pins -> Aufpreis in €
-BUILD = "b25"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
+BUILD = "b26"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
 TEST_QUAD_CENTS = int(os.environ.get("TESTPREIS_QUAD_CENTS", "0"))   # Testpreis für ALLE quadratischen Bretter; 0 = aus (Live-Betrieb)
 BASE_CENTS, BASE_AREA, CENTS_PER_CM2 = 14900, 2500, 2.5   # Vorschlag: 149 € bis 50 x 50 cm, darüber 2,5 Cent je cm² (70 x 70 = 209 €, 100 x 100 = 336 €)
 PREORDER_NOTE = os.environ.get("VORBESTELL_HINWEIS", "Vorbestellung: Wir fertigen ab Februar 2027 in der Reihenfolge der Bestellungen.")
@@ -403,6 +403,18 @@ def _warmup():
         app.logger.exception("numba-Vorübersetzung fehlgeschlagen")
 
 _warm = []
+
+def _prebuild():
+    """Sehnen-Tabellen für Engine 2 gleich beim Start bauen (sonst wartet die erste Berechnung darauf)."""
+    for n in (360, 240):
+        try:
+            engine2.lines_for(n)
+        except Exception:
+            app.logger.exception("Sehnen-Tabelle %s fehlgeschlagen", n)
+    engine2.warmup()
+
+if not os.environ.get("FADED_NO_PREBUILD"):
+    threading.Thread(target=_prebuild, daemon=True).start()
 
 def warm_up_once():
     if not _warm:
@@ -1333,6 +1345,20 @@ def preview_variant(ref, key):
         abort(404)
     return send_file(p, mimetype="image/png", max_age=0)
 
+@app.get("/thumb/<ref>/<key>.jpg")
+def thumb_variant(ref, key):
+    """Kleines Vorschaubild (Warenkorb): schnell geladen, einmal erzeugt."""
+    if not load(ref) or (key not in VARIANTS and key not in SUGGEST):
+        abort(404)
+    src, dst = os.path.join(odir(ref), f"preview_{key}.png"), os.path.join(odir(ref), f"thumb_{key}.jpg")
+    if not os.path.exists(src):
+        abort(404)
+    if not os.path.exists(dst):
+        im = Image.open(src).convert("RGB")
+        im.thumbnail((360, 360))
+        im.save(dst, quality=85)
+    return send_file(dst, mimetype="image/jpeg", max_age=3600)
+
 @app.get("/zoom/<ref>/<key>.png")
 def zoom_variant(ref, key):
     """Fertiges Bild in voller Rechenauflösung (1000 px) zum Heranzoomen: einzelne Fäden sichtbar."""
@@ -1381,7 +1407,8 @@ def cart_items():
         m = load(ref)
         if m and m["status"] == "done" and not m.get("paid"):   # schon bezahlte Bilder fliegen raus
             keep.append(ref)
-            items.append({"ref": ref, "title": item_title(m), "cents": price_cents(m), "variant": m.get("variant", "a")})
+            items.append({"ref": ref, "title": item_title(m), "cents": price_cents(m), "variant": m.get("variant", "a"),
+                          "lines": (m.get("nlines") or {}).get(m.get("variant", "a"))})
     session["cart"] = keep
     return items
 

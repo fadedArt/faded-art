@@ -1,7 +1,6 @@
 (() => {
-const BUILD = 'b25';
+const BUILD = 'b26';
 window.addEventListener('error', e => { const m = document.getElementById('msg'); if (m && !m.textContent && e.message) m.textContent = 'Technischer Fehler: ' + e.message; });
-window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); });   // Zurück-Taste: Seite frisch laden statt alten Zustand zeigen
 const $ = id => document.getElementById(id);
 const S = 600, R = S * 0.49;     // Nagelring sitzt fast am Rand des Bildkreises (wie im berechneten Ergebnis)
 const CFG = JSON.parse($('cfg').dataset.cfg), SIZES = CFG.sizes, PRICE = CFG.pricing;
@@ -55,7 +54,7 @@ function board() {
   if (step >= 4) msg(lowContrast() ? MSG : '');
   [...$('size').options].forEach(o => { const [w, h] = SIZES[c.format][o.value]; o.textContent = o.value + ' (' + w + ' × ' + h + ' cm)'; });
   recommendThread();
-  price(); draw();
+  price(); draw(); saveState();
 }
 
 function pins(c2, r, n, size, col) {
@@ -99,11 +98,41 @@ $('file').addEventListener('change', e => {
   const f = e.target.files[0]; if (!f) return;
   if (!/^image\/(jpeg|png)$/.test(f.type) || f.size > 15 * 1024 * 1024) { msg('Bitte JPG oder PNG bis 15 MB wählen.'); e.target.value = ''; return; }
   msg(''); const url = URL.createObjectURL(f);
-  img.onload = () => { hasImg = true; fit(); $('ph').hidden = true; cv.hidden = false; $('zoomBox').hidden = false; $('bgBox').hidden = false; $('result').hidden = true; orderRef = null;
-    cut = null; draw(); URL.revokeObjectURL(url); if ($('bgcut').checked) freistellen(); };
-  img.onerror = () => msg('Das Bild konnte nicht gelesen werden.');
-  img.src = url;
+  useImage(url, null).then(() => { URL.revokeObjectURL(url); storeImage(); saveState({ job: null, variant: null }); });
 });
+function useImage(url, v) {                                   // Foto anzeigen; v = gespeicherter Ausschnitt (nach Zurück-Taste)
+  return new Promise(res => {
+    img.onload = () => { hasImg = true; fit(); if (v) { view.x = v.x; view.y = v.y; view.s = v.s; $('zoom').value = v.s; }
+      $('ph').hidden = true; cv.hidden = false; $('zoomBox').hidden = false; $('bgBox').hidden = false; $('result').hidden = true; orderRef = null;
+      cut = null; draw(); if ($('bgcut').checked) freistellen(); res(); };
+    img.onerror = () => { msg('Das Bild konnte nicht gelesen werden.'); res(); };
+    img.src = url;
+  });
+}
+
+// ---- Zustand merken: Zurück-Taste / Wischgeste am iPhone darf nichts löschen ----
+const SKEY = 'fa-konfig-v1', SEL = ['format', 'size', 'wood', 'color', 'circle', 'thick', 'pincolor', 'pins'];
+function saveState(extra) {
+  try {
+    const st = JSON.parse(sessionStorage.getItem(SKEY) || '{}');
+    st.step = step; st.sel = {}; SEL.forEach(id => st.sel[id] = $(id).value); st.bgcut = $('bgcut').checked;
+    if (hasImg) st.view = { x: view.x, y: view.y, s: view.s };
+    Object.assign(st, extra || {});
+    sessionStorage.setItem(SKEY, JSON.stringify(st));
+  } catch (e) { /* privater Modus o. ä.: dann eben ohne Merken */ }
+}
+function storeImage() {                                        // Foto verkleinert merken (passt in den Sitzungsspeicher)
+  for (const max of [1600, 1100, 800]) {
+    try {
+      const k = Math.min(1, max / Math.max(img.width, img.height)), c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      const st = JSON.parse(sessionStorage.getItem(SKEY) || '{}');
+      st.img = c.toDataURL('image/jpeg', 0.88); st.imgScale = k;
+      sessionStorage.setItem(SKEY, JSON.stringify(st)); return;
+    } catch (e) { /* zu groß: kleiner versuchen */ }
+  }
+}
 
 // Hintergrund entfernen: MediaPipe (Google, Apache 2.0) läuft nur hier im Browser, Dateien liegen auf unserem Server (static/mp)
 function segmenter() {
@@ -152,8 +181,8 @@ cv.addEventListener('pointermove', e => {
   view.x += (e.clientX - drag.x) * k; view.y += (e.clientY - drag.y) * k;
   drag = { x: e.clientX, y: e.clientY }; draw();
 });
-['pointerup', 'pointercancel'].forEach(t => cv.addEventListener(t, () => { drag = null; cv.style.cursor = step === 1 ? 'grab' : 'default'; }));
-$('zoom').addEventListener('input', e => { view.s = parseFloat(e.target.value); draw(); });
+['pointerup', 'pointercancel'].forEach(t => cv.addEventListener(t, () => { if (drag) saveState(); drag = null; cv.style.cursor = step === 1 ? 'grab' : 'default'; }));
+$('zoom').addEventListener('input', e => { view.s = parseFloat(e.target.value); draw(); saveState(); });
 const zoomBy = f => { const z = $('zoom'); view.s = Math.min(+z.max, Math.max(+z.min, view.s * f)); z.value = view.s; draw(); };
 $('zin').addEventListener('click', () => zoomBy(1.1));
 $('zout').addEventListener('click', () => zoomBy(1 / 1.1));
@@ -172,7 +201,7 @@ function show(n) {
   $('next').textContent = n === 5 ? 'Varianten berechnen' : 'Weiter';
   cv.style.cursor = n === 1 ? 'grab' : 'default'; cv.style.touchAction = n === 1 ? 'none' : 'auto'; // Verschieben nur in Schritt 1
   msg(''); if (n >= 4 && lowContrast()) msg(MSG);
-  draw();
+  draw(); saveState();
 }
 
 $('back').addEventListener('click', () => step > 1 && show(step - 1));
@@ -188,7 +217,7 @@ function cropBlob() { // exakt der sichtbare Kreisausschnitt, ohne Pins; freiges
   const c = o.getContext('2d'); if (!cut) { c.fillStyle = '#fff'; c.fillRect(0, 0, o.width, o.height); }
   const dw = img.width * view.s, dh = img.height * view.s, off = S / 2 - R;
   c.drawImage(cut || img, (view.x - dw / 2 - off) * k, (view.y - dh / 2 - off) * k, dw * k, dh * k);
-  return new Promise(r => o.toBlob(r, 'image/png'));
+  return new Promise(r => o.toBlob(r, cut ? 'image/png' : 'image/jpeg', 0.92));   // ohne Freistellung: JPEG, viel kleiner
 }
 
 async function fetchRetry(url, opts, tries = 4) {   // Server aufgeweckt/neu gestartet? Mehrfach versuchen
@@ -283,6 +312,7 @@ function pick(k) {
   if (!b || b.classList.contains('wait')) return;
   variantKey = k;
   document.querySelectorAll('.vopt').forEach(x => x.classList.toggle('sel', x === b));
+  saveState({ variant: k });
   if (SKEYS.includes(k)) { if (prices[k]) $('price').textContent = 'Preis mit diesem Vorschlag: ' + eur(prices[k]); }
   else if (basePrice != null) $('price').textContent = 'Preis: ' + eur(basePrice);
   syncBig(); bigInfo();
@@ -343,11 +373,7 @@ function showVariants(d) {
 }
 document.querySelectorAll('.vopt').forEach(b => b.addEventListener('click', () => pick(b.dataset.k)));
 
-async function generate() {
-  if (busy) return;
-  if (lowContrast()) return msg(MSG);
-  busy = true; msg(''); $('next').disabled = true;
-  $('wait').textContent = 'Berechnung läuft, das dauert meist unter einer Minute …';
+function resetResults() {
   $('spin').hidden = false; $('checkout').hidden = true; $('variants').hidden = false; $('sugg').hidden = true; prices = {}; basePrice = null;
   $('vtext').textContent = 'Deine drei Varianten werden gerade live gezeichnet. Tippe auf eine, um sie groß zu sehen.';
   variantKey = null; fin = {}; liveSeen = {}; nlines = {}; $('bigInfo').hidden = true;
@@ -355,40 +381,64 @@ async function generate() {
   $('result').hidden = true; cv.hidden = false;
   document.querySelectorAll('.vopt').forEach(x => { x.classList.add('wait'); x.classList.remove('sel'); x.classList.remove('fin'); x.querySelector('img').removeAttribute('src'); x.querySelector('.vp').textContent = ''; x.classList.remove('drawing'); const xp = x.querySelector('.xp'); if (xp) xp.textContent = ''; });
   initLive();
+}
+async function followJob(jobId, d, want) {                     // Berechnung verfolgen bis fertig (auch nach Zurück-Taste)
+  let fails = 0;
+  for (let i = 0; jobId && d.status !== 'done' && i < 600; i++) {   // Polling: erst schnell, damit das Zeichnen sofort startet
+    await new Promise(r => setTimeout(r, i < 40 ? 600 : 1200));
+    try {
+      const r = await fetch(statusUrl(jobId));
+      if (r.status === 404) throw new Error('Die Berechnung ist nicht mehr auf dem Server (Neustart). Bitte neu berechnen');
+      d = await r.json(); fails = 0;
+    } catch (e) { if (e.message.startsWith('Die Berechnung ist nicht')) throw e; if (++fails > 40) throw new Error('Die Verbindung zum Server ist abgebrochen'); continue; }
+    if (d.status === 'error') throw new Error(d.message || 'Berechnung fehlgeschlagen');
+    $('wait').textContent = 'Die Fäden werden gezogen, Linie für Linie … ' + (d.progress || 0) + ' %';
+    showVariants(d);
+  }
+  if (!d.variants || !d.variants.length) throw new Error('Die Berechnung dauert ungewöhnlich lange');
+  orderRef = d.order_ref;
+  showVariants(d); showSugg(d);
+  if (want && tile(want) && !tile(want).classList.contains('wait')) pick(want);
+  $('vtext').textContent = 'Fertig! Tippe auf deine Lieblingsvariante und kaufe sie. Darunter rechnen wir noch drei Vorschläge für dich.';
+  $('checkout').hidden = false;
+  pollSugg(jobId, want);
+}
+async function resume(jobId, want) {                           // nach Zurück-Taste: Ergebnis wieder anzeigen statt neu rechnen
+  busy = true; $('next').disabled = true; resetResults();
   try {
-    await fetchRetry('/health', {}, 10);                      // Server zuerst aufwecken
+    const r = await fetch(statusUrl(jobId));
+    if (r.status === 404) { saveState({ job: null }); $('variants').hidden = true; $('spin').hidden = true; cv.hidden = !hasImg; return; }
+    await followJob(jobId, await r.json(), want);
+  } catch (err) { msg('Berechnung nicht möglich: ' + err.message + '. Bitte erneut versuchen.'); }
+  finally { $('wait').textContent = ''; busy = false; $('next').disabled = false; $('spin').hidden = true; }
+}
+async function generate() {
+  if (busy) return;
+  if (lowContrast()) return msg(MSG);
+  busy = true; msg(''); $('next').disabled = true;
+  $('wait').textContent = 'Berechnung läuft, das dauert meist unter einer Minute …';
+  resetResults();
+  try {
+    const [blob] = await Promise.all([cropBlob(), fetchRetry('/health', {}, 10)]);   // Bild vorbereiten, während der Server aufwacht
     $('wait').textContent = 'Berechnung läuft, für drei Varianten kann das einige Minuten dauern …';
     const c = cfg(), fd = new FormData();
-    fd.append('image', await cropBlob(), 'crop.png');
+    fd.append('image', blob, cut ? 'crop.png' : 'crop.jpg');
     ['format', 'size', 'wood', 'color', 'disc', 'thick', 'pin', 'pins'].forEach(k => fd.append(k, c[k]));
     const res = await fetchRetry('/generate', { method: 'POST', body: fd });
     if (!res.ok) { let m = ''; try { m = (await res.json()).message; } catch (e) {} throw new Error(m || 'Server-Fehler ' + res.status); }
-    let d = await res.json();
-    let fails = 0;
-    const jobId = d.job_id;                                  // Job-ID merken: die Status-Antwort ersetzt d
-    for (let i = 0; jobId && d.status !== 'done' && i < 480; i++) {   // Polling bis zu 12 Minuten
-      await new Promise(r => setTimeout(r, 1500));
-      try { d = await (await fetch(statusUrl(jobId))).json(); fails = 0; }
-      catch (e) { if (++fails > 40) throw new Error('Die Verbindung zum Server ist abgebrochen'); continue; }
-      if (d.status === 'error') throw new Error(d.message || 'Berechnung fehlgeschlagen');
-      $('wait').textContent = 'Die Fäden werden gezogen, Linie für Linie … ' + (d.progress || 0) + ' %';
-      showVariants(d);
-    }
-    if (!d.variants || !d.variants.length) throw new Error('Die Berechnung dauert ungewöhnlich lange');
-    orderRef = d.order_ref;
-    showVariants(d); showSugg(d);
-    $('vtext').textContent = 'Fertig! Tippe auf deine Lieblingsvariante und kaufe sie. Darunter rechnen wir noch drei Vorschläge für dich.';
-    $('checkout').hidden = false;
-    pollSugg(jobId);
+    const d = await res.json();
+    saveState({ job: d.job_id, variant: null });             // Job merken: nach Zurück-Taste wird nicht neu gerechnet
+    await followJob(d.job_id, d, null);
   } catch (err) { msg('Berechnung nicht möglich: ' + err.message + '. Bitte erneut versuchen.'); }
   finally { $('wait').textContent = ''; busy = false; $('next').disabled = false; $('spin').hidden = true; }
 }
 
-async function pollSugg(id) {                                   // Vorschläge laufen nach den drei Varianten weiter
+async function pollSugg(id, want) {                             // Vorschläge laufen nach den drei Varianten weiter
   for (let i = 0; i < 600; i++) {
     let d;
     try { d = await (await fetch(statusUrl(id))).json(); } catch (e) { await new Promise(r => setTimeout(r, 4000)); continue; }
     feed(d); showSugg(d);
+    if (want && variantKey !== want && fin[want]) pick(want);
     if (d.sugg === 'done' || d.status === 'error') return;
     await new Promise(r => setTimeout(r, 1500));
   }
@@ -426,7 +476,22 @@ $('buy').addEventListener('click', async () => {
   catch (err) { msg('Kauf nicht möglich: ' + err.message); }
 });
 
+const SAVED = (() => { try { return JSON.parse(sessionStorage.getItem(SKEY) || 'null'); } catch (e) { return null; } })();
 show(1); board();
+
+(async function restore() {                                     // gespeicherten Zustand wiederherstellen
+  const st = SAVED;
+  if (!st || !st.img) return;
+  const keep = st;                                              // board()/show() speichern zwischendurch, deshalb Kopie
+  Object.entries(keep.sel || {}).forEach(([id, v]) => { const el = $(id); if (el && [...el.options].some(o => o.value === v)) el.value = v; });
+  if (keep.sel && keep.sel.thick) threadTouched = true;
+  $('bgcut').checked = !!keep.bgcut;
+  const v = keep.view && keep.imgScale ? { x: keep.view.x, y: keep.view.y, s: keep.view.s / keep.imgScale } : null;
+  await useImage(keep.img, v);
+  board(); show(keep.step || 1);
+  try { const s2 = JSON.parse(sessionStorage.getItem(SKEY) || '{}'); s2.img = keep.img; s2.imgScale = 1; s2.job = keep.job; s2.variant = keep.variant; sessionStorage.setItem(SKEY, JSON.stringify(s2)); } catch (e) {}
+  if (keep.job && (keep.step || 1) === 5) resume(keep.job, keep.variant);
+})();
 
 async function checkBuild() {                                  // Selbsttest: passen alle vier Dateien zusammen?
   const bad = [], html = ($('buildinfo') || { dataset: {} }).dataset.build;
