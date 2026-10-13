@@ -113,3 +113,8 @@ mark{background:rgba(212,175,55,.2);color:var(--gold-t);padding:0 .25rem;border-
 .sugg-h{font-size:1rem;margin:1.2rem 0 .3rem;color:var(--gold)}
 .vopt .xp{display:block;font-style:normal;font-weight:700;color:var(--gold);margin-top:.15rem;font-size:.8rem}
 .vopt.wait.drawing canvas{visibility:visible}
+.gs-vals{display:flex;flex-wrap:wrap;gap:.5rem}
+.gs-val{padding:.6rem 1.2rem}
+.gs-val.on{background:var(--grad);color:#0b0b0b;border-color:transparent}
+.gs-code{font-family:ui-monospace,Menlo,monospace;font-size:2rem;letter-spacing:.12em;color:var(--gold-t);margin:1rem 0}
+.linkbtn{background:none;border:0;color:var(--gold-t);text-decoration:underline;cursor:pointer;font:inherit;padding:0}

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Gutschein verschenken – Faded Art{% endblock %}
+{% block desc %}String Art aus einem Foto verschenken: Gutschein kaufen, ausdrucken, der Beschenkte gestaltet sein Bild selbst.{% endblock %}
+{% block content %}
+<section class="block">
+  <h2 class="title">Gutschein verschenken</h2>
+  <p class="hint" style="max-width:60ch;margin-bottom:1.25rem">Ein Fadenbild aus dem Lieblingsfoto: Du schenkst den Gutschein, der Beschenkte lädt sein Foto hoch und sucht sich sein Bild aus. Den Gutschein bekommst du sofort als PDF zum Ausdrucken. {{ note }}</p>
+  {% if left is not none and left <= 0 %}
+  <div class="card"><h3>Ausverkauft</h3><p>Alle Gutscheine für diese Runde sind vergeben. Schau bald wieder vorbei.</p></div>
+  {% else %}
+  <div class="card" style="max-width:560px">
+    <div class="field"><label>Betrag</label>
+      <div class="gs-vals" role="radiogroup" aria-label="Betrag">
+        {% for c in values %}<button type="button" class="btn gs-val{% if loop.index == 2 %} on{% endif %}" data-c="{{ c }}" role="radio" aria-checked="{{ 'true' if loop.index == 2 else 'false' }}">{{ (c // 100) }} €</button>{% endfor %}
+      </div>
+      <p class="hint" style="margin-top:.5rem">Richtwert: Größe M (50 × 50 cm) ab 149 €.</p></div>
+    <div class="field"><label for="gname">Für wen? (steht auf dem Gutschein, optional)</label><input type="text" id="gname" maxlength="60" placeholder="z. B. Lena"></div>
+    <div class="field"><label for="gmail">Deine E-Mail (dorthin schicken wir den Gutschein)</label><input type="email" id="gmail" autocomplete="email" placeholder="name@beispiel.de"></div>
+    <div class="field"><label style="text-transform:none;font-weight:400"><input type="checkbox" id="gagb">Ich akzeptiere die <a href="/agb" target="_blank" rel="noopener">AGB</a>. Der Gutschein ist {{ years }} Jahre gültig und wird nicht bar ausgezahlt.</label></div>
+    <button type="button" class="btn btn-gold" id="gbuy" style="width:100%">Gutschein kaufen</button>
+    <p class="msg" id="gmsg" role="alert"></p>
+    {% if left is not none %}<p class="hint" style="margin-top:.75rem">Nur noch {{ left }} Gutscheine in dieser Runde.</p>{% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+let cents = +(document.querySelector('.gs-val.on') || {}).dataset?.c || 0;
+document.querySelectorAll('.gs-val').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.gs-val').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', x === b); });
+  cents = +b.dataset.c;
+}));
+const buy = document.getElementById('gbuy');
+if (buy) buy.addEventListener('click', async () => {
+  const msg = t => document.getElementById('gmsg').textContent = t || '';
+  const email = document.getElementById('gmail').value.trim();
+  if (!/^\S+@\S+\.\S+$/.test(email)) return msg('Bitte eine gültige E-Mail-Adresse eingeben.');
+  if (!document.getElementById('gagb').checked) return msg('Bitte die AGB bestätigen.');
+  buy.disabled = true; msg('');
+  try {
+    const r = await fetch('/gutschein/kaufen', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cents, email, name: document.getElementById('gname').value.trim(), agb: true }) });
+    const d = await r.json();
+    if (d.url) location.href = d.url; else throw new Error(d.message || 'Unbekannt');
+  } catch (e) { msg('Kauf nicht möglich: ' + e.message); buy.disabled = false; }
+});
+</script>
+{% endblock %}

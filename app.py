@@ -1,4 +1,4 @@
-import base64, hashlib, hmac, json, math, mimetypes, os, re, shutil, smtplib, threading, time, urllib.error, urllib.request, uuid
+import base64, hashlib, hmac, json, secrets, math, mimetypes, os, re, shutil, smtplib, threading, time, urllib.error, urllib.request, uuid
 from email.message import EmailMessage
 from datetime import datetime
 from datetime import timedelta
@@ -128,8 +128,72 @@ def lum(rgb):
     return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 PINS = {240: 0, 360: 70}                       # Pins -> Aufpreis in €
 BUILD = "b24"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
-TEST_QUAD_CENTS = int(os.environ.get("TESTPREIS_QUAD_CENTS", "50"))   # Testpreis für ALLE quadratischen Bretter; 0 = aus (Live-Betrieb!)
-BASE_CENTS, BASE_AREA, CENTS_PER_CM2 = 50, 2500, 2.5  # 0,50 € ist noch der Testpreis!
+TEST_QUAD_CENTS = int(os.environ.get("TESTPREIS_QUAD_CENTS", "0"))   # Testpreis für ALLE quadratischen Bretter; 0 = aus (Live-Betrieb)
+BASE_CENTS, BASE_AREA, CENTS_PER_CM2 = 14900, 2500, 2.5   # Vorschlag: 149 € bis 50 x 50 cm, darüber 2,5 Cent je cm² (70 x 70 = 209 €, 100 x 100 = 336 €)
+PREORDER_NOTE = os.environ.get("VORBESTELL_HINWEIS", "Vorbestellung: Wir fertigen ab Februar 2027 in der Reihenfolge der Bestellungen.")
+
+# ---------- Gutscheine (Wertgutscheine, auch zum Vorbestellen) ----------
+VOUCHER_VALUES = (5000, 10000, 15000, 20000, 30000)    # wählbare Werte in Cent
+VOUCHER_LIMIT = int(os.environ.get("GUTSCHEIN_LIMIT", "25"))   # höchstens so viele Gutscheine verkaufen (0 = unbegrenzt)
+VOUCHER_YEARS = 3                                        # gesetzliche Verjährung: 3 Jahre zum Jahresende
+VDIR = os.path.join(DATA_DIR, "gutscheine")
+os.makedirs(VDIR, exist_ok=True)
+_vlock = threading.Lock()
+CODE_RE = re.compile(r"^FA-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$")
+
+def voucher_load(code):
+    code = (code or "").strip().upper()
+    if not CODE_RE.match(code):
+        return None
+    try:
+        with open(os.path.join(VDIR, code + ".json")) as f:
+            return json.load(f)
+    except OSError:
+        return None
+
+def voucher_save(v):
+    p = os.path.join(VDIR, v["code"] + ".json")
+    with open(p + ".tmp", "w") as f:
+        json.dump(v, f)
+    os.replace(p + ".tmp", p)
+
+def voucher_sold():
+    return sum(1 for f in os.listdir(VDIR) if f.endswith(".json"))
+
+def voucher_valid_until(created):
+    y = time.localtime(created).tm_year + VOUCHER_YEARS
+    return f"31.12.{y}"
+
+def voucher_ok(v):
+    return bool(v) and v["left"] > 0 and time.time() < time.mktime((time.localtime(v["created"]).tm_year + VOUCHER_YEARS, 12, 31, 23, 59, 59, 0, 0, -1))
+
+def voucher_create(session_id, cents, email, name):
+    """Legt den Gutschein nach bezahlter Zahlung an. Mehrfachmeldung derselben Zahlung erzeugt keinen zweiten."""
+    with _vlock:
+        for f in os.listdir(VDIR):
+            if f.endswith(".json"):
+                v = json.load(open(os.path.join(VDIR, f)))
+                if v.get("session") == session_id:
+                    return v
+        alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+        while True:
+            code = "FA-" + "".join(secrets.choice(alphabet) for _ in range(4)) + "-" + "".join(secrets.choice(alphabet) for _ in range(4))
+            if not os.path.exists(os.path.join(VDIR, code + ".json")):
+                break
+        v = dict(code=code, cents=cents, left=cents, email=email, name=name, session=session_id, created=time.time(), uses=[])
+        voucher_save(v)
+    threading.Thread(target=voucher_mail, args=(v,), daemon=True).start()
+    return v
+
+def voucher_use(code, cents, use_id):
+    """Zieht cents vom Gutschein ab (einmal je use_id)."""
+    with _vlock:
+        v = voucher_load(code)
+        if not v or use_id in v["uses"]:
+            return
+        v["left"] = max(0, v["left"] - cents)
+        v["uses"].append(use_id)
+        voucher_save(v)
 # Feste Größen (Breite x Höhe in cm) je Format. Einzige Quelle: Frontend liest sie von hier.
 SIZES = {
     "rund": {"S": (30, 30), "M": (50, 50), "L": (70, 70), "XL": (100, 100)},   # Durchmesser in cm
@@ -930,6 +994,140 @@ def admin_file(ref, name):
     return send_file(os.path.join(odir(ref), name), as_attachment=(name != "final.png"), max_age=0)
 
 
+# ---------- Gutscheine: Seiten und PDF ----------
+def voucher_pdf(v):
+    """Gutschein zum Ausdrucken (A5 quer)."""
+    pdf = FPDF(orientation="L", format="A5")
+    pdf.set_auto_page_break(False)
+    pdf.add_page()
+    pdf.set_fill_color(11, 11, 11)
+    pdf.rect(0, 0, 210, 148, style="F")
+    pdf.set_draw_color(212, 175, 55)
+    pdf.set_line_width(0.8)
+    pdf.ellipse(140, 24, 100, 100)
+    pdf.set_text_color(212, 175, 55)
+    pdf.set_font("Helvetica", "B", 26)
+    pdf.set_xy(14, 18)
+    pdf.cell(0, 12, "FADED ART")
+    pdf.set_font("Helvetica", "", 13)
+    pdf.set_text_color(240, 240, 240)
+    pdf.set_xy(14, 34)
+    pdf.cell(0, 8, "Gutschein für ein String-Art-Bild aus deinem Foto")
+    if v.get("name"):
+        pdf.set_xy(14, 46)
+        pdf.cell(0, 8, f"Für: {v['name']}")
+    pdf.set_font("Helvetica", "B", 40)
+    pdf.set_text_color(212, 175, 55)
+    pdf.set_xy(14, 60)
+    pdf.cell(0, 18, euro(v["cents"]).replace("€", "EUR"))   # Standardschrift kennt kein €-Zeichen
+    pdf.set_font("Courier", "B", 20)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_xy(14, 86)
+    pdf.cell(0, 10, v["code"])
+    pdf.set_font("Helvetica", "", 9.5)
+    pdf.set_text_color(190, 190, 190)
+    pdf.set_xy(14, 102)
+    pdf.multi_cell(120, 5, f"Einlösen: Foto hochladen auf faded-art, Bild gestalten, Code im Warenkorb eingeben. "
+                   f"Gültig bis {voucher_valid_until(v['created'])}. {PREORDER_NOTE} Keine Barauszahlung.")
+    return bytes(pdf.output())
+
+def send_mail(to, subject, text, files=()):
+    """E-Mail über Resend (RESEND_API_KEY) oder SMTP. files: [(Name, MIME-Typ, Bytes)]."""
+    key = os.environ.get("RESEND_API_KEY", "").strip()
+    if key:
+        body = json.dumps({"from": os.environ.get("MAIL_FROM", "Faded Art <onboarding@resend.dev>"), "to": [to], "subject": subject,
+                           "text": text, "attachments": [{"filename": n, "content": base64.b64encode(b).decode()} for n, _, b in files]})
+        req = urllib.request.Request("https://api.resend.com/emails", data=body.encode(), method="POST",
+                                     headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json", "User-Agent": "faded-art"})
+        try:
+            urllib.request.urlopen(req, timeout=60).read()
+        except urllib.error.HTTPError as e:
+            raise RuntimeError(f"Resend {e.code}: {e.read().decode(errors='replace')[:300]}") from None
+    elif os.environ.get("SMTP_HOST"):
+        msg = EmailMessage()
+        msg["Subject"], msg["To"], msg["From"] = subject, to, os.environ.get("SMTP_USER", to)
+        msg.set_content(text)
+        for name, kind, data in files:
+            msg.add_attachment(data, maintype=kind.split("/")[0], subtype=kind.split("/")[1], filename=name)
+        with smtplib.SMTP(os.environ["SMTP_HOST"], int(os.environ.get("SMTP_PORT", "587")), timeout=30) as sm:
+            sm.starttls()
+            sm.login(os.environ["SMTP_USER"], os.environ["SMTP_PASS"])
+            sm.send_message(msg)
+    else:
+        raise RuntimeError("kein E-Mail-Versand eingerichtet")
+
+def voucher_mail(v):
+    """Gutschein als PDF an den Käufer, Kopie an dich."""
+    text = (f"Vielen Dank! Dein Faded-Art-Gutschein über {euro(v['cents'])}:\n\n    {v['code']}\n\n"
+            f"Gültig bis {voucher_valid_until(v['created'])}. Im Anhang als PDF zum Ausdrucken und Verschenken.\n{PREORDER_NOTE}")
+    for to in filter(None, [v.get("email"), os.environ.get("ORDER_MAIL_TO")]):
+        try:
+            send_mail(to, f"Dein Faded-Art-Gutschein {v['code']}", text, [(f"Gutschein-{v['code']}.pdf", "application/pdf", voucher_pdf(v))])
+        except Exception:
+            app.logger.exception("Gutschein-Mail an %s fehlgeschlagen", to)
+
+@app.get("/gutschein")
+def voucher_page():
+    left = (VOUCHER_LIMIT - voucher_sold()) if VOUCHER_LIMIT else None
+    return render_template("gutschein.html", values=VOUCHER_VALUES, left=left, note=PREORDER_NOTE, years=VOUCHER_YEARS)
+
+@app.post("/gutschein/kaufen")
+def voucher_buy():
+    d = request.get_json(silent=True) or {}
+    cents, email, name = d.get("cents"), str(d.get("email", "")).strip(), str(d.get("name", "")).strip()[:60]
+    if cents not in VOUCHER_VALUES:
+        return jsonify(message="Bitte einen Betrag wählen"), 400
+    if not re.match(r"^\S+@\S+\.\S+$", email) or d.get("agb") is not True:
+        return jsonify(message="E-Mail oder AGB-Zustimmung fehlt"), 400
+    if VOUCHER_LIMIT and voucher_sold() >= VOUCHER_LIMIT:
+        return jsonify(message="Die Gutscheine sind leider ausverkauft"), 400
+    if not stripe.api_key:
+        return jsonify(message="Zahlung ist noch nicht eingerichtet (STRIPE_SECRET_KEY fehlt bei Render)"), 500
+    try:
+        s = stripe.checkout.Session.create(
+            mode="payment", locale="de", customer_email=email,
+            line_items=[{"quantity": 1, "price_data": {"currency": "eur", "unit_amount": cents,
+                                                         "product_data": {"name": f"Faded-Art-Gutschein {euro(cents)}" + (f" für {name}" if name else "")}}}],
+            metadata={"gutschein_kauf": str(cents), "gutschein_name": name},
+            success_url=request.host_url + "gutschein/fertig?session_id={CHECKOUT_SESSION_ID}",
+            cancel_url=request.host_url + "gutschein")
+        return jsonify(url=s.url)
+    except Exception as e:
+        app.logger.exception("Stripe-Fehler (Gutschein)")
+        return jsonify(message="Checkout konnte nicht gestartet werden" +
+                       (": " + str(getattr(e, "user_message", None) or e)[:300] if stripe.api_key.startswith(("sk_test", "rk_test")) else "")), 500
+
+@app.get("/gutschein/fertig")
+def voucher_done():
+    sid, v = request.args.get("session_id", ""), None
+    if sid.startswith("cs_") and stripe.api_key:
+        try:
+            v = handle_checkout(stripe.checkout.Session.retrieve(sid))
+        except Exception:
+            app.logger.exception("Gutschein-Sitzung %s konnte nicht geprüft werden", sid)
+    return render_template("gutschein_fertig.html", v=v, until=voucher_valid_until(v["created"]) if v else "", note=PREORDER_NOTE)
+
+@app.get("/gutschein/<code>.pdf")
+def voucher_download(code):
+    v = voucher_load(code)
+    if not v:
+        abort(404)
+    return send_file(__import__("io").BytesIO(voucher_pdf(v)), mimetype="application/pdf", as_attachment=True,
+                     download_name=f"Gutschein-{v['code']}.pdf")
+
+@app.post("/cart/gutschein")
+def cart_voucher():
+    code = str((request.get_json(silent=True) or {}).get("code", "")).strip().upper()
+    if not code:
+        session.pop("voucher", None)
+        return jsonify(ok=True)
+    v = voucher_load(code)
+    if not voucher_ok(v):
+        return jsonify(message="Dieser Gutscheincode ist ungültig, abgelaufen oder schon aufgebraucht."), 400
+    session["voucher"] = v["code"]
+    return jsonify(ok=True, left=v["left"])
+
+
 # ---------- Maschine: holt bezahlte Aufträge (nur mit ADMIN_KEY) ----------
 def machine_job(ref):
     """Alles, was die Spannmaschine braucht: Nagelzahl, Kreisdurchmesser und die Abschnitte [(Farbe, Pins)] in Spannreihenfolge."""
@@ -1003,6 +1201,7 @@ def about():
 @app.get("/success")
 def success():
     session.pop("cart", None)
+    session.pop("voucher", None)
     sid = request.args.get("session_id", "")
     if sid.startswith("cs_") and stripe.api_key:      # Zahlung direkt bei Stripe prüfen: klappt auch ohne eingerichteten Webhook
         try:
@@ -1157,7 +1356,7 @@ def cart_items():
     items, keep = [], []
     for ref in session.get("cart", []):
         m = load(ref)
-        if m and m["status"] == "done":
+        if m and m["status"] == "done" and not m.get("paid"):   # schon bezahlte Bilder fliegen raus
             keep.append(ref)
             items.append({"ref": ref, "title": item_title(m), "cents": price_cents(m), "variant": m.get("variant", "a")})
     session["cart"] = keep
@@ -1189,7 +1388,13 @@ def bad_request(e):
 @app.get("/warenkorb")
 def cart():
     items = cart_items()
-    return render_template("cart.html", items=items, total=sum(i["cents"] for i in items))
+    total = sum(i["cents"] for i in items)
+    v = voucher_load(session.get("voucher"))
+    if not voucher_ok(v):
+        v = None
+        session.pop("voucher", None)
+    disc = min(v["left"], total) if v else 0
+    return render_template("cart.html", items=items, total=total, voucher=v, disc=disc, pay=total - disc, note=PREORDER_NOTE)
 
 @app.post("/cart/add")
 def cart_add():
@@ -1222,6 +1427,31 @@ def checkout():
         return jsonify(message="Der Warenkorb ist leer"), 400
     if not re.match(r"^\S+@\S+\.\S+$", email) or data.get("agb") is not True:
         return jsonify(message="E-Mail oder AGB-Zustimmung fehlt"), 400
+    total = sum(i["cents"] for i in items)
+    v = voucher_load(session.get("voucher"))
+    disc = min(v["left"], total) if voucher_ok(v) else 0
+    if disc and total - disc < 50:                      # Gutschein deckt alles (Stripe nimmt erst ab 0,50 €): ohne Zahlung bestellen
+        use_id = "gs-" + uuid.uuid4().hex
+        voucher_use(v["code"], total, use_id)
+        for i in items:
+            with _meta_lock:
+                m = load(i["ref"])
+                if not m or m.get("paid"):
+                    continue
+                m.update(paid=True, email=email, gutschein=v["code"], stripe_session=use_id)
+                _write(i["ref"], m)
+            threading.Thread(target=notify_owner, args=(i["ref"],), daemon=True).start()
+        session.pop("cart", None)
+        session.pop("voucher", None)
+        return jsonify(url="/success?gutschein=1")
+    if disc:                                             # Teilbetrag: Rabatt anteilig auf die Positionen verteilen
+        rest = disc
+        for n_, i in enumerate(items):
+            cut = rest if n_ == len(items) - 1 else min(rest, round(disc * i["cents"] / total))
+            cut = min(cut, i["cents"])
+            i["cents"] -= cut
+            i["title"] += f" (Gutschein {v['code']} abgezogen)" if cut else ""
+            rest -= cut
     if not stripe.api_key:
         return jsonify(message="Zahlung ist noch nicht eingerichtet (STRIPE_SECRET_KEY fehlt bei Render)"), 500
     if not stripe.api_key.startswith(("sk_", "rk_")):
@@ -1234,7 +1464,8 @@ def checkout():
                 "currency": "eur", "unit_amount": i["cents"],   # Preise kommen nur vom Server
                 "product_data": {"name": i["title"]}}} for i in items],
             shipping_address_collection={"allowed_countries": ["DE", "AT", "CH"]},
-            metadata={"order_refs": ",".join(i["ref"] for i in items)},
+            metadata={"order_refs": ",".join(i["ref"] for i in items),
+                      **({"gutschein": v["code"], "gutschein_cents": str(disc)} if disc else {})},
             success_url=request.host_url + "success?session_id={CHECKOUT_SESSION_ID}",
             cancel_url=request.host_url + "warenkorb")
         return jsonify(url=s.url)
@@ -1303,6 +1534,12 @@ def handle_checkout(s):
     if s["payment_status"] != "paid":           # Klammer-Zugriff statt .get(): läuft mit alten und neuen stripe-Versionen
         return
     meta = s["metadata"] if "metadata" in s else {}
+    email0 = s["customer_email"] if "customer_email" in s else None
+    if "gutschein_kauf" in meta:                 # Gutschein gekauft
+        return voucher_create(s["id"], int(meta["gutschein_kauf"]), email0,
+                              meta["gutschein_name"] if "gutschein_name" in meta else "")
+    if "gutschein" in meta:                      # Bestellung mit Gutschein (Teilbetrag): Guthaben abziehen
+        voucher_use(meta["gutschein"], int(meta["gutschein_cents"]), s["id"])
     refs = meta["order_refs"] if "order_refs" in meta else ""
     email = s["customer_email"] if "customer_email" in s else None
     for ref in refs.split(","):
