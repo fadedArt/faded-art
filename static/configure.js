@@ -1,5 +1,5 @@
 (() => {
-const BUILD = 'b24';
+const BUILD = 'b25';
 window.addEventListener('error', e => { const m = document.getElementById('msg'); if (m && !m.textContent && e.message) m.textContent = 'Technischer Fehler: ' + e.message; });
 window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); });   // Zurück-Taste: Seite frisch laden statt alten Zustand zeigen
 const $ = id => document.getElementById(id);
@@ -203,34 +203,44 @@ async function fetchRetry(url, opts, tries = 4) {   // Server aufgeweckt/neu ges
 }
 
 let variantKey = null, fin = {}, liveSeen = {}, L = {}, animOn = false;
-const KEYS = ['a', 'b', 'c'], SKEYS = ['d', 'e', 'f'];
+const KEYS = ['a', 'b', 'c'], SKEYS = ['d', 'e', 'f'], ALL = KEYS.concat(SKEYS);
+let curRef = null, nlines = {};
+const fmtN = x => Number(x).toLocaleString('de-DE');
 let prices = {}, basePrice = null;
 const eur = c => (c / 100).toFixed(2).replace('.', ',') + ' €';
 const tile = k => document.querySelector('.vopt[data-k="' + k + '"]');
 const pinXY = (i, n) => { const t = 2 * Math.PI * i / n, r = 300 * 0.982; return [300 + r * Math.cos(t), 300 + r * Math.sin(t)]; };
-const statusUrl = id => '/status/' + id + '?' + KEYS.map(k => 's' + k + '=' + (L[k] ? L[k].got : 0)).join('&');
+const statusUrl = id => '/status/' + id + '?' + ALL.map(k => 's' + k + '=' + (L[k] ? L[k].got : 0)).join('&');
 
+function paintBase(x, bg, pinHex, n) {
+  x.globalAlpha = 1; x.fillStyle = bg; x.fillRect(0, 0, 600, 600); x.fillStyle = pinHex;
+  for (let i = 0; i < n; i++) { const [px, py] = pinXY(i, n); x.beginPath(); x.arc(px, py, 2, 0, 7); x.fill(); }
+}
 function initLive() {                                          // leere Leinwände mit Kreisfarbe und Nägeln
   const c = cfg();
-  KEYS.forEach(k => {
+  ALL.forEach(k => {
     const cvs = tile(k).querySelector('canvas'), x = cvs.getContext('2d');
     x.globalAlpha = 1; x.fillStyle = c.discHex; x.fillRect(0, 0, 600, 600); x.fillStyle = c.pinHex;
     for (let i = 0; i < c.pins; i++) { const [px, py] = pinXY(i, c.pins); x.beginPath(); x.arc(px, py, 2, 0, 7); x.fill(); }
-    L[k] = { x, cvs, got: 0, queue: [], last: {}, prev: null, n: c.pins, hex: [c.hex], alpha: 0.08, lw: 2, dirty: false };   // last: letzter Pin je Fadenfarbe
+    L[k] = { x, cvs, got: 0, queue: [], last: {}, prev: null, n: c.pins, bg: c.discHex, hex: [c.hex], alpha: 0.08, lw: 2, dirty: false };   // last: letzter Pin je Fadenfarbe
   });
   if (!animOn) { animOn = true; requestAnimationFrame(anim); }
 }
 function feed(d) {                                             // neue Linien aus der Statusantwort übernehmen
-  KEYS.forEach(k => {
+  if (d.order_ref) curRef = d.order_ref;
+  ALL.forEach(k => {
     const s = L[k], ln = d.lines && d.lines[k];
     if (!s || !ln || ln.from > s.got) return;
+    if (s.got === 0 && ((ln.bg && ln.bg !== s.bg) || (ln.n && ln.n !== s.n))) {   // Vorschlag: andere Kreisfarbe/Nagelzahl
+      s.bg = ln.bg || s.bg; s.n = ln.n || s.n; paintBase(s.x, s.bg, cfg().pinHex, s.n);
+    }
     s.alpha = ln.alpha; s.lw = ln.lw; s.n = ln.n || s.n; if (ln.hex) s.hex = ln.hex;
     const off = s.got - ln.from, add = ln.pins.slice(off), cols = (ln.cols || []).slice(off);
     s.got += add.length; s.queue.push(...add.map((p, i) => [p, cols[i] || 0]));   // [Pin, Fadenfarbe]
   });
 }
 function anim() {                                              // jede Linie einzeln zeichnen, gleichmäßig verteilt
-  KEYS.forEach(k => {
+  ALL.forEach(k => {
     const s = L[k];
     if (!s || !s.queue.length) return;
     const m = Math.max(1, Math.ceil(s.queue.length / 80));
@@ -244,11 +254,11 @@ function anim() {                                              // jede Linie ein
       }
       s.last[col] = p;
     }
-    s.dirty = true; tile(k).classList.remove('wait');
+    s.dirty = true; tile(k).classList.remove('wait'); tile(k).classList.add('drawing');
   });
   const s = variantKey && L[variantKey];
   if (s && s.dirty && !fin[variantKey]) drawBig(s);
-  KEYS.forEach(k => { if (L[k]) L[k].dirty = false; });
+  ALL.forEach(k => { if (L[k]) L[k].dirty = false; });
   requestAnimationFrame(anim);
 }
 function drawBig(s) {
@@ -273,10 +283,17 @@ function pick(k) {
   if (!b || b.classList.contains('wait')) return;
   variantKey = k;
   document.querySelectorAll('.vopt').forEach(x => x.classList.toggle('sel', x === b));
-  if (SKEYS.includes(k)) {                                       // Vorschlag: fertiges Bild groß zeigen, Preis mit Vorschlag
-    $('result').src = b.querySelector('img').src; $('result').hidden = false; $('big').hidden = true; cv.hidden = true;
-    if (prices[k]) $('price').textContent = 'Preis mit diesem Vorschlag: ' + eur(prices[k]);
-  } else { if (basePrice != null) $('price').textContent = 'Preis: ' + eur(basePrice); syncBig(); }
+  if (SKEYS.includes(k)) { if (prices[k]) $('price').textContent = 'Preis mit diesem Vorschlag: ' + eur(prices[k]); }
+  else if (basePrice != null) $('price').textContent = 'Preis: ' + eur(basePrice);
+  syncBig(); bigInfo();
+}
+function bigInfo() {                                             // unter dem großen Bild: Name, Anzahl Fäden, Zoom
+  const k = variantKey, b = k && tile(k);
+  if (!b) { $('bigInfo').hidden = true; return; }
+  $('bigInfo').hidden = false;
+  const name = b.querySelector('span').textContent.replace(' …', '');
+  $('bigLines').textContent = name + ': ' + (nlines[k] ? fmtN(nlines[k]) + ' Fäden (Handgriffe)' : 'wird noch gezeichnet …');
+  $('zoomBtn').hidden = !fin[k];
 }
 function showSugg(d) {                                           // drei Vorschläge: Fortschritt, fertiges Bild, Aufpreis
   if (!d.suggestions) return;
@@ -286,12 +303,14 @@ function showSugg(d) {                                           // drei Vorschl
     const b = tile(sg.key); if (!b) return;
     prices[sg.key] = sg.cents;
     b.querySelector('.xp').textContent = sg.extra_cents > 0 ? '+ ' + eur(sg.extra_cents) : 'ohne Aufpreis';
+    if (sg.lines) nlines[sg.key] = sg.lines;
     if (sg.url && !fin[sg.key]) {
       fin[sg.key] = true; b.querySelector('img').src = sg.url; b.classList.add('fin'); b.classList.remove('wait');
-      b.querySelector('.vp').textContent = 'fertig ✓';
+      b.querySelector('.vp').textContent = sg.lines ? fmtN(sg.lines) + ' Fäden' : 'fertig ✓';
+      if (variantKey === sg.key) { syncBig(); bigInfo(); }
     } else if (!sg.url) {
       b.querySelector('.vp').textContent = sg.pct ? sg.pct + ' %' : 'wartet';
-      if (d.live && d.live[sg.key] && liveSeen[sg.key] !== d.live[sg.key]) {           // Zwischenbild, solange gerechnet wird
+      if (!(d.lines && d.lines[sg.key]) && d.live && d.live[sg.key] && liveSeen[sg.key] !== d.live[sg.key]) {           // Zwischenbild, solange gerechnet wird
         liveSeen[sg.key] = d.live[sg.key];
         const im = new Image(), cvs = b.querySelector('canvas');
         im.onload = () => { const x = cvs.getContext('2d'); x.globalAlpha = 1; x.drawImage(im, 0, 0, 600, 600); b.classList.add('drawing'); };
@@ -306,7 +325,9 @@ function showVariants(d) {
   KEYS.forEach(k => {
     const b = tile(k), vp = b.querySelector('.vp'), done = (d.variants || []).find(v => v.key === k);
     if (done) {
-      if (!fin[k]) { fin[k] = true; b.querySelector('img').src = done.url; b.classList.add('fin'); b.classList.remove('wait'); vp.textContent = 'fertig ✓'; if (variantKey === k) syncBig(); }
+      if (done.lines) nlines[k] = done.lines;
+      if (!fin[k]) { fin[k] = true; b.querySelector('img').src = done.url; b.classList.add('fin'); b.classList.remove('wait');
+        vp.textContent = done.lines ? fmtN(done.lines) + ' Fäden' : 'fertig ✓'; if (variantKey === k) { syncBig(); bigInfo(); } }
       return;
     }
     vp.textContent = ((d.prog || {})[k] || 0) + ' %';
@@ -317,7 +338,7 @@ function showVariants(d) {
       im.src = '/live/' + d.order_ref + '/' + k + '.jpg?v=' + d.live[k];
     }
   });
-  if (!variantKey && !tile('a').classList.contains('wait')) pick('a');
+  if (!variantKey && !tile('a').classList.contains('wait')) pick('a'); else bigInfo();
   if ((d.variants || []).length || Object.keys(d.lines || {}).length || Object.keys(d.live || {}).length) $('spin').hidden = true;
 }
 document.querySelectorAll('.vopt').forEach(b => b.addEventListener('click', () => pick(b.dataset.k)));
@@ -329,7 +350,7 @@ async function generate() {
   $('wait').textContent = 'Berechnung läuft, das dauert meist unter einer Minute …';
   $('spin').hidden = false; $('checkout').hidden = true; $('variants').hidden = false; $('sugg').hidden = true; prices = {}; basePrice = null;
   $('vtext').textContent = 'Deine drei Varianten werden gerade live gezeichnet. Tippe auf eine, um sie groß zu sehen.';
-  variantKey = null; fin = {}; liveSeen = {};
+  variantKey = null; fin = {}; liveSeen = {}; nlines = {}; $('bigInfo').hidden = true;
   $('big').hidden = true;
   $('result').hidden = true; cv.hidden = false;
   document.querySelectorAll('.vopt').forEach(x => { x.classList.add('wait'); x.classList.remove('sel'); x.classList.remove('fin'); x.querySelector('img').removeAttribute('src'); x.querySelector('.vp').textContent = ''; x.classList.remove('drawing'); const xp = x.querySelector('.xp'); if (xp) xp.textContent = ''; });
@@ -367,11 +388,23 @@ async function pollSugg(id) {                                   // Vorschläge l
   for (let i = 0; i < 600; i++) {
     let d;
     try { d = await (await fetch(statusUrl(id))).json(); } catch (e) { await new Promise(r => setTimeout(r, 4000)); continue; }
-    showSugg(d);
+    feed(d); showSugg(d);
     if (d.sugg === 'done' || d.status === 'error') return;
-    await new Promise(r => setTimeout(r, 2500));
+    await new Promise(r => setTimeout(r, 1500));
   }
 }
+
+// Zoom: fertiges Bild in voller Auflösung, einzelne Fäden sichtbar
+let zl = 2;
+const zset = () => { $('zimg').style.width = (zl * 100) + '%'; };
+$('zoomBtn').addEventListener('click', () => {
+  if (!variantKey || !curRef) return;
+  $('zimg').src = '/zoom/' + curRef + '/' + variantKey + '.png'; zl = 2; zset(); $('zoomOv').hidden = false;
+  const sc = $('zscroll'); setTimeout(() => { sc.scrollLeft = (sc.scrollWidth - sc.clientWidth) / 2; sc.scrollTop = (sc.scrollHeight - sc.clientHeight) / 2; }, 300);
+});
+$('zplus').addEventListener('click', () => { zl = Math.min(8, zl * 1.5); zset(); });
+$('zminus').addEventListener('click', () => { zl = Math.max(1, zl / 1.5); zset(); });
+$('zclose').addEventListener('click', () => { $('zoomOv').hidden = true; });
 
 async function addToCart() {
   const res = await fetch('/cart/add', { method: 'POST', headers: { 'Content-Type': 'application/json' },

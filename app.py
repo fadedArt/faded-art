@@ -127,7 +127,7 @@ MIN_CONTRAST = 60
 def lum(rgb):
     return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 PINS = {240: 0, 360: 70}                       # Pins -> Aufpreis in €
-BUILD = "b24"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
+BUILD = "b25"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
 TEST_QUAD_CENTS = int(os.environ.get("TESTPREIS_QUAD_CENTS", "0"))   # Testpreis für ALLE quadratischen Bretter; 0 = aus (Live-Betrieb)
 BASE_CENTS, BASE_AREA, CENTS_PER_CM2 = 14900, 2500, 2.5   # Vorschlag: 149 € bis 50 x 50 cm, darüber 2,5 Cent je cm² (70 x 70 = 209 €, 100 x 100 = 336 €)
 PREORDER_NOTE = os.environ.get("VORBESTELL_HINWEIS", "Vorbestellung: Wir fertigen ab Februar 2027 in der Reihenfolge der Bestellungen.")
@@ -231,12 +231,14 @@ def update(ref, **kw):
         m.update(kw)
         _write(ref, m)
 
-def update_variant(ref, key, pct=None, live=None, ready=False, used=None):
+def update_variant(ref, key, pct=None, live=None, ready=False, used=None, lines=None):
     """Fortschritt, Live-Bildnummer, verwendete Fadenfarben und Fertig-Meldung EINER Variante (drei laufen gleichzeitig)."""
     with _meta_lock:
         m = load(ref) or {}
         if used is not None:
             m.setdefault("used", {})[key] = used
+        if lines is not None:
+            m.setdefault("nlines", {})[key] = lines
         if pct is not None:
             m.setdefault("prog", {})[key] = pct
         if live is not None:
@@ -396,6 +398,7 @@ def _warmup():
         _init_gain(C, T, Co, Gk, 0.1, 0.5, 2)
         _lines(0, 0, 1, np.empty(1, np.int64), ln, ok, used, Gk, C, T, Co, np.arange(n) * 3.0, np.zeros(n), 0.1, 0.5, 2, 2, np.full((n, n), 4, np.int32), -0.1, 0.0, 0.0, 1)
         _render_run(np.ones((n, 2)), np.arange(2, dtype=np.int64), 4, 3, np.ones(4, np.float32), np.ones(3, np.float32), np.zeros(16, np.uint16), np.zeros((16, 3), np.uint8))
+        engine2.warmup()
     except Exception:
         app.logger.exception("numba-Vorübersetzung fehlgeschlagen")
 
@@ -641,6 +644,7 @@ def compute_string_art(ref, m, key="a"):
             left = 0
 
     runs = color_runs(seq, cseq)
+    update_variant(ref, key, lines=sum(len(p) - 1 for _, p in runs))
     render_final(ref, m, key, runs, cols, px, py, a, LW)
     with open(os.path.join(d, f"pinfolge_{key}.txt"), "w") as f:
         if K == 1:
@@ -672,9 +676,16 @@ def compute_sw(ref, m, key):
     a = min(0.4, max(0.02, E_REF * (t_mm / 0.20) * (D0_CM / disc_cm) / LINE_W))
     lalpha = min(255, int(255 * a * LINE_W * lk))
     state = {"drawn": 0, "n": 0}
+    seq, cseq, started = [], [], set()                      # Live-Linien für den Browser (jede Linie einzeln gezeichnet)
+    LIVE_SEQ.setdefault(ref, {"t": time.time()})[key] = {"seq": seq, "cseq": cseq, "hex": ["#%02x%02x%02x" % c for c in cols],
+                                                         "alpha": round(lalpha / 255, 4), "lw": 1, "n": n,
+                                                         "bg": "#%02x%02x%02x" % disc}
 
     def progress(f, order):
         for k, p0, p1 in order[state["drawn"]:]:
+            if k not in started:
+                started.add(k); seq.append(p0); cseq.append(k)
+            seq.append(p1); cseq.append(k)
             ld.line([(px[p0] * lk, py[p0] * lk), (px[p1] * lk, py[p1] * lk)], fill=cols[k] + (lalpha,), width=1)
         state["drawn"] = len(order)
         if state["drawn"] // 1000 > state["n"] or f == 0:
@@ -685,8 +696,10 @@ def compute_sw(ref, m, key):
         else:
             update_variant(ref, key, pct=min(99, int(100 * f)))
 
-    order = engine2.solve(t, w, L, [lum(c) / 255 for c in cols], lum(disc) / 255, a_r, max_lines, progress)
+    order = engine2.solve(t, w, L, [lum(c) / 255 for c in cols], lum(disc) / 255, a_r, max_lines, progress, board_mm=disc_cm * 10)
+    progress(1.0, order)
     runs = engine2.runs_of(order)
+    update_variant(ref, key, lines=len(order))
     render_final(ref, mm, key, runs, cols, px, py, a, LINE_W)
     with open(os.path.join(d, f"pinfolge_{key}.txt"), "w") as f:
         f.write("\n".join(f"{thread_name(pal[k])}: " + ",".join(map(str, p)) for k, p in runs))
@@ -1285,19 +1298,21 @@ def status(ref):
     out = {"status": m["status"], "order_ref": ref, "job_id": ref, "progress": m.get("progress", 0),
            "prog": m.get("prog", {}), "live": m.get("live", {}), "lines": {}}
     for k, v in (LIVE_SEQ.get(ref) or {}).items():           # neue Linien seit der letzten Abfrage (?sa=, ?sb=, ?sc=)
-        if k in VARIANTS:
+        if k in VARIANTS or k in SUGGEST:
             since = max(0, request.args.get("s" + k, 0, type=int))
             end = min(len(v["cseq"]), since + 800)           # cseq wird nach seq ergänzt: so passen beide immer zusammen
             out["lines"][k] = {"from": since, "pins": v["seq"][since:end], "cols": v["cseq"][since:end], "hex": v["hex"],
-                               "alpha": v["alpha"], "lw": v["lw"], "n": v["n"]}
+                               "alpha": v["alpha"], "lw": v["lw"], "n": v["n"], "bg": v.get("bg")}
     if m["status"] == "error":
         out["message"] = m.get("message", "Die Berechnung ist fehlgeschlagen.")
     ready = m.get("ready") or []
-    out["variants"] = [{"key": k, "name": VARIANTS[k]["name"], "url": f"/preview/{ref}/{k}.png"} for k in VARIANTS if k in ready]
+    nl = m.get("nlines") or {}
+    out["variants"] = [{"key": k, "name": VARIANTS[k]["name"], "url": f"/preview/{ref}/{k}.png", "lines": nl.get(k)} for k in VARIANTS if k in ready]
     base = price_cents(m.get("orig") and dict(m, **m["orig"]) or m)
     out["suggestions"] = [{"key": k, "name": SUGGEST[k]["name"], "url": f"/preview/{ref}/{k}.png" if k in ready else None,
                            "pct": (m.get("prog") or {}).get(k, 0), "extra_cents": price_cents(with_suggestion(dict(m, **(m.get("orig") or {})), k)) - base,
-                           "cents": price_cents(with_suggestion(dict(m, **(m.get("orig") or {})), k))} for k in SUGGEST]
+                           "cents": price_cents(with_suggestion(dict(m, **(m.get("orig") or {})), k)), "lines": nl.get(k) if k in ready else None}
+                          for k in SUGGEST]
     out["sugg"] = m.get("sugg", "waiting")
     out["cents"] = base
     if m["status"] == "done" and out["variants"]:
@@ -1314,6 +1329,14 @@ def live_view(ref, key):
 @app.get("/preview/<ref>/<key>.png")
 def preview_variant(ref, key):
     p = os.path.join(odir(ref), f"preview_{key}.png")
+    if not load(ref) or (key not in VARIANTS and key not in SUGGEST) or not os.path.exists(p):
+        abort(404)
+    return send_file(p, mimetype="image/png", max_age=0)
+
+@app.get("/zoom/<ref>/<key>.png")
+def zoom_variant(ref, key):
+    """Fertiges Bild in voller Rechenauflösung (1000 px) zum Heranzoomen: einzelne Fäden sichtbar."""
+    p = os.path.join(odir(ref), f"final_{key}.png")
     if not load(ref) or (key not in VARIANTS and key not in SUGGEST) or not os.path.exists(p):
         abort(404)
     return send_file(p, mimetype="image/png", max_age=0)

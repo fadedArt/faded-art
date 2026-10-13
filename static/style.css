@@ -1,4 +1,4 @@
-:root{--build:"b24"}
+:root{--build:"b25"}
 [hidden]{display:none!important}   /* sonst überschreiben display-Regeln das hidden-Attribut (z. B. Ergebnisbild im Kreis) */
 @font-face{font-family:Cinzel;src:url(fonts/cinzel.woff2) format("woff2");font-weight:400 700;font-display:swap}
 @font-face{font-family:"Plus Jakarta Sans";src:url(fonts/plus-jakarta-sans.woff2) format("woff2");font-weight:300 600;font-display:swap}
@@ -118,3 +118,11 @@ mark{background:rgba(212,175,55,.2);color:var(--gold-t);padding:0 .25rem;border-
 .gs-val.on{background:var(--grad);color:#0b0b0b;border-color:transparent}
 .gs-code{font-family:ui-monospace,Menlo,monospace;font-size:2rem;letter-spacing:.12em;color:var(--gold-t);margin:1rem 0}
 .linkbtn{background:none;border:0;color:var(--gold-t);text-decoration:underline;cursor:pointer;font:inherit;padding:0}
+.biginfo{display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin:.6rem 0 .2rem;font-size:.9rem;color:var(--gold-t)}
+.biginfo .btn{padding:.5rem 1.1rem}
+.zoomov{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.94);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)}
+.zoomov[hidden]{display:none}
+.zbar{display:flex;gap:.5rem;justify-content:center;padding:.6rem}
+.zbar .btn{padding:.5rem 1.2rem}
+.zscroll{flex:1;overflow:auto;touch-action:pan-x pan-y pinch-zoom;-webkit-overflow-scrolling:touch}
+.zscroll img{display:block;max-width:none;width:200%;height:auto;margin:0 auto}
