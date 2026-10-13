@@ -77,8 +77,7 @@ class Lines:
 def lines_for(n):
     """Sehnen je Nagelzahl; nur eine Nagelzahl im Speicher."""
     with _cache_lock:
-        if n not in _cache:
-            _cache.clear()
+        if n not in _cache:                               # 240 und 360 Nägel passen beide in den Speicher (~35 + 70 MB)
             _cache[n] = Lines(n, RASTER, max(8, n // 16))
         return _cache[n]
 
@@ -283,7 +282,7 @@ def solve(t, w, L, colors, board, a, max_lines, progress=None, pen=SWITCH_PEN, s
         dead = 0 if (got and out[:got, 3].any()) else dead + 1
         if got == 0 or dead > DEAD:
             break
-        if progress and len(order) % 100 < EVERY:
+        if progress and (len(order) <= 300 or len(order) % 100 < EVERY):   # am Anfang oft: Zeichnen startet sofort
             progress(len(order) / max_lines, order)
     return order[:best[1]] if best[1] else order
 

@@ -1,4 +1,4 @@
-:root{--build:"b25"}
+:root{--build:"b26"}
 [hidden]{display:none!important}   /* sonst überschreiben display-Regeln das hidden-Attribut (z. B. Ergebnisbild im Kreis) */
 @font-face{font-family:Cinzel;src:url(fonts/cinzel.woff2) format("woff2");font-weight:400 700;font-display:swap}
 @font-face{font-family:"Plus Jakarta Sans";src:url(fonts/plus-jakarta-sans.woff2) format("woff2");font-weight:300 600;font-display:swap}
@@ -126,3 +126,9 @@ mark{background:rgba(212,175,55,.2);color:var(--gold-t);padding:0 .25rem;border-
 .zbar .btn{padding:.5rem 1.2rem}
 .zscroll{flex:1;overflow:auto;touch-action:pan-x pan-y pinch-zoom;-webkit-overflow-scrolling:touch}
 .zscroll img{display:block;max-width:none;width:200%;height:auto;margin:0 auto}
+.cart-thumb{position:relative;display:block;flex:0 0 140px}
+.cart-thumb img{display:block;width:140px;height:140px;border-radius:50%;object-fit:cover;background:#222}
+.cart-thumb span{display:none;font-size:.75rem;color:var(--muted)}
+.cart-thumb.noimg img{display:none}
+.cart-thumb.noimg span{display:block}
+@media(max-width:520px){.cart-item{flex-wrap:wrap}.cart-thumb{flex-basis:100px}.cart-thumb img{width:100px;height:100px}}
