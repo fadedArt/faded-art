@@ -1,5 +1,5 @@
 (() => {
-const BUILD = 'b26';
+const BUILD = 'b27';
 window.addEventListener('error', e => { const m = document.getElementById('msg'); if (m && !m.textContent && e.message) m.textContent = 'Technischer Fehler: ' + e.message; });
 const $ = id => document.getElementById(id);
 const S = 600, R = S * 0.49;     // Nagelring sitzt fast am Rand des Bildkreises (wie im berechneten Ergebnis)
@@ -161,7 +161,7 @@ async function freistellen() {
     mx.putImageData(id, 0, 0);
     x.globalCompositeOperation = 'destination-in'; x.drawImage(mc, 0, 0, c.width, c.height);   // Maske = Deckung des Fotos
     if (token !== cutToken || !box.checked) return;                          // inzwischen neues Foto oder ausgeschaltet
-    cut = c; $('bgHint').textContent = $('bgHint').dataset.text; draw();
+    cut = c; $('bgHint').textContent = $('bgHint').dataset.text; draw(); if (step === 5) specSoon();
   } catch (e) {
     if (token !== cutToken) return;
     box.checked = false; cut = null; $('bgHint').textContent = $('bgHint').dataset.text; draw();
@@ -187,7 +187,7 @@ const zoomBy = f => { const z = $('zoom'); view.s = Math.min(+z.max, Math.max(+z
 $('zin').addEventListener('click', () => zoomBy(1.1));
 $('zout').addEventListener('click', () => zoomBy(1 / 1.1));
 $('center').addEventListener('click', () => { fit(); draw(); });
-['format', 'size', 'wood', 'color', 'circle', 'thick', 'pincolor', 'pins'].forEach(id => $(id).addEventListener('input', board));
+['format', 'size', 'wood', 'color', 'circle', 'thick', 'pincolor', 'pins'].forEach(id => $(id).addEventListener('input', () => { board(); if (step === 5) specSoon(); }));
 $('cfg').addEventListener('submit', e => e.preventDefault());
 
 function show(n) {
@@ -202,6 +202,34 @@ function show(n) {
   cv.style.cursor = n === 1 ? 'grab' : 'default'; cv.style.touchAction = n === 1 ? 'none' : 'auto'; // Verschieben nur in Schritt 1
   msg(''); if (n >= 4 && lowContrast()) msg(MSG);
   draw(); saveState();
+  if (n === 5) specSoon(); else if (spec && !busy) dropSpec();
+}
+
+// ---- Vorab-Berechnung: sobald Schritt 5 erreicht ist, rechnet der Server schon los ----
+let spec = null, specTimer = null;                               // spec = { sig, ref, ready: Promise }
+const sig = () => JSON.stringify([cfg(), Math.round(view.x), Math.round(view.y), +view.s.toFixed(4), !!cut, img.src.length]);
+function dropSpec() {
+  const s0 = spec; spec = null;
+  if (s0) s0.ready.then(ref => ref && fetch('/cancel/' + ref, { method: 'POST' }).catch(() => {}));
+}
+function specSoon() { clearTimeout(specTimer); specTimer = setTimeout(startSpec, 600); }
+function startSpec() {
+  if (busy || !hasImg || step !== 5 || lowContrast()) return;
+  const sg = sig();
+  if (spec && spec.sig === sg) return;
+  dropSpec();
+  const me = { sig: sg };
+  me.ready = (async () => {
+    try {
+      const c = cfg(), fd = new FormData(), blob = await cropBlob();
+      fd.append('image', blob, cut ? 'crop.png' : 'crop.jpg');
+      ['format', 'size', 'wood', 'color', 'disc', 'thick', 'pin', 'pins'].forEach(k => fd.append(k, c[k]));
+      const r = await fetch('/generate', { method: 'POST', body: fd });
+      if (!r.ok) return null;
+      return (await r.json()).job_id;
+    } catch (e) { return null; }
+  })();
+  spec = me;
 }
 
 $('back').addEventListener('click', () => step > 1 && show(step - 1));
@@ -391,7 +419,7 @@ async function followJob(jobId, d, want) {                     // Berechnung ver
       if (r.status === 404) throw new Error('Die Berechnung ist nicht mehr auf dem Server (Neustart). Bitte neu berechnen');
       d = await r.json(); fails = 0;
     } catch (e) { if (e.message.startsWith('Die Berechnung ist nicht')) throw e; if (++fails > 40) throw new Error('Die Verbindung zum Server ist abgebrochen'); continue; }
-    if (d.status === 'error') throw new Error(d.message || 'Berechnung fehlgeschlagen');
+    if (d.status === 'error' || d.status === 'cancelled') throw new Error(d.message || 'Berechnung fehlgeschlagen');
     $('wait').textContent = 'Die Fäden werden gezogen, Linie für Linie … ' + (d.progress || 0) + ' %';
     showVariants(d);
   }
@@ -419,6 +447,16 @@ async function generate() {
   $('wait').textContent = 'Berechnung läuft, das dauert meist unter einer Minute …';
   resetResults();
   try {
+    if (spec && spec.sig === sig()) {                          // Vorab-Berechnung passt: sofort weiterzeichnen statt neu starten
+      const s0 = spec; spec = null;
+      const ref = await s0.ready;
+      if (ref) {
+        saveState({ job: ref, variant: null });
+        await followJob(ref, { status: 'running' }, null);
+        return;
+      }
+    }
+    dropSpec();
     const [blob] = await Promise.all([cropBlob(), fetchRetry('/health', {}, 10)]);   // Bild vorbereiten, während der Server aufwacht
     $('wait').textContent = 'Berechnung läuft, für drei Varianten kann das einige Minuten dauern …';
     const c = cfg(), fd = new FormData();
