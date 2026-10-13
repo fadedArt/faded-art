@@ -74,11 +74,39 @@ class Lines:
         self.cand_inv = (1 / np.sqrt(self.cand_e - self.cand_s)).astype(np.float32)
 
 
+_FIELDS = ("ids", "ws", "cand_off", "cand_j", "cand_s", "cand_e", "cand_inv")
+
+
+def _load_or_build(n):
+    """Sehnen-Tabelle von der Disk laden (unter 1 s) oder einmal bauen und speichern."""
+    import os
+    d = os.environ.get("FADED_CACHE")
+    p = os.path.join(d, f"engine2_{n}_{RASTER}.npz") if d else None
+    if p and os.path.exists(p):
+        try:
+            z = np.load(p)
+            L = Lines.__new__(Lines)
+            L.n, L.size = n, RASTER
+            for f in _FIELDS:
+                setattr(L, f, z[f])
+            return L
+        except Exception:
+            pass
+    L = Lines(n, RASTER, max(8, n // 16))
+    if p:
+        try:
+            np.savez(p + ".tmp.npz", **{f: getattr(L, f) for f in _FIELDS})
+            os.replace(p + ".tmp.npz", p)
+        except Exception:
+            pass
+    return L
+
+
 def lines_for(n):
     """Sehnen je Nagelzahl; nur eine Nagelzahl im Speicher."""
     with _cache_lock:
         if n not in _cache:                               # 240 und 360 Nägel passen beide in den Speicher (~35 + 70 MB)
-            _cache[n] = Lines(n, RASTER, max(8, n // 16))
+            _cache[n] = _load_or_build(n)
         return _cache[n]
 
 

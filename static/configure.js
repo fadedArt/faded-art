@@ -1,5 +1,5 @@
 (() => {
-const BUILD = 'b27';
+const BUILD = 'b28';
 window.addEventListener('error', e => { const m = document.getElementById('msg'); if (m && !m.textContent && e.message) m.textContent = 'Technischer Fehler: ' + e.message; });
 const $ = id => document.getElementById(id);
 const S = 600, R = S * 0.49;     // Nagelring sitzt fast am Rand des Bildkreises (wie im berechneten Ergebnis)
@@ -420,7 +420,9 @@ async function followJob(jobId, d, want) {                     // Berechnung ver
       d = await r.json(); fails = 0;
     } catch (e) { if (e.message.startsWith('Die Berechnung ist nicht')) throw e; if (++fails > 40) throw new Error('Die Verbindung zum Server ist abgebrochen'); continue; }
     if (d.status === 'error' || d.status === 'cancelled') throw new Error(d.message || 'Berechnung fehlgeschlagen');
-    $('wait').textContent = 'Die Fäden werden gezogen, Linie für Linie … ' + (d.progress || 0) + ' %';
+    const anyLine = Object.keys(d.lines || {}).some(k => (d.lines[k].pins || []).length) || Object.values(L).some(x => x.got);
+    $('wait').textContent = !anyLine && i > 12 ? 'Der Server startet gerade neu (passiert nach Updates), das erste Bild braucht dann bis zu einer Minute …'
+      : 'Die Fäden werden gezogen, Linie für Linie … ' + (d.progress || 0) + ' %';
     showVariants(d);
   }
   if (!d.variants || !d.variants.length) throw new Error('Die Berechnung dauert ungewöhnlich lange');
