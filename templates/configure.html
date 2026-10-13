@@ -6,7 +6,7 @@
   <li><b>1</b><span>Bild</span></li><li><b>2</b><span>Format</span></li><li><b>3</b><span>Untergrund</span></li><li><b>4</b><span>Faden</span></li><li><b>5</b><span>Pins</span></li>
 </ol>
 
-<div id="buildinfo" data-build="b24" hidden></div>
+<div id="buildinfo" data-build="b25" hidden></div>
 <form id="cfg" class="cfg" novalidate data-cfg='{{ cfg|tojson }}'>
 <div class="card panel">
   <section data-step="1">
@@ -101,6 +101,11 @@
     </div>
     <div class="spin" id="spin" hidden></div>
   </div>
+  <div class="biginfo" id="bigInfo" hidden><span id="bigLines"></span><button type="button" class="btn" id="zoomBtn" hidden>Heranzoomen</button></div>
+  <div class="zoomov" id="zoomOv" hidden role="dialog" aria-label="Bild vergrößert">
+    <div class="zbar"><button type="button" class="btn" id="zminus" aria-label="Verkleinern">−</button><button type="button" class="btn" id="zplus" aria-label="Vergrößern">+</button><button type="button" class="btn btn-gold" id="zclose">Schließen</button></div>
+    <div class="zscroll" id="zscroll"><img id="zimg" alt="Fadenbild in voller Auflösung"></div>
+  </div>
   <div id="variants" hidden>
     <p class="hint" id="vtext" style="margin-bottom:.6rem"></p>
     <div class="vgrid">
@@ -110,7 +115,7 @@
     </div>
     <div id="sugg" hidden>
       <h3 class="sugg-h">Unsere Vorschläge für dein Foto</h3>
-      <p class="hint" style="margin-bottom:.6rem">Die bestmögliche Umsetzung deines Motivs: Schwarz + Weiß gemischt, 360 Pins. Der Aufpreis gegenüber deiner Auswahl steht unter jedem Bild.</p>
+      <p class="hint" style="margin-bottom:.6rem">Die bestmögliche Umsetzung deines Motivs: Schwarz + Weiß gemischt, 360 Pins. Unter jedem Bild steht, wie viele Fäden (Handgriffe) es braucht. Der Aufpreis gegenüber deiner Auswahl steht unter jedem Bild.</p>
       <div class="vgrid">
         <button type="button" class="vopt wait" data-k="d"><canvas width="600" height="600"></canvas><img alt="Vorschlag Schwarz und Weiß auf Schwarz"><span>S+W auf Schwarz</span><small class="vp"></small><em class="xp"></em></button>
         <button type="button" class="vopt wait" data-k="e"><canvas width="600" height="600"></canvas><img alt="Vorschlag Schwarz und Weiß auf Nussbaum"><span>S+W auf Nussbaum</span><small class="vp"></small><em class="xp"></em></button>

@@ -1,21 +1,31 @@
-"""Faded Art Engine 2: Schwarz + Weiß gemischt (zwei durchgehende Fäden, beliebig oft gewechselt).
+"""Faded Art Engine 2: Schwarz + Weiß gemischt (zwei durchgehende Fäden).
 
-Testsieger aus dem Vergleich vom 13.10.2026 (15 Porträts x 6 Versionen): deutlich detailreicher als ein einzelner
-schwarzer Faden. Physikalisches Mischmodell: jeder Faden zieht die Zellen, die er quert, ein Stück in seine Farbe
-(c += a * w * (Farbe - c)). Pro Schritt wird die Farbe und Sehne mit dem größten Fehlerrückgang gewählt.
-Wechsel-Bremse: die andere Farbe kommt nur dran, wenn sie deutlich mehr bringt (gleiche Qualität, ~60 % weniger Wechsel).
+v2 (13.10.2026, Vergleich 15 Porträts): Der Fehler wird im leicht weichgezeichneten Bild gemessen, also so, wie das Auge
+das Fadenbild aus Abstand sieht. Ergebnis gegenüber v1: Ähnlichkeit 98,1 -> 98,45 (bei allen 15 Fotos besser),
+etwa 20 % weniger Faden und rund 45 statt 500 Farbwechsel.
 
-Speichersparend für Render Free (512 MB): Sehnen nur einmal je Nagel abgelegt, Pixelindex uint16, Deckung uint8.
+Mischmodell: jeder Faden zieht die Zellen, die er quert, ein Stück in seine Farbe (c += a * w * (Farbe - c)).
+Gewinn eines Fadens (linearisiert): -sum(d * (2R + q d)), R = G*G*(c - Ziel), alle EVERY Fäden exakt neu berechnet.
+Rechenkern mit numba (wie in app.py); fehlt numba, rechnet dieselbe Logik mit numpy (langsamer).
+Speichersparend für Render (512 MB): alle Sehnen einmal je Nagel in einem flachen Array, Pixelindex uint16, Deckung uint8.
 """
 import threading
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
-RASTER = 180          # Rechenraster in Pixeln (220 bringt kaum mehr, kostet aber deutlich Zeit und Speicher)
+RASTER = 180          # Rechenraster in Pixeln
+SIGMA_MM = 2.3        # Weichzeichnung in mm auf dem Brett (Betrachtungsabstand ca. 1-2 m)
+EVERY = 10            # so oft wird der weichgezeichnete Fehler exakt neu berechnet
 SWITCH_PEN = 100.0    # Wechsel-Bremse (0 = aus)
-PATIENCE = 400
+DEAD = 8              # so viele Abschnitte ohne Verbesserung, dann Stopp
 
 _cache, _cache_lock = {}, threading.Lock()
+
+try:
+    from numba import njit
+    _NUMBA = True
+except Exception:                                          # pragma: no cover
+    _NUMBA = False
 
 
 def _line(p0, p1, size):
@@ -39,7 +49,7 @@ def _line(p0, p1, size):
 
 
 class Lines:
-    """Alle erlaubten Sehnen, je Nagel flach hintereinander (für eine Rechnung über alle Kandidaten auf einmal)."""
+    """Alle erlaubten Sehnen als flache Liste (CSR): je Nagel p die Kandidaten cand_off[p]..cand_off[p+1]."""
     def __init__(self, n, size, min_gap):
         self.n, self.size = n, size
         c = (size - 1) / 2
@@ -50,32 +60,33 @@ class Lines:
             for j in range(i + 1, n):
                 if min(j - i, n - (j - i)) >= min_gap:
                     segs[(i, j)] = _line(pins[i], pins[j], size)
-        self.per_pin = []
+        off, cj, cs, ce, ids, ws, pos = [0], [], [], [], [], [], 0
         for i in range(n):
-            js, ids, ws, st, pos = [], [], [], [], 0
             for j in range(n):
                 s = segs.get((min(i, j), max(i, j)))
                 if s is not None:
-                    js.append(j); st.append(pos); ids.append(s[0]); ws.append(s[1]); pos += len(s[0])
-            st.append(pos)
-            st = np.array(st)
-            self.per_pin.append((np.array(js), np.concatenate(ids), np.concatenate(ws),
-                                 st[:-1].copy(), st, (1 / np.sqrt(np.diff(st))).astype(np.float32)))
+                    cj.append(j); cs.append(pos); ids.append(s[0]); ws.append(s[1]); pos += len(s[0]); ce.append(pos)
+            off.append(len(cj))
         del segs
-
-    def seg(self, a, b):
-        js, ids, ws, st, st_full, _ = self.per_pin[a]
-        i = int(np.searchsorted(js, b))
-        return ids[st_full[i]:st_full[i + 1]], ws[st_full[i]:st_full[i + 1]].astype(np.float32) / 255
+        self.ids, self.ws = np.concatenate(ids), np.concatenate(ws)
+        self.cand_off, self.cand_j = np.array(off, np.int64), np.array(cj, np.int64)
+        self.cand_s, self.cand_e = np.array(cs, np.int64), np.array(ce, np.int64)
+        self.cand_inv = (1 / np.sqrt(self.cand_e - self.cand_s)).astype(np.float32)
 
 
 def lines_for(n):
-    """Sehnen je Nagelzahl; nur eine Nagelzahl im Speicher (Render Free)."""
+    """Sehnen je Nagelzahl; nur eine Nagelzahl im Speicher."""
     with _cache_lock:
         if n not in _cache:
             _cache.clear()
             _cache[n] = Lines(n, RASTER, max(8, n // 16))
         return _cache[n]
+
+
+def _gauss_matrix(size, sigma):
+    r = np.arange(size)
+    G = np.exp(-(r[:, None] - r[None, :]) ** 2 / (2 * sigma ** 2))
+    return (G / G.sum(1, keepdims=True)).astype(np.float32)
 
 
 def clahe(g, clip, tiles=8):
@@ -125,66 +136,149 @@ def target(path, size=RASTER, gamma=1.0, clip=0.008, edges=False, bg=0.12):
     t = m * g + (1 - m) * bg
     yy, xx = np.mgrid[:size, :size]
     r = np.hypot(xx - size / 2, yy - size / 2) / (size / 2)
-    w = (0.5 + 1.0 * m) * np.clip(1.2 - 0.35 * r ** 2, 0.7, 1.2)   # Motiv und Bildmitte zählen mehr
+    w = (0.75 + 0.5 * m) * np.clip(1.15 - 0.3 * r ** 2, 0.8, 1.15)   # Motiv und Mitte etwas wichtiger
     if edges:
         e = np.hypot(*np.gradient(_blur(g, 1.0)))
-        w = w * (1 + 1.2 * np.clip(e / (np.percentile(e, 99) + 1e-6), 0, 1))
+        w = w * (1 + 0.8 * np.clip(e / (np.percentile(e, 99) + 1e-6), 0, 1))
     return t.astype(np.float32), w.astype(np.float32)
 
 
-def solve(t, w, L, colors, board, a, max_lines, progress=None, pen=SWITCH_PEN):
-    """Gibt die Spannreihenfolge [(Farbe, von, nach), ...] zurück."""
+def _steps_py(nsteps, cur, last, used, c, R, q, a, cols, off, cj, cs, ce, cinv, ids, ws, out, pen):
+    """Bis zu nsteps Fäden wählen (numpy-Fassung). Gibt die Anzahl zurück; out[i] = (Farbe, von, nach, Gewinn>0)."""
+    K = len(cols)
+    for step in range(nsteps):
+        best = (-1e30, -1, -1, 0, 0, 0.0)
+        for k in range(K):
+            p = cur[k]
+            o0, o1 = off[p], off[p + 1]
+            s0, s1 = cs[o0], ce[o1 - 1]
+            px = ids[s0:s1].astype(np.int64)
+            d = a * (ws[s0:s1] / 255.0) * (cols[k] - c[px])
+            g = np.add.reduceat(-d * (2 * R[px] + q * d), cs[o0:o1] - s0) * cinv[o0:o1]
+            g[used[k, p, cj[o0:o1]]] = -np.inf
+            i = int(np.argmax(g))
+            v = float(g[i])
+            eff = v if (k == last[0] or v <= 0) else v / (1 + pen)
+            if eff > best[0]:
+                best = (eff, k, int(cj[o0 + i]), int(cs[o0 + i]), int(ce[o0 + i]), v)
+        _, k, j, s, e, v = best
+        if k < 0 or v == -np.inf:
+            return step
+        p = cur[k]
+        px = ids[s:e].astype(np.int64)
+        dv = a * (ws[s:e] / 255.0) * (cols[k] - c[px])
+        R[px] += q * dv
+        c[px] += dv
+        used[k, p, j] = used[k, j, p] = True
+        out[step, 0], out[step, 1], out[step, 2], out[step, 3] = k, p, j, 1 if v > 0 else 0
+        cur[k] = j
+        last[0] = k
+    return nsteps
+
+
+if _NUMBA:
+    @njit(cache=True, nogil=True)
+    def _steps_nb(nsteps, cur, last, used, c, R, q, a, cols, off, cj, cs, ce, cinv, ids, ws, out, pen):
+        K = cols.shape[0]
+        for step in range(nsteps):
+            beff, bk, bj, bs, be, bv = -1e30, -1, -1, 0, 0, 0.0
+            for k in range(K):
+                p = cur[k]
+                for ci in range(off[p], off[p + 1]):
+                    j = cj[ci]
+                    if used[k, p, j]:
+                        continue
+                    s = 0.0
+                    for x in range(cs[ci], ce[ci]):
+                        px = ids[x]
+                        d = a * (ws[x] / 255.0) * (cols[k] - c[px])
+                        s -= d * (2.0 * R[px] + q * d)
+                    v = s * cinv[ci]
+                    eff = v if (k == last[0] or v <= 0) else v / (1.0 + pen)
+                    if eff > beff:
+                        beff, bk, bj, bs, be, bv = eff, k, j, cs[ci], ce[ci], v
+            if bk < 0:
+                return step
+            p = cur[bk]
+            for x in range(bs, be):
+                px = ids[x]
+                dv = a * (ws[x] / 255.0) * (cols[bk] - c[px])
+                R[px] += q * dv
+                c[px] += dv
+            used[bk, p, bj] = True
+            used[bk, bj, p] = True
+            out[step, 0] = bk
+            out[step, 1] = p
+            out[step, 2] = bj
+            out[step, 3] = 1 if bv > 0 else 0
+            cur[bk] = bj
+            last[0] = bk
+        return nsteps
+
+
+def warmup():
+    """numba-Übersetzung vorab (beim Serverstart im Hintergrund)."""
+    if not _NUMBA:
+        return
+    try:
+        z = np.zeros(4, np.float64)
+        _steps_nb(1, np.zeros(1, np.int64), np.zeros(1, np.int64), np.zeros((1, 2, 2), np.bool_), z, z.copy(), 0.1, 0.1,
+                  np.zeros(1, np.float64), np.array([0, 1, 2], np.int64), np.array([1, 0], np.int64), np.array([0, 1], np.int64),
+                  np.array([1, 2], np.int64), np.ones(2, np.float32), np.zeros(2, np.uint16), np.zeros(2, np.uint8),
+                  np.zeros((1, 4), np.int64), 0.0)
+    except Exception:
+        pass
+
+
+def solve(t, w, L, colors, board, a, max_lines, progress=None, pen=SWITCH_PEN, sigma_px=None, board_mm=450.0):
+    """Gibt die Spannreihenfolge [(Farbe, von, nach), ...] zurück. progress(anteil, order) wird regelmäßig gerufen."""
     size, n, K = L.size, L.n, len(colors)
+    sigma = sigma_px or max(0.6, SIGMA_MM * size / board_mm)
     lo, hi = min(min(colors), board), max(max(colors), board)
-    t = (lo + (hi - lo) * np.clip(t, 0, 1)).ravel().astype(np.float32)      # Ziel in den erreichbaren Bereich
-    c = np.full_like(t, board)
+    tt = (lo + (hi - lo) * np.clip(t, 0, 1)).astype(np.float32)          # Ziel in den erreichbaren Bereich
     yy, xx = np.mgrid[:size, :size]
-    W = (w * (np.hypot(xx - (size - 1) / 2, yy - (size - 1) / 2) < size / 2 - 1)).ravel().astype(np.float32)
-    cur = []
-    for col in colors:                                    # Startnagel: bester erster Zug je Farbe
+    Wm = (w * (np.hypot(xx - (size - 1) / 2, yy - (size - 1) / 2) < size / 2 - 1)).astype(np.float32)
+    Wm = Wm / max(float(Wm[Wm > 0].mean()), 1e-6)
+    G = _gauss_matrix(size, sigma)
+    imp = np.zeros((size, size), np.float32); imp[size // 2, size // 2] = 1
+    q = float(((G @ imp @ G.T) ** 2).sum())
+    c = np.full(size * size, board, np.float64)
+    cols = np.array(colors, np.float64)
+
+    def resid():
+        e = (G @ (c.reshape(size, size).astype(np.float32) - tt) @ G.T) * Wm
+        return (G @ (e * Wm) @ G.T).ravel().astype(np.float64), float((e ** 2).sum())
+
+    R, E = resid()
+    cur = np.zeros(K, np.int64)
+    for k in range(K):                                   # Startnagel: bester erster Zug je Farbe
         best = (-np.inf, 0)
         for p in range(0, n, 3):
-            js, ids, ws, st, _, _ = L.per_pin[p]
-            cv = c[ids]; nv = cv + a * (ws / 255) * (col - cv); tv = t[ids]
-            g = np.add.reduceat(W[ids] * ((cv - tv) ** 2 - (nv - tv) ** 2), st).max()
+            o0, o1 = L.cand_off[p], L.cand_off[p + 1]
+            s0, s1 = L.cand_s[o0], L.cand_e[o1 - 1]
+            px = L.ids[s0:s1].astype(np.int64)
+            d = a * (L.ws[s0:s1] / 255.0) * (cols[k] - c[px])
+            g = np.add.reduceat(-d * (2 * R[px] + q * d), L.cand_s[o0:o1] - s0).max()
             best = max(best, (g, p))
-        cur.append(best[1])
-    used = np.zeros((K, n, n), bool)
-    order, err, best, dead, last = [], 0.0, (0.0, 0), [0] * K, 0
-    for step in range(max_lines):
-        cand = []
-        for k in range(K):
-            if dead[k] > PATIENCE:
-                continue
-            js, ids, ws, st, _, inv = L.per_pin[cur[k]]
-            cv = c[ids]; nv = cv + a * (ws / 255) * (colors[k] - cv); tv = t[ids]
-            sc = np.add.reduceat(W[ids] * ((cv - tv) ** 2 - (nv - tv) ** 2), st) * inv
-            sc[used[k, cur[k], js]] = -np.inf
-            i = int(np.argmax(sc))
-            cand.append((float(sc[i]), k, int(js[i])))
-        if not cand:
+        cur[k] = best[1]
+    used = np.zeros((K, n, n), np.bool_)
+    last = np.zeros(1, np.int64)
+    out = np.zeros((EVERY, 4), np.int64)
+    step_fn = _steps_nb if _NUMBA else _steps_py
+    order, best, dead = [], (E, 0), 0
+    while len(order) < max_lines:
+        got = step_fn(min(EVERY, max_lines - len(order)), cur, last, used, c, R, q, a, cols, L.cand_off, L.cand_j,
+                      L.cand_s, L.cand_e, L.cand_inv, L.ids, L.ws, out, float(pen))
+        order += [(int(k), int(p0), int(p1)) for k, p0, p1, _ in out[:got]]
+        R, E = resid()
+        if E < best[0]:
+            best = (E, len(order))
+        dead = 0 if (got and out[:got, 3].any()) else dead + 1
+        if got == 0 or dead > DEAD:
             break
-        g, k, j = max(cand, key=lambda x: x[0] if (x[1] == last or x[0] <= 0) else x[0] / (1 + pen))
-        if g == -np.inf:
-            break
-        if g <= 0:
-            dead[k] += 1
-            if all(d > PATIENCE for d in dead):
-                break
-        else:
-            dead[k] = 0
-        p = cur[k]
-        used[k, p, j] = used[k, j, p] = True
-        ids, ws = L.seg(p, j)
-        cv = c[ids]; nv = cv + a * ws * (colors[k] - cv); tv = t[ids]
-        err -= float(np.sum(W[ids] * ((cv - tv) ** 2 - (nv - tv) ** 2)))
-        c[ids] = nv
-        order.append((k, p, j)); cur[k] = j; last = k
-        if err < best[0]:
-            best = (err, len(order))
-        if progress and step % 200 == 0:
-            progress(step / max_lines, order)
-    return order[:best[1]]
+        if progress and len(order) % 100 < EVERY:
+            progress(len(order) / max_lines, order)
+    return order[:best[1]] if best[1] else order
 
 
 def runs_of(order):
@@ -196,3 +290,13 @@ def runs_of(order):
         else:
             out.append((k, [a, b]))
     return out
+
+
+def live_seq(order):
+    """Pinfolge im Format der Live-Ansicht (seq, cseq): beim ersten Faden einer Farbe kommt deren Startnagel davor."""
+    seq, cseq, started = [], [], set()
+    for k, a, b in order:
+        if k not in started:
+            started.add(k); seq.append(a); cseq.append(k)
+        seq.append(b); cseq.append(k)
+    return seq, cseq
