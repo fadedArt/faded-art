@@ -1,4 +1,4 @@
-import base64, hashlib, hmac, json, math, mimetypes, os, re, shutil, smtplib, threading, time, urllib.error, urllib.request, uuid
+import base64, hashlib, hmac, json, secrets, math, mimetypes, os, re, shutil, smtplib, threading, time, urllib.error, urllib.request, uuid
 from email.message import EmailMessage
 from datetime import datetime
 from datetime import timedelta
@@ -11,6 +11,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 from fpdf import FPDF
 from numba import njit
+import engine2
 
 mimetypes.add_type("application/wasm", ".wasm")          # Freisteller im Browser (static/mp): Browser verlangen diese Typen
 mimetypes.add_type("text/javascript", ".mjs")
@@ -46,8 +47,9 @@ COLORS = {
     "weiss": ("Reinweiß", (250, 250, 250)),
     "gold": ("Champagner Gold", (212, 175, 55)),
     "silber": ("Silber", (195, 195, 195)),
+    "sw": ("Schwarz + Weiß gemischt", (12, 12, 12)),
 }
-SHOP_COLORS = ("schwarz", "weiss")   # Fadenfarben, die der Shop gerade anbietet (Gold, Silber, Mehrfarbig: hier ergänzen)
+SHOP_COLORS = ("schwarz", "weiss", "sw")   # Fadenfarben, die der Shop gerade anbietet (Gold, Silber, Mehrfarbig: hier ergänzen)
 MULTI = "mehrfarbig"   # Wert im Konfigurator: Fadenfarben werden automatisch aus dem Foto gewählt
 MULTI_COLORS = {       # Fäden, aus denen die Mehrfarb-Berechnung wählt (nur echte, kaufbare Garnfarben eintragen)
     "schwarz": ("Tiefschwarz", (12, 12, 12)),
@@ -62,8 +64,27 @@ MULTI_COLORS = {       # Fäden, aus denen die Mehrfarb-Berechnung wählt (nur e
 MULTI_SAT, MULTI_CHROMA = 1.8, 2.5        # Mehrfarbig: Sättigung des Fotos, Gewicht der Farbe beim Zerlegen
 MULTI_LINEAR, MULTI_LINES_F = True, 1.3   # Mehrfarbig nach dem linearen Modell (wie Einfarbig); Linien = LINES x Faktor
 MULTI_MAX, MULTI_EUR = 4, 0   # höchstens so viele Fadenfarben; Aufpreis für Mehrfarbig in € (noch festlegen!)
+SW = "sw"                     # Schwarz + Weiß gemischt: zwei Fäden, Engine 2 (engine2.py), Testsieger vom 13.10.2026
+SW_EUR = 40                   # Aufpreis für Schwarz + Weiß in € (Platzhalter, bitte festlegen!)
+SW_PAL = ["schwarz", "weiss"]
+SW_LINES = {240: 9000, 360: 12000}   # Höchstzahl Fäden (gemischt braucht ca. 3x so viel Faden wie Einfarbig)
+SW_STYLE = {"a": dict(gamma=1.0, clip=0.008), "b": dict(gamma=1.2, clip=0.012), "c": dict(gamma=0.85, clip=0.005)}
+# Vorschläge: werden zusätzlich zu den drei Varianten berechnet, ohne Rücksicht auf den Preis (bestes Ergebnis).
+# set = was sich an der Bestellung ändert, wenn der Kunde den Vorschlag wählt (Aufpreis ergibt sich daraus automatisch)
+SUGGEST = {
+    "d": dict(name="Schwarz + Weiß auf Schwarz", set=dict(color=SW, disc="schwarz", wood="mdf", pins=360), edges=False),
+    "e": dict(name="Schwarz + Weiß auf Nussbaum", set=dict(color=SW, disc="braun", wood="nussbaum", pins=360), edges=False),
+    "f": dict(name="Schwarz + Weiß, Konturen betont", set=dict(color=SW, disc="anthrazit", pins=360), edges=True),
+}
 BLOCK = 150                   # Mehrfarbig: so viele Linien am Stück mit einer Farbe, dann wird ggf. gewechselt
 CHROMA = 0.7                  # Gewicht der Farbabweichung gegenüber der Helligkeit (Mehrfarbig)
+
+def style_name(key):
+    return (VARIANTS.get(key) or SUGGEST.get(key) or {"name": key})["name"]
+
+def with_suggestion(m, key):
+    """Bestellung so, wie sie mit dem Vorschlag key aussähe (ohne sie zu ändern)."""
+    return dict(m, **SUGGEST[key]["set"]) if key in SUGGEST else dict(m)
 
 def thread_name(k):
     return (COLORS.get(k) or MULTI_COLORS[k])[0]
@@ -106,9 +127,73 @@ MIN_CONTRAST = 60
 def lum(rgb):
     return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 PINS = {240: 0, 360: 70}                       # Pins -> Aufpreis in €
-BUILD = "b23"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
-TEST_QUAD_CENTS = int(os.environ.get("TESTPREIS_QUAD_CENTS", "50"))   # Testpreis für ALLE quadratischen Bretter; 0 = aus (Live-Betrieb!)
-BASE_CENTS, BASE_AREA, CENTS_PER_CM2 = 50, 2500, 2.5  # 0,50 € ist noch der Testpreis!
+BUILD = "b24"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
+TEST_QUAD_CENTS = int(os.environ.get("TESTPREIS_QUAD_CENTS", "0"))   # Testpreis für ALLE quadratischen Bretter; 0 = aus (Live-Betrieb)
+BASE_CENTS, BASE_AREA, CENTS_PER_CM2 = 14900, 2500, 2.5   # Vorschlag: 149 € bis 50 x 50 cm, darüber 2,5 Cent je cm² (70 x 70 = 209 €, 100 x 100 = 336 €)
+PREORDER_NOTE = os.environ.get("VORBESTELL_HINWEIS", "Vorbestellung: Wir fertigen ab Februar 2027 in der Reihenfolge der Bestellungen.")
+
+# ---------- Gutscheine (Wertgutscheine, auch zum Vorbestellen) ----------
+VOUCHER_VALUES = (5000, 10000, 15000, 20000, 30000)    # wählbare Werte in Cent
+VOUCHER_LIMIT = int(os.environ.get("GUTSCHEIN_LIMIT", "25"))   # höchstens so viele Gutscheine verkaufen (0 = unbegrenzt)
+VOUCHER_YEARS = 3                                        # gesetzliche Verjährung: 3 Jahre zum Jahresende
+VDIR = os.path.join(DATA_DIR, "gutscheine")
+os.makedirs(VDIR, exist_ok=True)
+_vlock = threading.Lock()
+CODE_RE = re.compile(r"^FA-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$")
+
+def voucher_load(code):
+    code = (code or "").strip().upper()
+    if not CODE_RE.match(code):
+        return None
+    try:
+        with open(os.path.join(VDIR, code + ".json")) as f:
+            return json.load(f)
+    except OSError:
+        return None
+
+def voucher_save(v):
+    p = os.path.join(VDIR, v["code"] + ".json")
+    with open(p + ".tmp", "w") as f:
+        json.dump(v, f)
+    os.replace(p + ".tmp", p)
+
+def voucher_sold():
+    return sum(1 for f in os.listdir(VDIR) if f.endswith(".json"))
+
+def voucher_valid_until(created):
+    y = time.localtime(created).tm_year + VOUCHER_YEARS
+    return f"31.12.{y}"
+
+def voucher_ok(v):
+    return bool(v) and v["left"] > 0 and time.time() < time.mktime((time.localtime(v["created"]).tm_year + VOUCHER_YEARS, 12, 31, 23, 59, 59, 0, 0, -1))
+
+def voucher_create(session_id, cents, email, name):
+    """Legt den Gutschein nach bezahlter Zahlung an. Mehrfachmeldung derselben Zahlung erzeugt keinen zweiten."""
+    with _vlock:
+        for f in os.listdir(VDIR):
+            if f.endswith(".json"):
+                v = json.load(open(os.path.join(VDIR, f)))
+                if v.get("session") == session_id:
+                    return v
+        alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+        while True:
+            code = "FA-" + "".join(secrets.choice(alphabet) for _ in range(4)) + "-" + "".join(secrets.choice(alphabet) for _ in range(4))
+            if not os.path.exists(os.path.join(VDIR, code + ".json")):
+                break
+        v = dict(code=code, cents=cents, left=cents, email=email, name=name, session=session_id, created=time.time(), uses=[])
+        voucher_save(v)
+    threading.Thread(target=voucher_mail, args=(v,), daemon=True).start()
+    return v
+
+def voucher_use(code, cents, use_id):
+    """Zieht cents vom Gutschein ab (einmal je use_id)."""
+    with _vlock:
+        v = voucher_load(code)
+        if not v or use_id in v["uses"]:
+            return
+        v["left"] = max(0, v["left"] - cents)
+        v["uses"].append(use_id)
+        voucher_save(v)
 # Feste Größen (Breite x Höhe in cm) je Format. Einzige Quelle: Frontend liest sie von hier.
 SIZES = {
     "rund": {"S": (30, 30), "M": (50, 50), "L": (70, 70), "XL": (100, 100)},   # Durchmesser in cm
@@ -160,7 +245,7 @@ def update_variant(ref, key, pct=None, live=None, ready=False, used=None):
             m["ready"] = (m.get("ready") or []) + [key]
         m["beat"] = time.time()
         if m.get("prog"):
-            m["progress"] = int(sum(m["prog"].values()) / len(VARIANTS))
+            m["progress"] = int(sum(v for k, v in m["prog"].items() if k in VARIANTS) / len(VARIANTS))
         _write(ref, m)
 
 def ring_cm(m):
@@ -175,7 +260,7 @@ def price_cents(m):
         return TEST_QUAD_CENTS
     area = m["w"] * m["h"] * (ROUND_AREA if m.get("fmt") in ROUND_FORMATS else 1)
     extra = max(0, area - BASE_AREA) * CENTS_PER_CM2
-    return BASE_CENTS + round(extra) + (WOOD[m["wood"]][2] + PINS[m["pins"]] + (MULTI_EUR if m.get("color") == MULTI else 0)) * 100
+    return BASE_CENTS + round(extra) + (WOOD[m["wood"]][2] + PINS[m["pins"]] + (MULTI_EUR if m.get("color") == MULTI else 0) + (SW_EUR if m.get("color") == SW else 0)) * 100
 
 
 # ---------- String-Art-Berechnung (dein Algorithmus, pro Bestellung isoliert) ----------
@@ -555,8 +640,63 @@ def compute_string_art(ref, m, key="a"):
                 break
             left = 0
 
-    # 3) Rendern in 2000 px, Abschnitt für Abschnitt (spätere Fäden liegen oben); Deckkraft überlagert sich physikalisch
     runs = color_runs(seq, cseq)
+    render_final(ref, m, key, runs, cols, px, py, a, LW)
+    with open(os.path.join(d, f"pinfolge_{key}.txt"), "w") as f:
+        if K == 1:
+            f.write(",".join(map(str, seq)))
+        else:                                                 # Mehrfarbig: eine Zeile je Abschnitt
+            f.write("\n".join(f"{thread_name(pal[k])}: " + ",".join(map(str, p)) for k, p in runs))
+    update_variant(ref, key, used=[pal[k] for k in sorted(set(cseq))])   # Mehrfarbig: nicht jede gewählte Farbe wird gebraucht
+    write_instructions(ref, m, runs, pal, px, py, rp, key, n_lines)
+
+def compute_sw(ref, m, key):
+    """Schwarz + Weiß gemischt (engine2.py). Für die Varianten a/b/c bei Fadenwahl "sw" und für die Vorschläge d/e/f."""
+    mm = with_suggestion(m, key)
+    st = SW_STYLE.get(key, SW_STYLE["a"])
+    sg = SUGGEST.get(key)
+    d, n, pal = odir(ref), mm["pins"], SW_PAL
+    cols = [thread_rgb(c) for c in pal]
+    disc = DISC[mm["disc"]][1]
+    disc_cm = max(10.0, ring_cm(mm))
+    t_mm = float(mm["thick"])
+    a_r = t_mm * engine2.RASTER / (disc_cm * 10)            # Deckkraft eines Fadens im Rechenraster (Fadendicke / Rasterzelle)
+    L = engine2.lines_for(n)
+    t, w = engine2.target(os.path.join(d, "input.png"), gamma=st["gamma"], clip=st["clip"], edges=bool(sg and sg["edges"]))
+    max_lines = int(SW_LINES[n] * min(1.6, max(1.0, (0.20 / t_mm) * (disc_cm / D0_CM))))
+    geo = geometry(n)
+    px, py, rp = geo["px"], geo["py"], geo["rp"]
+    LIVE, lk = 600, 600 / W_IMG                             # Live-Bild wie bei compute_string_art
+    live = Image.new("RGB", (LIVE, LIVE), disc)
+    ld = ImageDraw.Draw(live, "RGBA")
+    a = min(0.4, max(0.02, E_REF * (t_mm / 0.20) * (D0_CM / disc_cm) / LINE_W))
+    lalpha = min(255, int(255 * a * LINE_W * lk))
+    state = {"drawn": 0, "n": 0}
+
+    def progress(f, order):
+        for k, p0, p1 in order[state["drawn"]:]:
+            ld.line([(px[p0] * lk, py[p0] * lk), (px[p1] * lk, py[p1] * lk)], fill=cols[k] + (lalpha,), width=1)
+        state["drawn"] = len(order)
+        if state["drawn"] // 1000 > state["n"] or f == 0:
+            state["n"] += 1
+            live.save(os.path.join(d, f"live_{key}.tmp.jpg"), quality=80)
+            os.replace(os.path.join(d, f"live_{key}.tmp.jpg"), os.path.join(d, f"live_{key}.jpg"))
+            update_variant(ref, key, pct=min(99, int(100 * f)), live=state["n"])
+        else:
+            update_variant(ref, key, pct=min(99, int(100 * f)))
+
+    order = engine2.solve(t, w, L, [lum(c) / 255 for c in cols], lum(disc) / 255, a_r, max_lines, progress)
+    runs = engine2.runs_of(order)
+    render_final(ref, mm, key, runs, cols, px, py, a, LINE_W)
+    with open(os.path.join(d, f"pinfolge_{key}.txt"), "w") as f:
+        f.write("\n".join(f"{thread_name(pal[k])}: " + ",".join(map(str, p)) for k, p in runs))
+    update_variant(ref, key, used=list(pal))
+    write_instructions(ref, mm, runs, pal, px, py, rp, key, max_lines)
+
+def render_final(ref, m, key, runs, cols, px, py, a, LW):
+    """Rendern in 2000 px, Abschnitt für Abschnitt (spätere Fäden liegen oben); Deckkraft überlagert sich physikalisch."""
+    d, W, S = odir(ref), W_IMG, S_RENDER
+    disc, bg = DISC[m["disc"]][1], WOOD[m["wood"]][1]
     P = np.ascontiguousarray(np.stack([px, py], 1) * (S / W))
     ra = min(0.95, 2 * a * LW)                               # Deckung je Pixel einer 1 px breiten Linie: wirkt wie echter Faden
     canvas = np.empty((S * S, 3), np.uint8)                # 8 Bit je Farbe: wenig Speicher (Render Free hat nur 512 MB)
@@ -581,18 +721,11 @@ def compute_string_art(ref, m, key="a"):
     final.paste(art, (0, 0), mask)
     final.save(os.path.join(d, f"final_{key}.png"), compress_level=3)              # privat, nur nach Zahlung nutzbar (Stufe 3: schneller und kleiner als Standard)
     preview_img(final).save(os.path.join(d, f"preview_{key}.png"), compress_level=3)   # Vorschau ohne Wasserzeichen
-    with open(os.path.join(d, f"pinfolge_{key}.txt"), "w") as f:
-        if K == 1:
-            f.write(",".join(map(str, seq)))
-        else:                                                 # Mehrfarbig: eine Zeile je Abschnitt
-            f.write("\n".join(f"{thread_name(pal[k])}: " + ",".join(map(str, p)) for k, p in runs))
-    update_variant(ref, key, used=[pal[k] for k in sorted(set(cseq))])   # Mehrfarbig: nicht jede gewählte Farbe wird gebraucht
-    write_instructions(ref, m, runs, pal, px, py, rp, key, n_lines)
 
 def write_instructions(ref, m, runs, pal, px, py, rp, key, n_lines):
     """Anleitung mit allen Einstellungen und der kompletten Pinfolge (für die Fertigung)."""
     n, disc_cm = m["pins"], round(ring_cm(m))
-    multi = m["color"] == MULTI
+    multi = len(pal) > 1
     scale = (disc_cm / 2 / rp) / 100
     meters = {}
     for k, p in runs:
@@ -626,7 +759,7 @@ def write_instructions(ref, m, runs, pal, px, py, rp, key, n_lines):
     txt = f"""FADED ART - Pinfolge und Anleitung
 Erstellt am: {datetime.now():%d.%m.%Y um %H:%M:%S}
 Bestellnummer: {ref}
-Stil der Berechnung: {VARIANTS[key]['name']}
+Stil der Berechnung: {style_name(key)}
 
 === PROJEKT-EINSTELLUNGEN ===
 Anzahl Pins: {n}
@@ -661,7 +794,7 @@ Gesamtschritte: {total}{f" in {len(runs)} Abschnitten" if multi else ""}
 
 def write_pdf(ref, m, runs, pal, meters, total, n_lines, key):
     """Fertigungsanleitung als PDF: Seite 1 Vorschau und alle Einstellungen, danach die Pinfolge zum Abhaken."""
-    n, disc_cm, multi = m["pins"], round(ring_cm(m)), m["color"] == MULTI
+    n, disc_cm, multi = m["pins"], round(ring_cm(m)), len(pal) > 1
     pdf = FPDF(format="A4")
     pdf.set_auto_page_break(False)
     pdf.set_title(f"Faded Art Anleitung {ref}")
@@ -681,7 +814,7 @@ def write_pdf(ref, m, runs, pal, meters, total, n_lines, key):
     pdf.cell(0, 10, "FADED ART", new_x="LMARGIN", new_y="NEXT")
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Helvetica", "", 12)
-    pdf.cell(0, 6, f"Fertigungsanleitung  |  Stil: {VARIANTS[key]['name']}  |  erstellt am {datetime.now():%d.%m.%Y %H:%M}",
+    pdf.cell(0, 6, f"Fertigungsanleitung  |  Stil: {style_name(key)}  |  erstellt am {datetime.now():%d.%m.%Y %H:%M}",
              new_x="LMARGIN", new_y="NEXT")
     pdf.image(os.path.join(odir(ref), f"preview_{key}.png"), x=12, y=30, w=88)
     if multi:
@@ -791,7 +924,7 @@ def run_job(ref):
 
         def one(key):                                # alle drei Varianten laufen gleichzeitig, jede mit Live-Bild
             try:
-                compute_string_art(ref, meta, key)
+                (compute_sw if meta["color"] == SW else compute_string_art)(ref, meta, key)
                 update_variant(ref, key, pct=100, ready=True)
             except Exception:
                 app.logger.exception("Variante %s fehlgeschlagen (%s)", key, ref)
@@ -800,10 +933,18 @@ def run_job(ref):
             list(ex.map(one, list(VARIANTS)))
         if not load(ref).get("ready"):
             raise RuntimeError("keine Variante berechnet")
-        update(ref, status="done", progress=100)
+        update(ref, status="done", progress=100, sugg="running")
     except Exception:
         app.logger.exception("Berechnung fehlgeschlagen (%s)", ref)
         update(ref, status="error", message="Die Berechnung ist fehlgeschlagen.")
+        return
+    for key in SUGGEST:                              # danach die Vorschläge, einer nach dem anderen (Kunde kann schon kaufen)
+        try:
+            compute_sw(ref, meta, key)
+            update_variant(ref, key, pct=100, ready=True)
+        except Exception:
+            app.logger.exception("Vorschlag %s fehlgeschlagen (%s)", key, ref)
+    update(ref, sugg="done")
 
 
 # ---------- Admin: bezahlte Bestellungen mit Anleitung ansehen (nur mit ADMIN_KEY) ----------
@@ -853,6 +994,193 @@ def admin_file(ref, name):
     return send_file(os.path.join(odir(ref), name), as_attachment=(name != "final.png"), max_age=0)
 
 
+# ---------- Gutscheine: Seiten und PDF ----------
+def voucher_pdf(v):
+    """Gutschein zum Ausdrucken (A5 quer)."""
+    pdf = FPDF(orientation="L", format="A5")
+    pdf.set_auto_page_break(False)
+    pdf.add_page()
+    pdf.set_fill_color(11, 11, 11)
+    pdf.rect(0, 0, 210, 148, style="F")
+    pdf.set_draw_color(212, 175, 55)
+    pdf.set_line_width(0.8)
+    pdf.ellipse(140, 24, 100, 100)
+    pdf.set_text_color(212, 175, 55)
+    pdf.set_font("Helvetica", "B", 26)
+    pdf.set_xy(14, 18)
+    pdf.cell(0, 12, "FADED ART")
+    pdf.set_font("Helvetica", "", 13)
+    pdf.set_text_color(240, 240, 240)
+    pdf.set_xy(14, 34)
+    pdf.cell(0, 8, "Gutschein für ein String-Art-Bild aus deinem Foto")
+    if v.get("name"):
+        pdf.set_xy(14, 46)
+        pdf.cell(0, 8, f"Für: {v['name']}")
+    pdf.set_font("Helvetica", "B", 40)
+    pdf.set_text_color(212, 175, 55)
+    pdf.set_xy(14, 60)
+    pdf.cell(0, 18, euro(v["cents"]).replace("€", "EUR"))   # Standardschrift kennt kein €-Zeichen
+    pdf.set_font("Courier", "B", 20)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_xy(14, 86)
+    pdf.cell(0, 10, v["code"])
+    pdf.set_font("Helvetica", "", 9.5)
+    pdf.set_text_color(190, 190, 190)
+    pdf.set_xy(14, 102)
+    pdf.multi_cell(120, 5, f"Einlösen: Foto hochladen auf faded-art, Bild gestalten, Code im Warenkorb eingeben. "
+                   f"Gültig bis {voucher_valid_until(v['created'])}. {PREORDER_NOTE} Keine Barauszahlung.")
+    return bytes(pdf.output())
+
+def send_mail(to, subject, text, files=()):
+    """E-Mail über Resend (RESEND_API_KEY) oder SMTP. files: [(Name, MIME-Typ, Bytes)]."""
+    key = os.environ.get("RESEND_API_KEY", "").strip()
+    if key:
+        body = json.dumps({"from": os.environ.get("MAIL_FROM", "Faded Art <onboarding@resend.dev>"), "to": [to], "subject": subject,
+                           "text": text, "attachments": [{"filename": n, "content": base64.b64encode(b).decode()} for n, _, b in files]})
+        req = urllib.request.Request("https://api.resend.com/emails", data=body.encode(), method="POST",
+                                     headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json", "User-Agent": "faded-art"})
+        try:
+            urllib.request.urlopen(req, timeout=60).read()
+        except urllib.error.HTTPError as e:
+            raise RuntimeError(f"Resend {e.code}: {e.read().decode(errors='replace')[:300]}") from None
+    elif os.environ.get("SMTP_HOST"):
+        msg = EmailMessage()
+        msg["Subject"], msg["To"], msg["From"] = subject, to, os.environ.get("SMTP_USER", to)
+        msg.set_content(text)
+        for name, kind, data in files:
+            msg.add_attachment(data, maintype=kind.split("/")[0], subtype=kind.split("/")[1], filename=name)
+        with smtplib.SMTP(os.environ["SMTP_HOST"], int(os.environ.get("SMTP_PORT", "587")), timeout=30) as sm:
+            sm.starttls()
+            sm.login(os.environ["SMTP_USER"], os.environ["SMTP_PASS"])
+            sm.send_message(msg)
+    else:
+        raise RuntimeError("kein E-Mail-Versand eingerichtet")
+
+def voucher_mail(v):
+    """Gutschein als PDF an den Käufer, Kopie an dich."""
+    text = (f"Vielen Dank! Dein Faded-Art-Gutschein über {euro(v['cents'])}:\n\n    {v['code']}\n\n"
+            f"Gültig bis {voucher_valid_until(v['created'])}. Im Anhang als PDF zum Ausdrucken und Verschenken.\n{PREORDER_NOTE}")
+    for to in filter(None, [v.get("email"), os.environ.get("ORDER_MAIL_TO")]):
+        try:
+            send_mail(to, f"Dein Faded-Art-Gutschein {v['code']}", text, [(f"Gutschein-{v['code']}.pdf", "application/pdf", voucher_pdf(v))])
+        except Exception:
+            app.logger.exception("Gutschein-Mail an %s fehlgeschlagen", to)
+
+@app.get("/gutschein")
+def voucher_page():
+    left = (VOUCHER_LIMIT - voucher_sold()) if VOUCHER_LIMIT else None
+    return render_template("gutschein.html", values=VOUCHER_VALUES, left=left, note=PREORDER_NOTE, years=VOUCHER_YEARS)
+
+@app.post("/gutschein/kaufen")
+def voucher_buy():
+    d = request.get_json(silent=True) or {}
+    cents, email, name = d.get("cents"), str(d.get("email", "")).strip(), str(d.get("name", "")).strip()[:60]
+    if cents not in VOUCHER_VALUES:
+        return jsonify(message="Bitte einen Betrag wählen"), 400
+    if not re.match(r"^\S+@\S+\.\S+$", email) or d.get("agb") is not True:
+        return jsonify(message="E-Mail oder AGB-Zustimmung fehlt"), 400
+    if VOUCHER_LIMIT and voucher_sold() >= VOUCHER_LIMIT:
+        return jsonify(message="Die Gutscheine sind leider ausverkauft"), 400
+    if not stripe.api_key:
+        return jsonify(message="Zahlung ist noch nicht eingerichtet (STRIPE_SECRET_KEY fehlt bei Render)"), 500
+    try:
+        s = stripe.checkout.Session.create(
+            mode="payment", locale="de", customer_email=email,
+            line_items=[{"quantity": 1, "price_data": {"currency": "eur", "unit_amount": cents,
+                                                         "product_data": {"name": f"Faded-Art-Gutschein {euro(cents)}" + (f" für {name}" if name else "")}}}],
+            metadata={"gutschein_kauf": str(cents), "gutschein_name": name},
+            success_url=request.host_url + "gutschein/fertig?session_id={CHECKOUT_SESSION_ID}",
+            cancel_url=request.host_url + "gutschein")
+        return jsonify(url=s.url)
+    except Exception as e:
+        app.logger.exception("Stripe-Fehler (Gutschein)")
+        return jsonify(message="Checkout konnte nicht gestartet werden" +
+                       (": " + str(getattr(e, "user_message", None) or e)[:300] if stripe.api_key.startswith(("sk_test", "rk_test")) else "")), 500
+
+@app.get("/gutschein/fertig")
+def voucher_done():
+    sid, v = request.args.get("session_id", ""), None
+    if sid.startswith("cs_") and stripe.api_key:
+        try:
+            v = handle_checkout(stripe.checkout.Session.retrieve(sid))
+        except Exception:
+            app.logger.exception("Gutschein-Sitzung %s konnte nicht geprüft werden", sid)
+    return render_template("gutschein_fertig.html", v=v, until=voucher_valid_until(v["created"]) if v else "", note=PREORDER_NOTE)
+
+@app.get("/gutschein/<code>.pdf")
+def voucher_download(code):
+    v = voucher_load(code)
+    if not v:
+        abort(404)
+    return send_file(__import__("io").BytesIO(voucher_pdf(v)), mimetype="application/pdf", as_attachment=True,
+                     download_name=f"Gutschein-{v['code']}.pdf")
+
+@app.post("/cart/gutschein")
+def cart_voucher():
+    code = str((request.get_json(silent=True) or {}).get("code", "")).strip().upper()
+    if not code:
+        session.pop("voucher", None)
+        return jsonify(ok=True)
+    v = voucher_load(code)
+    if not voucher_ok(v):
+        return jsonify(message="Dieser Gutscheincode ist ungültig, abgelaufen oder schon aufgebraucht."), 400
+    session["voucher"] = v["code"]
+    return jsonify(ok=True, left=v["left"])
+
+
+# ---------- Maschine: holt bezahlte Aufträge (nur mit ADMIN_KEY) ----------
+def machine_job(ref):
+    """Alles, was die Spannmaschine braucht: Nagelzahl, Kreisdurchmesser und die Abschnitte [(Farbe, Pins)] in Spannreihenfolge."""
+    m = load(ref)
+    p = os.path.join(odir(ref), "pinfolge.txt")
+    if not m or not os.path.exists(p):
+        return None
+    names = {thread_name(k): k for k in list(COLORS) + list(MULTI_COLORS)}
+    runs = []
+    for line in open(p).read().strip().splitlines():
+        if ":" in line:
+            name, pins_ = line.split(":", 1)
+            k = names.get(name.strip(), name.strip())
+        else:
+            k, pins_ = m["color"], line
+        runs.append({"color": k, "rgb": thread_rgb(k) if k in COLORS or k in MULTI_COLORS else None,
+                     "pins": [int(x) for x in pins_.split(",") if x.strip()]})
+    return {"ref": ref, "nr": ref[:6], "paid": m.get("paid", False), "title": item_title(m), "pins": m["pins"],
+            "ring_cm": round(ring_cm(m), 1), "thick_mm": float(m["thick"]), "runs": runs,
+            "lines": sum(len(r["pins"]) - 1 for r in runs)}
+
+@app.get("/api/maschine")
+def machine_list():
+    """Bezahlte Aufträge für die Maschine: /api/maschine?key=ADMIN_KEY"""
+    if not admin_ok():
+        abort(404)
+    out = []
+    for ref in os.listdir(DATA_DIR):
+        m = load(ref)
+        if m and m.get("paid"):
+            out.append({"nr": ref[:6], "ref": ref, "title": item_title(m), "done": bool(m.get("gespannt")),
+                        "created": time.strftime("%d.%m.%Y %H:%M", time.localtime(m.get("created", 0)))})
+    return jsonify(sorted(out, key=lambda r: r["created"]))
+
+@app.get("/api/maschine/<nr>")
+def machine_get(nr):
+    """Ein Auftrag per Bestellnummer (die ersten 6 Zeichen reichen): /api/maschine/3fa2c1?key=ADMIN_KEY"""
+    if not admin_ok() or not re.match(r"^[0-9a-f]{4,32}$", nr):
+        abort(404)
+    hits = [r for r in os.listdir(DATA_DIR) if r.startswith(nr) and (load(r) or {}).get("paid")]
+    if len(hits) != 1:
+        return jsonify(message="keine oder mehrere Bestellungen mit dieser Nummer"), 404
+    return jsonify(machine_job(hits[0]))
+
+@app.post("/api/maschine/<ref>/fertig")
+def machine_done(ref):
+    """Maschine meldet: Bild ist gespannt."""
+    if not admin_ok() or not load(ref):
+        abort(404)
+    update(ref, gespannt=time.time())
+    return jsonify(ok=True)
+
+
 # ---------- Seiten ----------
 @app.get("/")
 def index():
@@ -863,7 +1191,7 @@ def configure():
     warm_up_once()                          # Rechenkerne übersetzen, während der Kunde sein Foto auswählt
     cfg = {"sizes": SIZES, "pricing": {
         "test_quad_cents": TEST_QUAD_CENTS, "round_factor": ROUND_AREA, "base_cents": BASE_CENTS, "base_area": BASE_AREA, "cents_per_cm2": CENTS_PER_CM2,
-        "wood": {k: v[2] for k, v in WOOD.items()}, "pins": PINS, "multi": MULTI_EUR}}
+        "wood": {k: v[2] for k, v in WOOD.items()}, "pins": PINS, "multi": MULTI_EUR, "sw": SW_EUR}}
     return render_template("configure.html", cfg=cfg)
 
 @app.get("/ueber-uns")
@@ -873,6 +1201,7 @@ def about():
 @app.get("/success")
 def success():
     session.pop("cart", None)
+    session.pop("voucher", None)
     sid = request.args.get("session_id", "")
     if sid.startswith("cs_") and stripe.api_key:      # Zahlung direkt bei Stripe prüfen: klappt auch ohne eingerichteten Webhook
         try:
@@ -912,7 +1241,7 @@ def generate():
         return jsonify(message="Ungültige Nagelfarbe"), 400
     if disc not in DISC:
         return jsonify(message="Ungültige Kreisfarbe"), 400
-    if color in COLORS and abs(lum(COLORS[color][1]) - lum(DISC[disc][1])) < MIN_CONTRAST:   # mehrfarbig: Farben passend zum Kreis gewählt
+    if color in COLORS and color != SW and abs(lum(COLORS[color][1]) - lum(DISC[disc][1])) < MIN_CONTRAST:   # mehrfarbig: Farben passend zum Kreis gewählt
         return jsonify(message="Fadenfarbe und Kreisfarbe sind zu ähnlich"), 400
     fmt, size = form.get("format") or "quad", form.get("size") or "M"
     if fmt not in SIZES or size not in SIZES[fmt]:
@@ -965,6 +1294,12 @@ def status(ref):
         out["message"] = m.get("message", "Die Berechnung ist fehlgeschlagen.")
     ready = m.get("ready") or []
     out["variants"] = [{"key": k, "name": VARIANTS[k]["name"], "url": f"/preview/{ref}/{k}.png"} for k in VARIANTS if k in ready]
+    base = price_cents(m.get("orig") and dict(m, **m["orig"]) or m)
+    out["suggestions"] = [{"key": k, "name": SUGGEST[k]["name"], "url": f"/preview/{ref}/{k}.png" if k in ready else None,
+                           "pct": (m.get("prog") or {}).get(k, 0), "extra_cents": price_cents(with_suggestion(dict(m, **(m.get("orig") or {})), k)) - base,
+                           "cents": price_cents(with_suggestion(dict(m, **(m.get("orig") or {})), k))} for k in SUGGEST]
+    out["sugg"] = m.get("sugg", "waiting")
+    out["cents"] = base
     if m["status"] == "done" and out["variants"]:
         out["preview_url"] = out["variants"][0]["url"]
     return jsonify(out)
@@ -972,14 +1307,14 @@ def status(ref):
 @app.get("/live/<ref>/<key>.jpg")
 def live_view(ref, key):
     p = os.path.join(odir(ref), f"live_{key}.jpg")
-    if not load(ref) or key not in VARIANTS or not os.path.exists(p):
+    if not load(ref) or (key not in VARIANTS and key not in SUGGEST) or not os.path.exists(p):
         abort(404)
     return send_file(p, mimetype="image/jpeg", max_age=0)
 
 @app.get("/preview/<ref>/<key>.png")
 def preview_variant(ref, key):
     p = os.path.join(odir(ref), f"preview_{key}.png")
-    if not load(ref) or key not in VARIANTS or not os.path.exists(p):
+    if not load(ref) or (key not in VARIANTS and key not in SUGGEST) or not os.path.exists(p):
         abort(404)
     return send_file(p, mimetype="image/png", max_age=0)
 
@@ -994,7 +1329,17 @@ def choose_variant(ref, key):
     for src, dst in ((f"final_{key}.png", "final.png"), (f"pinfolge_{key}.txt", "pinfolge.txt"),
                      (f"anleitung_{key}.txt", "anleitung.txt"), (f"anleitung_{key}.pdf", "anleitung.pdf"), (f"preview_{key}.png", "preview.png")):
         shutil.copyfile(os.path.join(odir(ref), src), os.path.join(odir(ref), dst))
-    update(ref, variant=key)
+    with _meta_lock:                         # Vorschlag gewählt: Bestellung übernimmt dessen Einstellungen (Preis passt sich an)
+        m = load(ref)
+        orig = m.get("orig") or {k: m[k] for k in ("color", "disc", "wood", "pins")}
+        m.update(orig)
+        if key in SUGGEST:
+            m["orig"] = orig
+            m.update(SUGGEST[key]["set"])
+        else:
+            m.pop("orig", None)
+        m["variant"] = key
+        _write(ref, m)
 
 def thread_label(m):
     if m["color"] == MULTI:                  # Farben der gewählten Variante (oder alle vorgeschlagenen, solange keine gewählt ist)
@@ -1005,13 +1350,13 @@ def thread_label(m):
 def item_title(m):
     return (f"String Art {m.get('size', '')} ({board_label(m)}), {WOOD[m['wood']][0]}, "
             f"{thread_label(m)} auf {DISC[m['disc']][0]}, {m['pins']} Pins ({PINCOL[m.get('pin', 'gold')][0]})"
-            + (f", Stil {VARIANTS[m['variant']]['name']}" if m.get("variant") in VARIANTS else ""))
+            + (f", Stil {style_name(m['variant'])}" if m.get("variant") in VARIANTS or m.get("variant") in SUGGEST else ""))
 
 def cart_items():
     items, keep = [], []
     for ref in session.get("cart", []):
         m = load(ref)
-        if m and m["status"] == "done":
+        if m and m["status"] == "done" and not m.get("paid"):   # schon bezahlte Bilder fliegen raus
             keep.append(ref)
             items.append({"ref": ref, "title": item_title(m), "cents": price_cents(m), "variant": m.get("variant", "a")})
     session["cart"] = keep
@@ -1043,7 +1388,13 @@ def bad_request(e):
 @app.get("/warenkorb")
 def cart():
     items = cart_items()
-    return render_template("cart.html", items=items, total=sum(i["cents"] for i in items))
+    total = sum(i["cents"] for i in items)
+    v = voucher_load(session.get("voucher"))
+    if not voucher_ok(v):
+        v = None
+        session.pop("voucher", None)
+    disc = min(v["left"], total) if v else 0
+    return render_template("cart.html", items=items, total=total, voucher=v, disc=disc, pay=total - disc, note=PREORDER_NOTE)
 
 @app.post("/cart/add")
 def cart_add():
@@ -1076,6 +1427,31 @@ def checkout():
         return jsonify(message="Der Warenkorb ist leer"), 400
     if not re.match(r"^\S+@\S+\.\S+$", email) or data.get("agb") is not True:
         return jsonify(message="E-Mail oder AGB-Zustimmung fehlt"), 400
+    total = sum(i["cents"] for i in items)
+    v = voucher_load(session.get("voucher"))
+    disc = min(v["left"], total) if voucher_ok(v) else 0
+    if disc and total - disc < 50:                      # Gutschein deckt alles (Stripe nimmt erst ab 0,50 €): ohne Zahlung bestellen
+        use_id = "gs-" + uuid.uuid4().hex
+        voucher_use(v["code"], total, use_id)
+        for i in items:
+            with _meta_lock:
+                m = load(i["ref"])
+                if not m or m.get("paid"):
+                    continue
+                m.update(paid=True, email=email, gutschein=v["code"], stripe_session=use_id)
+                _write(i["ref"], m)
+            threading.Thread(target=notify_owner, args=(i["ref"],), daemon=True).start()
+        session.pop("cart", None)
+        session.pop("voucher", None)
+        return jsonify(url="/success?gutschein=1")
+    if disc:                                             # Teilbetrag: Rabatt anteilig auf die Positionen verteilen
+        rest = disc
+        for n_, i in enumerate(items):
+            cut = rest if n_ == len(items) - 1 else min(rest, round(disc * i["cents"] / total))
+            cut = min(cut, i["cents"])
+            i["cents"] -= cut
+            i["title"] += f" (Gutschein {v['code']} abgezogen)" if cut else ""
+            rest -= cut
     if not stripe.api_key:
         return jsonify(message="Zahlung ist noch nicht eingerichtet (STRIPE_SECRET_KEY fehlt bei Render)"), 500
     if not stripe.api_key.startswith(("sk_", "rk_")):
@@ -1088,7 +1464,8 @@ def checkout():
                 "currency": "eur", "unit_amount": i["cents"],   # Preise kommen nur vom Server
                 "product_data": {"name": i["title"]}}} for i in items],
             shipping_address_collection={"allowed_countries": ["DE", "AT", "CH"]},
-            metadata={"order_refs": ",".join(i["ref"] for i in items)},
+            metadata={"order_refs": ",".join(i["ref"] for i in items),
+                      **({"gutschein": v["code"], "gutschein_cents": str(disc)} if disc else {})},
             success_url=request.host_url + "success?session_id={CHECKOUT_SESSION_ID}",
             cancel_url=request.host_url + "warenkorb")
         return jsonify(url=s.url)
@@ -1157,6 +1534,12 @@ def handle_checkout(s):
     if s["payment_status"] != "paid":           # Klammer-Zugriff statt .get(): läuft mit alten und neuen stripe-Versionen
         return
     meta = s["metadata"] if "metadata" in s else {}
+    email0 = s["customer_email"] if "customer_email" in s else None
+    if "gutschein_kauf" in meta:                 # Gutschein gekauft
+        return voucher_create(s["id"], int(meta["gutschein_kauf"]), email0,
+                              meta["gutschein_name"] if "gutschein_name" in meta else "")
+    if "gutschein" in meta:                      # Bestellung mit Gutschein (Teilbetrag): Guthaben abziehen
+        voucher_use(meta["gutschein"], int(meta["gutschein_cents"]), s["id"])
     refs = meta["order_refs"] if "order_refs" in meta else ""
     email = s["customer_email"] if "customer_email" in s else None
     for ref in refs.split(","):

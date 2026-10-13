@@ -3,7 +3,7 @@
 {% block content %}
 <section class="hero">
   <h1 class="gold-text">Vielen Dank für Ihre Bestellung</h1>
-  <p>Ihre Zahlung wird bestätigt. Sie erhalten in Kürze eine E-Mail von Stripe mit dem Beleg. Wir melden uns, sobald Ihr Werk in Fertigung geht.</p>
+  {% if request.args.get('gutschein') %}<p>Ihre Bestellung ist mit dem Gutschein bezahlt.</p>{% else %}<p>Ihre Zahlung wird bestätigt. Sie erhalten in Kürze eine E-Mail von Stripe mit dem Beleg. Wir melden uns, sobald Ihr Werk in Fertigung geht.</p>{% endif %}
   <a href="/" class="btn btn-gold">Zur Startseite</a>
 </section>
 {% endblock %}

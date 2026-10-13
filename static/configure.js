@@ -1,5 +1,5 @@
 (() => {
-const BUILD = 'b23';
+const BUILD = 'b24';
 window.addEventListener('error', e => { const m = document.getElementById('msg'); if (m && !m.textContent && e.message) m.textContent = 'Technischer Fehler: ' + e.message; });
 window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); });   // Zurück-Taste: Seite frisch laden statt alten Zustand zeigen
 const $ = id => document.getElementById(id);
@@ -15,11 +15,11 @@ const cfg = () => { const fmt = $('format').value, size = $('size').value, [w, h
     hex: $('color').selectedOptions[0].dataset.hex,
     pin: $('pincolor').value, pinHex: $('pincolor').selectedOptions[0].dataset.hex,
     disc: $('circle').value, discHex: $('circle').selectedOptions[0].dataset.hex, thick: $('thick').value, pins: parseInt($('pins').value),
-    multi: $('color').value === 'mehrfarbig' }; };
+    multi: $('color').value === 'mehrfarbig', sw: $('color').value === 'sw' }; };
 const DEMO = ['#111111', '#b91c24', '#f2c416', '#1c3a96'];   // Beispielfarben für die Vorschau "Mehrfarbig" (echte Farben wählt der Server)
 const lum = h => { const n = parseInt(h.slice(1), 16); return .299 * (n >> 16) + .587 * ((n >> 8) & 255) + .114 * (n & 255); };
 const MSG = 'Fadenfarbe und Kreisfarbe sind zu ähnlich. Bitte wähle einen stärkeren Kontrast.';
-const lowContrast = () => { const c = cfg(); return !c.multi && Math.abs(lum(c.hex) - lum(c.discHex)) < 60; };   // mehrfarbig: Server wählt passende Farben
+const lowContrast = () => { const c = cfg(); return !c.multi && !c.sw && Math.abs(lum(c.hex) - lum(c.discHex)) < 60; };   // mehrfarbig: Server wählt passende Farben
 const msg = t => { $('msg').textContent = t || ''; };
 
 function price() {
@@ -29,7 +29,7 @@ function price() {
   }
   const area = c.w * c.h * (c.format === 'rund' ? PRICE.round_factor : 1);
   const cents = PRICE.base_cents + Math.max(0, area - PRICE.base_area) * PRICE.cents_per_cm2;
-  const p = Math.round(cents) / 100 + PRICE.wood[c.wood] + PRICE.pins[c.pins] + (c.multi ? PRICE.multi || 0 : 0);
+  const p = Math.round(cents) / 100 + PRICE.wood[c.wood] + PRICE.pins[c.pins] + (c.multi ? PRICE.multi || 0 : 0) + (c.sw ? PRICE.sw || 0 : 0);
   $('price').textContent = 'Preis: ' + p.toFixed(2).replace('.', ',') + ' €';
 }
 
@@ -51,7 +51,7 @@ function board() {
   b.classList.toggle('round', c.format === 'rund');
   b.dataset.wood = c.wood;
   $('disc').style.background = c.discHex;
-  $('multiHint').hidden = !c.multi;
+  $('multiHint').hidden = !c.multi; $('swHint').hidden = !c.sw;
   if (step >= 4) msg(lowContrast() ? MSG : '');
   [...$('size').options].forEach(o => { const [w, h] = SIZES[c.format][o.value]; o.textContent = o.value + ' (' + w + ' × ' + h + ' cm)'; });
   recommendThread();
@@ -79,6 +79,7 @@ function draw() {
     for (let i = 0; i < 120; i++) {
       const a = 2 * Math.PI * i / 120, b = a + 2.6;
       if (c.multi) ctx.strokeStyle = DEMO[i % DEMO.length];
+      else if (c.sw) ctx.strokeStyle = i % 2 ? '#f2f0ea' : '#111111';
       ctx.beginPath(); ctx.moveTo(S / 2 + R * Math.cos(a), S / 2 + R * Math.sin(a));
       ctx.lineTo(S / 2 + R * Math.cos(b), S / 2 + R * Math.sin(b)); ctx.stroke();
     }
@@ -168,7 +169,7 @@ function show(n) {
     i + 1 === n ? li.setAttribute('aria-current', 'step') : li.removeAttribute('aria-current');
   });
   $('back').style.visibility = n > 1 ? 'visible' : 'hidden';
-  $('next').textContent = n === 5 ? 'Drei Varianten berechnen' : 'Weiter';
+  $('next').textContent = n === 5 ? 'Varianten berechnen' : 'Weiter';
   cv.style.cursor = n === 1 ? 'grab' : 'default'; cv.style.touchAction = n === 1 ? 'none' : 'auto'; // Verschieben nur in Schritt 1
   msg(''); if (n >= 4 && lowContrast()) msg(MSG);
   draw();
@@ -202,7 +203,9 @@ async function fetchRetry(url, opts, tries = 4) {   // Server aufgeweckt/neu ges
 }
 
 let variantKey = null, fin = {}, liveSeen = {}, L = {}, animOn = false;
-const KEYS = ['a', 'b', 'c'];
+const KEYS = ['a', 'b', 'c'], SKEYS = ['d', 'e', 'f'];
+let prices = {}, basePrice = null;
+const eur = c => (c / 100).toFixed(2).replace('.', ',') + ' €';
 const tile = k => document.querySelector('.vopt[data-k="' + k + '"]');
 const pinXY = (i, n) => { const t = 2 * Math.PI * i / n, r = 300 * 0.982; return [300 + r * Math.cos(t), 300 + r * Math.sin(t)]; };
 const statusUrl = id => '/status/' + id + '?' + KEYS.map(k => 's' + k + '=' + (L[k] ? L[k].got : 0)).join('&');
@@ -270,7 +273,32 @@ function pick(k) {
   if (!b || b.classList.contains('wait')) return;
   variantKey = k;
   document.querySelectorAll('.vopt').forEach(x => x.classList.toggle('sel', x === b));
-  syncBig();
+  if (SKEYS.includes(k)) {                                       // Vorschlag: fertiges Bild groß zeigen, Preis mit Vorschlag
+    $('result').src = b.querySelector('img').src; $('result').hidden = false; $('big').hidden = true; cv.hidden = true;
+    if (prices[k]) $('price').textContent = 'Preis mit diesem Vorschlag: ' + eur(prices[k]);
+  } else { if (basePrice != null) $('price').textContent = 'Preis: ' + eur(basePrice); syncBig(); }
+}
+function showSugg(d) {                                           // drei Vorschläge: Fortschritt, fertiges Bild, Aufpreis
+  if (!d.suggestions) return;
+  $('sugg').hidden = false;
+  if (d.cents != null) basePrice = d.cents;
+  d.suggestions.forEach(sg => {
+    const b = tile(sg.key); if (!b) return;
+    prices[sg.key] = sg.cents;
+    b.querySelector('.xp').textContent = sg.extra_cents > 0 ? '+ ' + eur(sg.extra_cents) : 'ohne Aufpreis';
+    if (sg.url && !fin[sg.key]) {
+      fin[sg.key] = true; b.querySelector('img').src = sg.url; b.classList.add('fin'); b.classList.remove('wait');
+      b.querySelector('.vp').textContent = 'fertig ✓';
+    } else if (!sg.url) {
+      b.querySelector('.vp').textContent = sg.pct ? sg.pct + ' %' : 'wartet';
+      if (d.live && d.live[sg.key] && liveSeen[sg.key] !== d.live[sg.key]) {           // Zwischenbild, solange gerechnet wird
+        liveSeen[sg.key] = d.live[sg.key];
+        const im = new Image(), cvs = b.querySelector('canvas');
+        im.onload = () => { const x = cvs.getContext('2d'); x.globalAlpha = 1; x.drawImage(im, 0, 0, 600, 600); b.classList.add('drawing'); };
+        im.src = '/live/' + d.order_ref + '/' + sg.key + '.jpg?v=' + d.live[sg.key];
+      }
+    }
+  });
 }
 function showVariants(d) {
   $('variants').hidden = false;
@@ -299,12 +327,12 @@ async function generate() {
   if (lowContrast()) return msg(MSG);
   busy = true; msg(''); $('next').disabled = true;
   $('wait').textContent = 'Berechnung läuft, das dauert meist unter einer Minute …';
-  $('spin').hidden = false; $('checkout').hidden = true; $('variants').hidden = false;
+  $('spin').hidden = false; $('checkout').hidden = true; $('variants').hidden = false; $('sugg').hidden = true; prices = {}; basePrice = null;
   $('vtext').textContent = 'Deine drei Varianten werden gerade live gezeichnet. Tippe auf eine, um sie groß zu sehen.';
   variantKey = null; fin = {}; liveSeen = {};
   $('big').hidden = true;
   $('result').hidden = true; cv.hidden = false;
-  document.querySelectorAll('.vopt').forEach(x => { x.classList.add('wait'); x.classList.remove('sel'); x.classList.remove('fin'); x.querySelector('img').removeAttribute('src'); x.querySelector('.vp').textContent = ''; });
+  document.querySelectorAll('.vopt').forEach(x => { x.classList.add('wait'); x.classList.remove('sel'); x.classList.remove('fin'); x.querySelector('img').removeAttribute('src'); x.querySelector('.vp').textContent = ''; x.classList.remove('drawing'); const xp = x.querySelector('.xp'); if (xp) xp.textContent = ''; });
   initLive();
   try {
     await fetchRetry('/health', {}, 10);                      // Server zuerst aufwecken
@@ -327,11 +355,22 @@ async function generate() {
     }
     if (!d.variants || !d.variants.length) throw new Error('Die Berechnung dauert ungewöhnlich lange');
     orderRef = d.order_ref;
-    showVariants(d);
-    $('vtext').textContent = 'Fertig! Tippe auf deine Lieblingsvariante und kaufe sie:';
+    showVariants(d); showSugg(d);
+    $('vtext').textContent = 'Fertig! Tippe auf deine Lieblingsvariante und kaufe sie. Darunter rechnen wir noch drei Vorschläge für dich.';
     $('checkout').hidden = false;
+    pollSugg(jobId);
   } catch (err) { msg('Berechnung nicht möglich: ' + err.message + '. Bitte erneut versuchen.'); }
   finally { $('wait').textContent = ''; busy = false; $('next').disabled = false; $('spin').hidden = true; }
+}
+
+async function pollSugg(id) {                                   // Vorschläge laufen nach den drei Varianten weiter
+  for (let i = 0; i < 600; i++) {
+    let d;
+    try { d = await (await fetch(statusUrl(id))).json(); } catch (e) { await new Promise(r => setTimeout(r, 4000)); continue; }
+    showSugg(d);
+    if (d.sugg === 'done' || d.status === 'error') return;
+    await new Promise(r => setTimeout(r, 2500));
+  }
 }
 
 async function addToCart() {

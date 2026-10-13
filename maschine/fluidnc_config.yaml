@@ -1,0 +1,77 @@
+# FluidNC-Konfiguration für die Faded-Art-Spannmaschine (Startpunkt, Pins an dein Board anpassen!)
+# Board: ESP32 mit FluidNC, z. B. "6-Pack" oder MKS DLC32. Werte mit # einmessen.
+name: FadedArt
+board: 6-Pack
+
+stepping:
+  engine: RMT
+  idle_ms: 255            # Motoren bleiben bestromt (Teller darf sich nicht verdrehen)
+  pulse_us: 4
+
+axes:
+  shared_stepper_disable_pin: NO_PIN
+
+  x:                      # Drehteller in GRAD. NEMA 23, 1/16 Mikroschritt, Riemen-Untersetzung 15:1
+    steps_per_mm: 133.333 # 200 * 16 * 15 / 360  (einmessen: 360 Grad fahren und prüfen)
+    max_rate_mm_per_min: 60000
+    acceleration_mm_per_sec2: 1500
+    max_travel_mm: 100000000   # Endlosachse (dreht immer weiter)
+    soft_limits: false
+    homing:
+      cycle: 1
+      positive_direction: false
+      mpos_mm: 0
+      feed_mm_per_min: 600
+      seek_mm_per_min: 3000
+    motor0:
+      limit_neg_pin: gpio.36:low   # Induktiver Sensor: Markierung Nagel 0
+      external_stepper:            # externer Treiber DM542
+        step_pin: i2so.2
+        direction_pin: i2so.1
+        disable_pin: i2so.0
+
+  y:                      # Radialschlitten in mm (GT2-Riemen, 20 Zähne, 1/16)
+    steps_per_mm: 80
+    max_rate_mm_per_min: 5000
+    acceleration_mm_per_sec2: 300
+    max_travel_mm: 520
+    homing:
+      cycle: 2
+      positive_direction: false
+      mpos_mm: 0
+    motor0:
+      limit_neg_pin: gpio.39:low
+      stepstick:
+        step_pin: i2so.5
+        direction_pin: i2so.4
+        disable_pin: i2so.7
+
+  z:                      # Nadel Schwarz: RC-Servo, 0 = oben, 18 = unten
+    steps_per_mm: 100
+    max_rate_mm_per_min: 20000
+    acceleration_mm_per_sec2: 2000
+    max_travel_mm: 20
+    motor0:
+      rc_servo:
+        output_pin: gpio.27
+        pwm_hz: 50
+        min_pulse_us: 1000
+        max_pulse_us: 2000
+
+  a:                      # Nadel Weiß: RC-Servo
+    steps_per_mm: 100
+    max_rate_mm_per_min: 20000
+    acceleration_mm_per_sec2: 2000
+    max_travel_mm: 20
+    motor0:
+      rc_servo:
+        output_pin: gpio.4
+        pwm_hz: 50
+        min_pulse_us: 1000
+        max_pulse_us: 2000
+
+control:
+  safety_door_pin: NO_PIN
+  feed_hold_pin: gpio.34:low      # Taster "Pause" (z. B. Fadenriss-Schalter in Reihe)
+
+uart1: {}

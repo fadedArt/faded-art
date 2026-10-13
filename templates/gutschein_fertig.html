@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Dein Gutschein – Faded Art{% endblock %}
+{% block content %}
+<section class="hero">
+  {% if v %}
+  <h1 class="gold-text">Danke! Hier ist dein Gutschein</h1>
+  <p class="gs-code">{{ v.code }}</p>
+  <p>Wert {{ v.cents|euro }}, gültig bis {{ until }}. {{ note }}</p>
+  <p>Wir haben ihn dir auch per E-Mail geschickt. Code bitte gut aufheben.</p>
+  <div class="cta-row"><a href="/gutschein/{{ v.code }}.pdf" class="btn btn-gold">Gutschein als PDF</a><a href="/" class="btn">Zur Startseite</a></div>
+  {% else %}
+  <h1 class="gold-text">Zahlung wird bestätigt</h1>
+  <p>Das dauert manchmal einen Moment. Lade die Seite gleich neu. Den Gutschein bekommst du außerdem per E-Mail.</p>
+  <a href="" class="btn btn-gold">Neu laden</a>
+  {% endif %}
+</section>
+{% endblock %}
