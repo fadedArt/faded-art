@@ -6,7 +6,7 @@
   <li><b>1</b><span>Bild</span></li><li><b>2</b><span>Format</span></li><li><b>3</b><span>Untergrund</span></li><li><b>4</b><span>Faden</span></li><li><b>5</b><span>Pins</span></li>
 </ol>
 
-<div id="buildinfo" data-build="b23" hidden></div>
+<div id="buildinfo" data-build="b24" hidden></div>
 <form id="cfg" class="cfg" novalidate data-cfg='{{ cfg|tojson }}'>
 <div class="card panel">
   <section data-step="1">
@@ -44,8 +44,10 @@
       <select id="color">
         <option value="schwarz" data-hex="#111111">Tiefschwarz</option>
         <option value="weiss" data-hex="#f5f5f5">Reinweiß</option>
+        <option value="sw" data-hex="#111111" data-hex2="#f2f0ea">Schwarz + Weiß gemischt (+{{ cfg.pricing.sw }} €)</option>
         <!-- weitere Farben (gold, silber, mehrfarbig) erst wieder anbieten, wenn sie in SHOP_COLORS in app.py stehen -->
       </select>
+      <p class="hint" id="swHint" hidden style="margin-top:.4rem">Zwei Fäden, Schwarz und Weiß, abwechselnd gespannt: deutlich mehr Details und Tiefe als ein einzelner Faden. Am besten auf dunklem Kreis (Schwarz, Anthrazit oder Braun).</p>
       <p class="hint" id="multiHint" hidden style="margin-top:.4rem">Bis zu vier Fadenfarben (z. B. Schwarz, Rot, Gelb, Blau, Braun), passend zu deinem Foto und zur Kreisfarbe gewählt. Ideal für farbige Motive wie Tiere, Blumen oder Landschaften.</p></div>
     <div class="field"><label for="circle">Farbe des Kreises (Untergrund des Bildes)</label>
       <select id="circle">
@@ -105,6 +107,15 @@
       <button type="button" class="vopt wait" data-k="a"><canvas width="600" height="600"></canvas><img alt="Variante Ausgewogen"><span>Ausgewogen</span><small class="vp"></small></button>
       <button type="button" class="vopt wait" data-k="b"><canvas width="600" height="600"></canvas><img alt="Variante Kontrastreich"><span>Kontrastreich</span><small class="vp"></small></button>
       <button type="button" class="vopt wait" data-k="c"><canvas width="600" height="600"></canvas><img alt="Variante Weich"><span>Weich</span><small class="vp"></small></button>
+    </div>
+    <div id="sugg" hidden>
+      <h3 class="sugg-h">Unsere Vorschläge für dein Foto</h3>
+      <p class="hint" style="margin-bottom:.6rem">Die bestmögliche Umsetzung deines Motivs: Schwarz + Weiß gemischt, 360 Pins. Der Aufpreis gegenüber deiner Auswahl steht unter jedem Bild.</p>
+      <div class="vgrid">
+        <button type="button" class="vopt wait" data-k="d"><canvas width="600" height="600"></canvas><img alt="Vorschlag Schwarz und Weiß auf Schwarz"><span>S+W auf Schwarz</span><small class="vp"></small><em class="xp"></em></button>
+        <button type="button" class="vopt wait" data-k="e"><canvas width="600" height="600"></canvas><img alt="Vorschlag Schwarz und Weiß auf Nussbaum"><span>S+W auf Nussbaum</span><small class="vp"></small><em class="xp"></em></button>
+        <button type="button" class="vopt wait" data-k="f"><canvas width="600" height="600"></canvas><img alt="Vorschlag Konturen betont"><span>S+W Konturen</span><small class="vp"></small><em class="xp"></em></button>
+      </div>
     </div>
   </div>
 </div>

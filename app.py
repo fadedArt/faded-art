@@ -11,6 +11,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 from fpdf import FPDF
 from numba import njit
+import engine2
 
 mimetypes.add_type("application/wasm", ".wasm")          # Freisteller im Browser (static/mp): Browser verlangen diese Typen
 mimetypes.add_type("text/javascript", ".mjs")
@@ -46,8 +47,9 @@ COLORS = {
     "weiss": ("Reinweiß", (250, 250, 250)),
     "gold": ("Champagner Gold", (212, 175, 55)),
     "silber": ("Silber", (195, 195, 195)),
+    "sw": ("Schwarz + Weiß gemischt", (12, 12, 12)),
 }
-SHOP_COLORS = ("schwarz", "weiss")   # Fadenfarben, die der Shop gerade anbietet (Gold, Silber, Mehrfarbig: hier ergänzen)
+SHOP_COLORS = ("schwarz", "weiss", "sw")   # Fadenfarben, die der Shop gerade anbietet (Gold, Silber, Mehrfarbig: hier ergänzen)
 MULTI = "mehrfarbig"   # Wert im Konfigurator: Fadenfarben werden automatisch aus dem Foto gewählt
 MULTI_COLORS = {       # Fäden, aus denen die Mehrfarb-Berechnung wählt (nur echte, kaufbare Garnfarben eintragen)
     "schwarz": ("Tiefschwarz", (12, 12, 12)),
@@ -62,8 +64,27 @@ MULTI_COLORS = {       # Fäden, aus denen die Mehrfarb-Berechnung wählt (nur e
 MULTI_SAT, MULTI_CHROMA = 1.8, 2.5        # Mehrfarbig: Sättigung des Fotos, Gewicht der Farbe beim Zerlegen
 MULTI_LINEAR, MULTI_LINES_F = True, 1.3   # Mehrfarbig nach dem linearen Modell (wie Einfarbig); Linien = LINES x Faktor
 MULTI_MAX, MULTI_EUR = 4, 0   # höchstens so viele Fadenfarben; Aufpreis für Mehrfarbig in € (noch festlegen!)
+SW = "sw"                     # Schwarz + Weiß gemischt: zwei Fäden, Engine 2 (engine2.py), Testsieger vom 13.10.2026
+SW_EUR = 40                   # Aufpreis für Schwarz + Weiß in € (Platzhalter, bitte festlegen!)
+SW_PAL = ["schwarz", "weiss"]
+SW_LINES = {240: 9000, 360: 12000}   # Höchstzahl Fäden (gemischt braucht ca. 3x so viel Faden wie Einfarbig)
+SW_STYLE = {"a": dict(gamma=1.0, clip=0.008), "b": dict(gamma=1.2, clip=0.012), "c": dict(gamma=0.85, clip=0.005)}
+# Vorschläge: werden zusätzlich zu den drei Varianten berechnet, ohne Rücksicht auf den Preis (bestes Ergebnis).
+# set = was sich an der Bestellung ändert, wenn der Kunde den Vorschlag wählt (Aufpreis ergibt sich daraus automatisch)
+SUGGEST = {
+    "d": dict(name="Schwarz + Weiß auf Schwarz", set=dict(color=SW, disc="schwarz", wood="mdf", pins=360), edges=False),
+    "e": dict(name="Schwarz + Weiß auf Nussbaum", set=dict(color=SW, disc="braun", wood="nussbaum", pins=360), edges=False),
+    "f": dict(name="Schwarz + Weiß, Konturen betont", set=dict(color=SW, disc="anthrazit", pins=360), edges=True),
+}
 BLOCK = 150                   # Mehrfarbig: so viele Linien am Stück mit einer Farbe, dann wird ggf. gewechselt
 CHROMA = 0.7                  # Gewicht der Farbabweichung gegenüber der Helligkeit (Mehrfarbig)
+
+def style_name(key):
+    return (VARIANTS.get(key) or SUGGEST.get(key) or {"name": key})["name"]
+
+def with_suggestion(m, key):
+    """Bestellung so, wie sie mit dem Vorschlag key aussähe (ohne sie zu ändern)."""
+    return dict(m, **SUGGEST[key]["set"]) if key in SUGGEST else dict(m)
 
 def thread_name(k):
     return (COLORS.get(k) or MULTI_COLORS[k])[0]
@@ -106,7 +127,7 @@ MIN_CONTRAST = 60
 def lum(rgb):
     return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 PINS = {240: 0, 360: 70}                       # Pins -> Aufpreis in €
-BUILD = "b23"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
+BUILD = "b24"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
 TEST_QUAD_CENTS = int(os.environ.get("TESTPREIS_QUAD_CENTS", "50"))   # Testpreis für ALLE quadratischen Bretter; 0 = aus (Live-Betrieb!)
 BASE_CENTS, BASE_AREA, CENTS_PER_CM2 = 50, 2500, 2.5  # 0,50 € ist noch der Testpreis!
 # Feste Größen (Breite x Höhe in cm) je Format. Einzige Quelle: Frontend liest sie von hier.
@@ -160,7 +181,7 @@ def update_variant(ref, key, pct=None, live=None, ready=False, used=None):
             m["ready"] = (m.get("ready") or []) + [key]
         m["beat"] = time.time()
         if m.get("prog"):
-            m["progress"] = int(sum(m["prog"].values()) / len(VARIANTS))
+            m["progress"] = int(sum(v for k, v in m["prog"].items() if k in VARIANTS) / len(VARIANTS))
         _write(ref, m)
 
 def ring_cm(m):
@@ -175,7 +196,7 @@ def price_cents(m):
         return TEST_QUAD_CENTS
     area = m["w"] * m["h"] * (ROUND_AREA if m.get("fmt") in ROUND_FORMATS else 1)
     extra = max(0, area - BASE_AREA) * CENTS_PER_CM2
-    return BASE_CENTS + round(extra) + (WOOD[m["wood"]][2] + PINS[m["pins"]] + (MULTI_EUR if m.get("color") == MULTI else 0)) * 100
+    return BASE_CENTS + round(extra) + (WOOD[m["wood"]][2] + PINS[m["pins"]] + (MULTI_EUR if m.get("color") == MULTI else 0) + (SW_EUR if m.get("color") == SW else 0)) * 100
 
 
 # ---------- String-Art-Berechnung (dein Algorithmus, pro Bestellung isoliert) ----------
@@ -555,8 +576,63 @@ def compute_string_art(ref, m, key="a"):
                 break
             left = 0
 
-    # 3) Rendern in 2000 px, Abschnitt für Abschnitt (spätere Fäden liegen oben); Deckkraft überlagert sich physikalisch
     runs = color_runs(seq, cseq)
+    render_final(ref, m, key, runs, cols, px, py, a, LW)
+    with open(os.path.join(d, f"pinfolge_{key}.txt"), "w") as f:
+        if K == 1:
+            f.write(",".join(map(str, seq)))
+        else:                                                 # Mehrfarbig: eine Zeile je Abschnitt
+            f.write("\n".join(f"{thread_name(pal[k])}: " + ",".join(map(str, p)) for k, p in runs))
+    update_variant(ref, key, used=[pal[k] for k in sorted(set(cseq))])   # Mehrfarbig: nicht jede gewählte Farbe wird gebraucht
+    write_instructions(ref, m, runs, pal, px, py, rp, key, n_lines)
+
+def compute_sw(ref, m, key):
+    """Schwarz + Weiß gemischt (engine2.py). Für die Varianten a/b/c bei Fadenwahl "sw" und für die Vorschläge d/e/f."""
+    mm = with_suggestion(m, key)
+    st = SW_STYLE.get(key, SW_STYLE["a"])
+    sg = SUGGEST.get(key)
+    d, n, pal = odir(ref), mm["pins"], SW_PAL
+    cols = [thread_rgb(c) for c in pal]
+    disc = DISC[mm["disc"]][1]
+    disc_cm = max(10.0, ring_cm(mm))
+    t_mm = float(mm["thick"])
+    a_r = t_mm * engine2.RASTER / (disc_cm * 10)            # Deckkraft eines Fadens im Rechenraster (Fadendicke / Rasterzelle)
+    L = engine2.lines_for(n)
+    t, w = engine2.target(os.path.join(d, "input.png"), gamma=st["gamma"], clip=st["clip"], edges=bool(sg and sg["edges"]))
+    max_lines = int(SW_LINES[n] * min(1.6, max(1.0, (0.20 / t_mm) * (disc_cm / D0_CM))))
+    geo = geometry(n)
+    px, py, rp = geo["px"], geo["py"], geo["rp"]
+    LIVE, lk = 600, 600 / W_IMG                             # Live-Bild wie bei compute_string_art
+    live = Image.new("RGB", (LIVE, LIVE), disc)
+    ld = ImageDraw.Draw(live, "RGBA")
+    a = min(0.4, max(0.02, E_REF * (t_mm / 0.20) * (D0_CM / disc_cm) / LINE_W))
+    lalpha = min(255, int(255 * a * LINE_W * lk))
+    state = {"drawn": 0, "n": 0}
+
+    def progress(f, order):
+        for k, p0, p1 in order[state["drawn"]:]:
+            ld.line([(px[p0] * lk, py[p0] * lk), (px[p1] * lk, py[p1] * lk)], fill=cols[k] + (lalpha,), width=1)
+        state["drawn"] = len(order)
+        if state["drawn"] // 1000 > state["n"] or f == 0:
+            state["n"] += 1
+            live.save(os.path.join(d, f"live_{key}.tmp.jpg"), quality=80)
+            os.replace(os.path.join(d, f"live_{key}.tmp.jpg"), os.path.join(d, f"live_{key}.jpg"))
+            update_variant(ref, key, pct=min(99, int(100 * f)), live=state["n"])
+        else:
+            update_variant(ref, key, pct=min(99, int(100 * f)))
+
+    order = engine2.solve(t, w, L, [lum(c) / 255 for c in cols], lum(disc) / 255, a_r, max_lines, progress)
+    runs = engine2.runs_of(order)
+    render_final(ref, mm, key, runs, cols, px, py, a, LINE_W)
+    with open(os.path.join(d, f"pinfolge_{key}.txt"), "w") as f:
+        f.write("\n".join(f"{thread_name(pal[k])}: " + ",".join(map(str, p)) for k, p in runs))
+    update_variant(ref, key, used=list(pal))
+    write_instructions(ref, mm, runs, pal, px, py, rp, key, max_lines)
+
+def render_final(ref, m, key, runs, cols, px, py, a, LW):
+    """Rendern in 2000 px, Abschnitt für Abschnitt (spätere Fäden liegen oben); Deckkraft überlagert sich physikalisch."""
+    d, W, S = odir(ref), W_IMG, S_RENDER
+    disc, bg = DISC[m["disc"]][1], WOOD[m["wood"]][1]
     P = np.ascontiguousarray(np.stack([px, py], 1) * (S / W))
     ra = min(0.95, 2 * a * LW)                               # Deckung je Pixel einer 1 px breiten Linie: wirkt wie echter Faden
     canvas = np.empty((S * S, 3), np.uint8)                # 8 Bit je Farbe: wenig Speicher (Render Free hat nur 512 MB)
@@ -581,18 +657,11 @@ def compute_string_art(ref, m, key="a"):
     final.paste(art, (0, 0), mask)
     final.save(os.path.join(d, f"final_{key}.png"), compress_level=3)              # privat, nur nach Zahlung nutzbar (Stufe 3: schneller und kleiner als Standard)
     preview_img(final).save(os.path.join(d, f"preview_{key}.png"), compress_level=3)   # Vorschau ohne Wasserzeichen
-    with open(os.path.join(d, f"pinfolge_{key}.txt"), "w") as f:
-        if K == 1:
-            f.write(",".join(map(str, seq)))
-        else:                                                 # Mehrfarbig: eine Zeile je Abschnitt
-            f.write("\n".join(f"{thread_name(pal[k])}: " + ",".join(map(str, p)) for k, p in runs))
-    update_variant(ref, key, used=[pal[k] for k in sorted(set(cseq))])   # Mehrfarbig: nicht jede gewählte Farbe wird gebraucht
-    write_instructions(ref, m, runs, pal, px, py, rp, key, n_lines)
 
 def write_instructions(ref, m, runs, pal, px, py, rp, key, n_lines):
     """Anleitung mit allen Einstellungen und der kompletten Pinfolge (für die Fertigung)."""
     n, disc_cm = m["pins"], round(ring_cm(m))
-    multi = m["color"] == MULTI
+    multi = len(pal) > 1
     scale = (disc_cm / 2 / rp) / 100
     meters = {}
     for k, p in runs:
@@ -626,7 +695,7 @@ def write_instructions(ref, m, runs, pal, px, py, rp, key, n_lines):
     txt = f"""FADED ART - Pinfolge und Anleitung
 Erstellt am: {datetime.now():%d.%m.%Y um %H:%M:%S}
 Bestellnummer: {ref}
-Stil der Berechnung: {VARIANTS[key]['name']}
+Stil der Berechnung: {style_name(key)}
 
 === PROJEKT-EINSTELLUNGEN ===
 Anzahl Pins: {n}
@@ -661,7 +730,7 @@ Gesamtschritte: {total}{f" in {len(runs)} Abschnitten" if multi else ""}
 
 def write_pdf(ref, m, runs, pal, meters, total, n_lines, key):
     """Fertigungsanleitung als PDF: Seite 1 Vorschau und alle Einstellungen, danach die Pinfolge zum Abhaken."""
-    n, disc_cm, multi = m["pins"], round(ring_cm(m)), m["color"] == MULTI
+    n, disc_cm, multi = m["pins"], round(ring_cm(m)), len(pal) > 1
     pdf = FPDF(format="A4")
     pdf.set_auto_page_break(False)
     pdf.set_title(f"Faded Art Anleitung {ref}")
@@ -681,7 +750,7 @@ def write_pdf(ref, m, runs, pal, meters, total, n_lines, key):
     pdf.cell(0, 10, "FADED ART", new_x="LMARGIN", new_y="NEXT")
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Helvetica", "", 12)
-    pdf.cell(0, 6, f"Fertigungsanleitung  |  Stil: {VARIANTS[key]['name']}  |  erstellt am {datetime.now():%d.%m.%Y %H:%M}",
+    pdf.cell(0, 6, f"Fertigungsanleitung  |  Stil: {style_name(key)}  |  erstellt am {datetime.now():%d.%m.%Y %H:%M}",
              new_x="LMARGIN", new_y="NEXT")
     pdf.image(os.path.join(odir(ref), f"preview_{key}.png"), x=12, y=30, w=88)
     if multi:
@@ -791,7 +860,7 @@ def run_job(ref):
 
         def one(key):                                # alle drei Varianten laufen gleichzeitig, jede mit Live-Bild
             try:
-                compute_string_art(ref, meta, key)
+                (compute_sw if meta["color"] == SW else compute_string_art)(ref, meta, key)
                 update_variant(ref, key, pct=100, ready=True)
             except Exception:
                 app.logger.exception("Variante %s fehlgeschlagen (%s)", key, ref)
@@ -800,10 +869,18 @@ def run_job(ref):
             list(ex.map(one, list(VARIANTS)))
         if not load(ref).get("ready"):
             raise RuntimeError("keine Variante berechnet")
-        update(ref, status="done", progress=100)
+        update(ref, status="done", progress=100, sugg="running")
     except Exception:
         app.logger.exception("Berechnung fehlgeschlagen (%s)", ref)
         update(ref, status="error", message="Die Berechnung ist fehlgeschlagen.")
+        return
+    for key in SUGGEST:                              # danach die Vorschläge, einer nach dem anderen (Kunde kann schon kaufen)
+        try:
+            compute_sw(ref, meta, key)
+            update_variant(ref, key, pct=100, ready=True)
+        except Exception:
+            app.logger.exception("Vorschlag %s fehlgeschlagen (%s)", key, ref)
+    update(ref, sugg="done")
 
 
 # ---------- Admin: bezahlte Bestellungen mit Anleitung ansehen (nur mit ADMIN_KEY) ----------
@@ -863,7 +940,7 @@ def configure():
     warm_up_once()                          # Rechenkerne übersetzen, während der Kunde sein Foto auswählt
     cfg = {"sizes": SIZES, "pricing": {
         "test_quad_cents": TEST_QUAD_CENTS, "round_factor": ROUND_AREA, "base_cents": BASE_CENTS, "base_area": BASE_AREA, "cents_per_cm2": CENTS_PER_CM2,
-        "wood": {k: v[2] for k, v in WOOD.items()}, "pins": PINS, "multi": MULTI_EUR}}
+        "wood": {k: v[2] for k, v in WOOD.items()}, "pins": PINS, "multi": MULTI_EUR, "sw": SW_EUR}}
     return render_template("configure.html", cfg=cfg)
 
 @app.get("/ueber-uns")
@@ -912,7 +989,7 @@ def generate():
         return jsonify(message="Ungültige Nagelfarbe"), 400
     if disc not in DISC:
         return jsonify(message="Ungültige Kreisfarbe"), 400
-    if color in COLORS and abs(lum(COLORS[color][1]) - lum(DISC[disc][1])) < MIN_CONTRAST:   # mehrfarbig: Farben passend zum Kreis gewählt
+    if color in COLORS and color != SW and abs(lum(COLORS[color][1]) - lum(DISC[disc][1])) < MIN_CONTRAST:   # mehrfarbig: Farben passend zum Kreis gewählt
         return jsonify(message="Fadenfarbe und Kreisfarbe sind zu ähnlich"), 400
     fmt, size = form.get("format") or "quad", form.get("size") or "M"
     if fmt not in SIZES or size not in SIZES[fmt]:
@@ -965,6 +1042,12 @@ def status(ref):
         out["message"] = m.get("message", "Die Berechnung ist fehlgeschlagen.")
     ready = m.get("ready") or []
     out["variants"] = [{"key": k, "name": VARIANTS[k]["name"], "url": f"/preview/{ref}/{k}.png"} for k in VARIANTS if k in ready]
+    base = price_cents(m.get("orig") and dict(m, **m["orig"]) or m)
+    out["suggestions"] = [{"key": k, "name": SUGGEST[k]["name"], "url": f"/preview/{ref}/{k}.png" if k in ready else None,
+                           "pct": (m.get("prog") or {}).get(k, 0), "extra_cents": price_cents(with_suggestion(dict(m, **(m.get("orig") or {})), k)) - base,
+                           "cents": price_cents(with_suggestion(dict(m, **(m.get("orig") or {})), k))} for k in SUGGEST]
+    out["sugg"] = m.get("sugg", "waiting")
+    out["cents"] = base
     if m["status"] == "done" and out["variants"]:
         out["preview_url"] = out["variants"][0]["url"]
     return jsonify(out)
@@ -972,14 +1055,14 @@ def status(ref):
 @app.get("/live/<ref>/<key>.jpg")
 def live_view(ref, key):
     p = os.path.join(odir(ref), f"live_{key}.jpg")
-    if not load(ref) or key not in VARIANTS or not os.path.exists(p):
+    if not load(ref) or (key not in VARIANTS and key not in SUGGEST) or not os.path.exists(p):
         abort(404)
     return send_file(p, mimetype="image/jpeg", max_age=0)
 
 @app.get("/preview/<ref>/<key>.png")
 def preview_variant(ref, key):
     p = os.path.join(odir(ref), f"preview_{key}.png")
-    if not load(ref) or key not in VARIANTS or not os.path.exists(p):
+    if not load(ref) or (key not in VARIANTS and key not in SUGGEST) or not os.path.exists(p):
         abort(404)
     return send_file(p, mimetype="image/png", max_age=0)
 
@@ -994,7 +1077,17 @@ def choose_variant(ref, key):
     for src, dst in ((f"final_{key}.png", "final.png"), (f"pinfolge_{key}.txt", "pinfolge.txt"),
                      (f"anleitung_{key}.txt", "anleitung.txt"), (f"anleitung_{key}.pdf", "anleitung.pdf"), (f"preview_{key}.png", "preview.png")):
         shutil.copyfile(os.path.join(odir(ref), src), os.path.join(odir(ref), dst))
-    update(ref, variant=key)
+    with _meta_lock:                         # Vorschlag gewählt: Bestellung übernimmt dessen Einstellungen (Preis passt sich an)
+        m = load(ref)
+        orig = m.get("orig") or {k: m[k] for k in ("color", "disc", "wood", "pins")}
+        m.update(orig)
+        if key in SUGGEST:
+            m["orig"] = orig
+            m.update(SUGGEST[key]["set"])
+        else:
+            m.pop("orig", None)
+        m["variant"] = key
+        _write(ref, m)
 
 def thread_label(m):
     if m["color"] == MULTI:                  # Farben der gewählten Variante (oder alle vorgeschlagenen, solange keine gewählt ist)
@@ -1005,7 +1098,7 @@ def thread_label(m):
 def item_title(m):
     return (f"String Art {m.get('size', '')} ({board_label(m)}), {WOOD[m['wood']][0]}, "
             f"{thread_label(m)} auf {DISC[m['disc']][0]}, {m['pins']} Pins ({PINCOL[m.get('pin', 'gold')][0]})"
-            + (f", Stil {VARIANTS[m['variant']]['name']}" if m.get("variant") in VARIANTS else ""))
+            + (f", Stil {style_name(m['variant'])}" if m.get("variant") in VARIANTS or m.get("variant") in SUGGEST else ""))
 
 def cart_items():
     items, keep = [], []

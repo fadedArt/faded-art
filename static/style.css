@@ -1,4 +1,4 @@
-:root{--build:"b23"}
+:root{--build:"b24"}
 [hidden]{display:none!important}   /* sonst überschreiben display-Regeln das hidden-Attribut (z. B. Ergebnisbild im Kreis) */
 @font-face{font-family:Cinzel;src:url(fonts/cinzel.woff2) format("woff2");font-weight:400 700;font-display:swap}
 @font-face{font-family:"Plus Jakarta Sans";src:url(fonts/plus-jakarta-sans.woff2) format("woff2");font-weight:300 600;font-display:swap}
@@ -109,3 +109,7 @@ mark{background:rgba(212,175,55,.2);color:var(--gold-t);padding:0 .25rem;border-
 .vopt.sel{border-color:var(--gold);box-shadow:0 0 0 2px rgba(212,175,55,.35)}
 .vp{display:block;color:var(--muted);font-size:.7rem;min-height:1em}
 
+
+.sugg-h{font-size:1rem;margin:1.2rem 0 .3rem;color:var(--gold)}
+.vopt .xp{display:block;font-style:normal;font-weight:700;color:var(--gold);margin-top:.15rem;font-size:.8rem}
+.vopt.wait.drawing canvas{visibility:visible}
