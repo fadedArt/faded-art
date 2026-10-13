@@ -930,6 +930,59 @@ def admin_file(ref, name):
     return send_file(os.path.join(odir(ref), name), as_attachment=(name != "final.png"), max_age=0)
 
 
+# ---------- Maschine: holt bezahlte Aufträge (nur mit ADMIN_KEY) ----------
+def machine_job(ref):
+    """Alles, was die Spannmaschine braucht: Nagelzahl, Kreisdurchmesser und die Abschnitte [(Farbe, Pins)] in Spannreihenfolge."""
+    m = load(ref)
+    p = os.path.join(odir(ref), "pinfolge.txt")
+    if not m or not os.path.exists(p):
+        return None
+    names = {thread_name(k): k for k in list(COLORS) + list(MULTI_COLORS)}
+    runs = []
+    for line in open(p).read().strip().splitlines():
+        if ":" in line:
+            name, pins_ = line.split(":", 1)
+            k = names.get(name.strip(), name.strip())
+        else:
+            k, pins_ = m["color"], line
+        runs.append({"color": k, "rgb": thread_rgb(k) if k in COLORS or k in MULTI_COLORS else None,
+                     "pins": [int(x) for x in pins_.split(",") if x.strip()]})
+    return {"ref": ref, "nr": ref[:6], "paid": m.get("paid", False), "title": item_title(m), "pins": m["pins"],
+            "ring_cm": round(ring_cm(m), 1), "thick_mm": float(m["thick"]), "runs": runs,
+            "lines": sum(len(r["pins"]) - 1 for r in runs)}
+
+@app.get("/api/maschine")
+def machine_list():
+    """Bezahlte Aufträge für die Maschine: /api/maschine?key=ADMIN_KEY"""
+    if not admin_ok():
+        abort(404)
+    out = []
+    for ref in os.listdir(DATA_DIR):
+        m = load(ref)
+        if m and m.get("paid"):
+            out.append({"nr": ref[:6], "ref": ref, "title": item_title(m), "done": bool(m.get("gespannt")),
+                        "created": time.strftime("%d.%m.%Y %H:%M", time.localtime(m.get("created", 0)))})
+    return jsonify(sorted(out, key=lambda r: r["created"]))
+
+@app.get("/api/maschine/<nr>")
+def machine_get(nr):
+    """Ein Auftrag per Bestellnummer (die ersten 6 Zeichen reichen): /api/maschine/3fa2c1?key=ADMIN_KEY"""
+    if not admin_ok() or not re.match(r"^[0-9a-f]{4,32}$", nr):
+        abort(404)
+    hits = [r for r in os.listdir(DATA_DIR) if r.startswith(nr) and (load(r) or {}).get("paid")]
+    if len(hits) != 1:
+        return jsonify(message="keine oder mehrere Bestellungen mit dieser Nummer"), 404
+    return jsonify(machine_job(hits[0]))
+
+@app.post("/api/maschine/<ref>/fertig")
+def machine_done(ref):
+    """Maschine meldet: Bild ist gespannt."""
+    if not admin_ok() or not load(ref):
+        abort(404)
+    update(ref, gespannt=time.time())
+    return jsonify(ok=True)
+
+
 # ---------- Seiten ----------
 @app.get("/")
 def index():
