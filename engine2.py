@@ -267,8 +267,15 @@ def solve(t, w, L, colors, board, a, max_lines, progress=None, pen=SWITCH_PEN, s
     step_fn = _steps_nb if _NUMBA else _steps_py
     order, best, dead = [], (E, 0), 0
     while len(order) < max_lines:
-        got = step_fn(min(EVERY, max_lines - len(order)), cur, last, used, c, R, q, a, cols, L.cand_off, L.cand_j,
-                      L.cand_s, L.cand_e, L.cand_inv, L.ids, L.ws, out, float(pen))
+        args = (min(EVERY, max_lines - len(order)), cur, last, used, c, R, q, a, cols, L.cand_off, L.cand_j,
+                L.cand_s, L.cand_e, L.cand_inv, L.ids, L.ws, out, float(pen))
+        try:
+            got = step_fn(*args)
+        except Exception:                                 # numba-Problem auf dem Server: mit numpy weiterrechnen
+            if step_fn is _steps_py:
+                raise
+            step_fn = _steps_py
+            got = step_fn(*args)
         order += [(int(k), int(p0), int(p1)) for k, p0, p1, _ in out[:got]]
         R, E = resid()
         if E < best[0]:
