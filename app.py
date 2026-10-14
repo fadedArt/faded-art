@@ -1087,7 +1087,7 @@ def run_suggestions(ref, meta):
 # ---------- Admin: bezahlte Bestellungen mit Anleitung ansehen (nur mit ADMIN_KEY) ----------
 def admin_ok():
     key = os.environ.get("ADMIN_KEY", "")
-    return bool(key) and hmac.compare_digest(request.args.get("key", ""), key)
+    return bool(key) and hmac.compare_digest(request.args.get("key", "").encode(), key.encode())   # Bytes: Umlaute im Schlüssel erlaubt
 
 @app.get("/admin")
 def admin():
