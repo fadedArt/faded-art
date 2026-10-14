@@ -141,7 +141,7 @@ MIN_CONTRAST = 60
 def lum(rgb):
     return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 PINS = {240: 0, 360: 70}                       # Pins -> Aufpreis in €
-BUILD = "b31"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
+BUILD = "b32"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
 TEST_QUAD_CENTS = int(os.environ.get("TESTPREIS_QUAD_CENTS", "0"))   # Testpreis für ALLE quadratischen Bretter; 0 = aus (Live-Betrieb)
 BASE_CENTS, BASE_AREA, CENTS_PER_CM2 = 14900, 2500, 2.5   # Vorschlag: 149 € bis 50 x 50 cm, darüber 2,5 Cent je cm² (70 x 70 = 209 €, 100 x 100 = 336 €)
 PREORDER_NOTE = os.environ.get("VORBESTELL_HINWEIS", "Vorbestellung: Wir fertigen ab Februar 2027 in der Reihenfolge der Bestellungen.")
@@ -150,6 +150,19 @@ PREORDER_NOTE = os.environ.get("VORBESTELL_HINWEIS", "Vorbestellung: Wir fertige
 VOUCHER_VALUES = (5000, 10000, 15000, 20000, 30000)    # wählbare Werte in Cent
 VOUCHER_LIMIT = int(os.environ.get("GUTSCHEIN_LIMIT", "25"))   # höchstens so viele Gutscheine verkaufen (0 = unbegrenzt)
 VOUCHER_YEARS = 3                                        # gesetzliche Verjährung: 3 Jahre zum Jahresende
+VOUCHER_SALE_PCT = int(os.environ.get("GUTSCHEIN_RABATT", "20"))           # Aktion: Gutschein kostet X % weniger als sein Wert (0 = aus)
+VOUCHER_SALE_UNTIL = os.environ.get("GUTSCHEIN_AKTION_BIS", "2026-12-24")  # letzter Aktionstag (danach automatisch voller Preis)
+
+def voucher_sale_on():
+    return VOUCHER_SALE_PCT > 0 and time.strftime("%Y-%m-%d") <= VOUCHER_SALE_UNTIL
+
+def voucher_pay_cents(value):
+    """Was der Käufer zahlt. Der Gutschein behält immer seinen vollen Wert."""
+    return round(value * (100 - VOUCHER_SALE_PCT) / 100) if voucher_sale_on() else value
+
+def sale_until_de():
+    y, m, d = VOUCHER_SALE_UNTIL.split("-")
+    return f"{int(d)}.{int(m)}."
 VDIR = os.path.join(DATA_DIR, "gutscheine")
 os.makedirs(VDIR, exist_ok=True)
 _vlock = threading.Lock()
@@ -181,7 +194,7 @@ def voucher_valid_until(created):
 def voucher_ok(v):
     return bool(v) and v["left"] > 0 and time.time() < time.mktime((time.localtime(v["created"]).tm_year + VOUCHER_YEARS, 12, 31, 23, 59, 59, 0, 0, -1))
 
-def voucher_create(session_id, cents, email, name):
+def voucher_create(session_id, cents, email, name, paid=None):
     """Legt den Gutschein nach bezahlter Zahlung an. Mehrfachmeldung derselben Zahlung erzeugt keinen zweiten."""
     with _vlock:
         for f in os.listdir(VDIR):
@@ -194,7 +207,8 @@ def voucher_create(session_id, cents, email, name):
             code = "FA-" + "".join(secrets.choice(alphabet) for _ in range(4)) + "-" + "".join(secrets.choice(alphabet) for _ in range(4))
             if not os.path.exists(os.path.join(VDIR, code + ".json")):
                 break
-        v = dict(code=code, cents=cents, left=cents, email=email, name=name, session=session_id, created=time.time(), uses=[])
+        v = dict(code=code, cents=cents, left=cents, paid=cents if paid is None else paid, email=email, name=name,
+                 session=session_id, created=time.time(), uses=[])
         voucher_save(v)
     threading.Thread(target=voucher_mail, args=(v,), daemon=True).start()
     return v
@@ -1160,7 +1174,8 @@ def voucher_mail(v):
 @app.get("/gutschein")
 def voucher_page():
     left = (VOUCHER_LIMIT - voucher_sold()) if VOUCHER_LIMIT else None
-    return render_template("gutschein.html", values=VOUCHER_VALUES, left=left, note=PREORDER_NOTE, years=VOUCHER_YEARS)
+    return render_template("gutschein.html", values=[(c, voucher_pay_cents(c)) for c in VOUCHER_VALUES], left=left, note=PREORDER_NOTE,
+                           years=VOUCHER_YEARS, sale=VOUCHER_SALE_PCT if voucher_sale_on() else 0, until=sale_until_de())
 
 @app.post("/gutschein/kaufen")
 def voucher_buy():
@@ -1177,9 +1192,10 @@ def voucher_buy():
     try:
         s = stripe.checkout.Session.create(
             mode="payment", locale="de", customer_email=email,
-            line_items=[{"quantity": 1, "price_data": {"currency": "eur", "unit_amount": cents,
-                                                         "product_data": {"name": f"Faded-Art-Gutschein {euro(cents)}" + (f" für {name}" if name else "")}}}],
-            metadata={"gutschein_kauf": str(cents), "gutschein_name": name},
+            line_items=[{"quantity": 1, "price_data": {"currency": "eur", "unit_amount": voucher_pay_cents(cents),
+                                                         "product_data": {"name": f"Faded-Art-Gutschein im Wert von {euro(cents)}" + (f" für {name}" if name else "")
+                                                                          + (f" (Aktion −{VOUCHER_SALE_PCT} %)" if voucher_sale_on() else "")}}}],
+            metadata={"gutschein_kauf": str(cents), "gutschein_bezahlt": str(voucher_pay_cents(cents)), "gutschein_name": name},
             success_url=request.host_url + "gutschein/fertig?session_id={CHECKOUT_SESSION_ID}",
             cancel_url=request.host_url + "gutschein")
         return jsonify(url=s.url)
@@ -1488,6 +1504,30 @@ def cart_items():
     session["cart"] = keep
     return items
 
+# ---------- Versand (europaweit). Preise in Cent je Größenklasse S/M/L/XL, nach längster Seite ----------
+EU = ["AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "GR", "HU", "IE", "IT", "LV", "LT", "LU",
+      "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE"]
+SHIP = {   # Zone: (Anzeigename, Länder, Preise S/M/L/XL). Mit Umgebungsvariable VERSAND_JSON überschreibbar.
+    "de": ("Deutschland", ["DE"], (790, 990, 1490, 3990)),
+    "eu": ("EU-Ausland", EU, (1690, 1990, 2990, 6990)),
+    "ch": ("Schweiz / Liechtenstein (zzgl. Zoll und Einfuhrsteuer)", ["CH", "LI"], (2490, 2990, 3990, 8990)),
+}
+if os.environ.get("VERSAND_JSON"):
+    SHIP.update({k: tuple(v) for k, v in json.loads(os.environ["VERSAND_JSON"]).items()})
+SHIP_EXTRA = 500   # je weiteres Bild im selben Paket
+
+def ship_class(m):
+    side = max(m.get("w", 50), m.get("h", 50))
+    return 0 if side <= 40 else 1 if side <= 60 else 2 if side <= 80 else 3
+
+def ship_cents(refs, zone):
+    ms = [load(r) for r in refs]
+    ms = [m for m in ms if m]
+    if not ms or zone not in SHIP:
+        return 0
+    rates = SHIP[zone][2]
+    return max(rates[ship_class(m)] for m in ms) + SHIP_EXTRA * (len(ms) - 1)
+
 @app.template_filter("euro")
 def euro(cents):
     return f"{cents / 100:.2f}".replace(".", ",") + " €"
@@ -1520,7 +1560,9 @@ def cart():
         v = None
         session.pop("voucher", None)
     disc = min(v["left"], total) if v else 0
-    return render_template("cart.html", items=items, total=total, voucher=v, disc=disc, pay=total - disc, note=PREORDER_NOTE)
+    refs = [i["ref"] for i in items]
+    ship = {z: {"name": SHIP[z][0], "cents": ship_cents(refs, z)} for z in SHIP}
+    return render_template("cart.html", items=items, total=total, voucher=v, disc=disc, pay=total - disc, note=PREORDER_NOTE, ship=ship)
 
 @app.post("/cart/add")
 def cart_add():
@@ -1553,23 +1595,13 @@ def checkout():
         return jsonify(message="Der Warenkorb ist leer"), 400
     if not re.match(r"^\S+@\S+\.\S+$", email) or data.get("agb") is not True:
         return jsonify(message="E-Mail oder AGB-Zustimmung fehlt"), 400
+    zone = data.get("zone", "de")
+    if zone not in SHIP:
+        return jsonify(message="Bitte ein Lieferland wählen"), 400
     total = sum(i["cents"] for i in items)
+    ship = ship_cents([i["ref"] for i in items], zone)
     v = voucher_load(session.get("voucher"))
-    disc = min(v["left"], total) if voucher_ok(v) else 0
-    if disc and total - disc < 50:                      # Gutschein deckt alles (Stripe nimmt erst ab 0,50 €): ohne Zahlung bestellen
-        use_id = "gs-" + uuid.uuid4().hex
-        voucher_use(v["code"], total, use_id)
-        for i in items:
-            with _meta_lock:
-                m = load(i["ref"])
-                if not m or m.get("paid"):
-                    continue
-                m.update(paid=True, email=email, gutschein=v["code"], stripe_session=use_id)
-                _write(i["ref"], m)
-            threading.Thread(target=notify_owner, args=(i["ref"],), daemon=True).start()
-        session.pop("cart", None)
-        session.pop("voucher", None)
-        return jsonify(url="/success?gutschein=1")
+    disc = min(v["left"], total) if voucher_ok(v) else 0   # Gutschein gilt für die Bilder, Versand wird immer bezahlt (so kommt auch die Lieferadresse)
     if disc:                                             # Teilbetrag: Rabatt anteilig auf die Positionen verteilen
         rest = disc
         for n_, i in enumerate(items):
@@ -1588,9 +1620,11 @@ def checkout():
             mode="payment", locale="de", customer_email=email,   # Zahlarten legt das Stripe-Dashboard fest (payment_method_types gibt es nicht mehr)
             line_items=[{"quantity": 1, "price_data": {
                 "currency": "eur", "unit_amount": i["cents"],   # Preise kommen nur vom Server
-                "product_data": {"name": i["title"]}}} for i in items],
-            shipping_address_collection={"allowed_countries": ["DE", "AT", "CH"]},
-            metadata={"order_refs": ",".join(i["ref"] for i in items),
+                "product_data": {"name": i["title"]}}} for i in items if i["cents"] > 0] + [{"quantity": 1, "price_data": {
+                "currency": "eur", "unit_amount": ship,
+                "product_data": {"name": f"Versand {SHIP[zone][0]}" + (" (Bilder per Gutschein bezahlt)" if all(i["cents"] == 0 for i in items) else "")}}}],
+            shipping_address_collection={"allowed_countries": SHIP[zone][1]},   # Adresse muss zur gewählten Versandzone passen
+            metadata={"order_refs": ",".join(i["ref"] for i in items), "versand": zone, "versand_cents": str(ship),
                       **({"gutschein": v["code"], "gutschein_cents": str(disc)} if disc else {})},
             success_url=request.host_url + "success?session_id={CHECKOUT_SESSION_ID}",
             cancel_url=request.host_url + "warenkorb")
@@ -1663,7 +1697,8 @@ def handle_checkout(s):
     email0 = s["customer_email"] if "customer_email" in s else None
     if "gutschein_kauf" in meta:                 # Gutschein gekauft
         return voucher_create(s["id"], int(meta["gutschein_kauf"]), email0,
-                              meta["gutschein_name"] if "gutschein_name" in meta else "")
+                              meta["gutschein_name"] if "gutschein_name" in meta else "",
+                              int(meta["gutschein_bezahlt"]) if "gutschein_bezahlt" in meta else None)
     if "gutschein" in meta:                      # Bestellung mit Gutschein (Teilbetrag): Guthaben abziehen
         voucher_use(meta["gutschein"], int(meta["gutschein_cents"]), s["id"])
     refs = meta["order_refs"] if "order_refs" in meta else ""

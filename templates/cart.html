@@ -13,15 +13,17 @@
     </div>
     {% endfor %}
     <div class="card">
-      <p class="price" style="margin-bottom:.4rem">Summe: {{ total|euro }}</p>
-      {% if voucher %}<p class="hint">Gutschein {{ voucher.code }}: − {{ disc|euro }} <button type="button" class="linkbtn" id="vrm">entfernen</button></p>
-      <p class="price" style="margin:.4rem 0 1rem">Zu zahlen: {{ pay|euro }}</p>
-      {% else %}<div class="field" style="margin-top:.8rem"><label for="vcode">Gutscheincode</label>
+      <p class="hint" style="margin-bottom:.2rem">Bilder: {{ total|euro }}</p>
+      {% if voucher %}<p class="hint">Gutschein {{ voucher.code }}: − {{ disc|euro }} <button type="button" class="linkbtn" id="vrm">entfernen</button></p>{% endif %}
+      <div class="field" style="margin:.6rem 0 .4rem"><label for="zone">Lieferland</label>
+        <select id="zone">{% for z, s in ship.items() %}<option value="{{ z }}" data-c="{{ s.cents }}">{{ s.name }} – Versand {{ s.cents|euro }}</option>{% endfor %}</select></div>
+      <p class="price" style="margin:.4rem 0 1rem" id="topay" data-pay="{{ pay }}">Zu zahlen: {{ (pay + ship.de.cents)|euro }} <span class="hint">inkl. Versand</span></p>
+      {% if not voucher %}<div class="field" style="margin-top:.8rem"><label for="vcode">Gutscheincode</label>
         <div class="row"><input type="text" id="vcode" placeholder="FA-XXXX-XXXX" autocapitalize="characters" autocomplete="off"><button type="button" class="btn" id="vapply">Einlösen</button></div></div>{% endif %}
       <p class="hint" style="margin-bottom:1rem">{{ note }}</p>
       <div class="field"><label for="email">E-Mail für Ihre Bestellung</label><input type="email" id="email" autocomplete="email" placeholder="name@beispiel.de"></div>
       <div class="field"><label style="text-transform:none;font-weight:400"><input type="checkbox" id="agb">Ich akzeptiere die <a href="/agb" target="_blank" rel="noopener">AGB</a> und habe die <a href="/widerruf" target="_blank" rel="noopener">Widerrufsbelehrung</a> gelesen. Mir ist bekannt, dass für individuell angefertigte Ware kein Widerrufsrecht besteht.</label></div>
-      <button type="button" class="btn btn-gold" id="pay" style="width:100%">{% if voucher and pay < 50 %}Mit Gutschein bestellen{% else %}Zahlungspflichtig bestellen{% endif %}</button>
+      <button type="button" class="btn btn-gold" id="pay" style="width:100%">Zahlungspflichtig bestellen</button>
       <p class="msg" id="msg" role="alert"></p>
       <a href="/configure" class="btn" style="margin-top:.5rem">Weiteres Bild konfigurieren</a>
     </div>
@@ -45,6 +47,12 @@ if (vapply) vapply.addEventListener('click', async () => {
 });
 const vrm = document.getElementById('vrm');
 if (vrm) vrm.addEventListener('click', async () => { await post('/cart/gutschein', { code: '' }); location.reload(); });
+const zone = document.getElementById('zone');
+const eur = c => (c / 100).toFixed(2).replace('.', ',') + ' €';
+if (zone) zone.addEventListener('change', () => {
+  const tp = document.getElementById('topay');
+  tp.firstChild.textContent = 'Zu zahlen: ' + eur(+tp.dataset.pay + +zone.selectedOptions[0].dataset.c) + ' ';
+});
 const pay = document.getElementById('pay');
 if (pay) pay.addEventListener('click', async () => {
   const msg = t => document.getElementById('msg').textContent = t || '';
@@ -53,7 +61,7 @@ if (pay) pay.addEventListener('click', async () => {
   if (!document.getElementById('agb').checked) return msg('Bitte AGB und Widerrufsbelehrung bestätigen.');
   pay.disabled = true; msg('');
   try {
-    const d = await (await post('/checkout', { email, agb: true })).json();
+    const d = await (await post('/checkout', { email, agb: true, zone: zone.value })).json();
     if (d.url) location.href = d.url; else throw new Error(d.message || 'Unbekannt');
   } catch (e) { msg('Checkout nicht möglich: ' + e.message); pay.disabled = false; }
 });
