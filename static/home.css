@@ -280,3 +280,16 @@ body.v2 .steps-v{max-width:none;margin:3rem 0 0}
   .build-stage{width:min(100%,80svh)}
   .scrub-wrap{height:min(80svh,620px)}
 }
+/* Vergleich der Ausführungen */
+.cmp-pick{display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:2rem}
+.cmp-pick button{display:flex;align-items:center;gap:.6rem;padding:.35rem 1rem .35rem .35rem;border-radius:999px;background:var(--walnut-2);border:1px solid transparent;color:var(--ivory);font:inherit;font-size:.92rem;cursor:pointer}
+.cmp-pick img{width:36px;height:36px;border-radius:50%;object-fit:cover}
+.cmp-pick button.on{border-color:var(--gold);color:var(--gold-hi)}
+.cmp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:clamp(1rem,2.5vw,2rem)}
+.cmp figure{margin:0}
+.cmp img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:50%;display:block;box-shadow:0 0 0 1px rgba(201,162,74,.35),0 24px 50px -24px #000}
+.cmp-lux img{box-shadow:0 0 0 2px var(--gold),0 24px 50px -24px #000}
+.cmp figcaption{margin-top:1rem;color:var(--muted);font-size:.9rem}
+.cmp figcaption b{display:block;font-family:var(--serif);font-weight:500;font-size:1.35rem;color:var(--ivory)}
+.cmp-lux figcaption b{color:var(--gold-hi)}
+@media(max-width:900px) and (orientation:portrait),(max-width:600px){.cmp{grid-template-columns:1fr 1fr;gap:1.5rem 1rem}.cmp figcaption{font-size:.82rem}.cmp figcaption b{font-size:1.1rem}}
