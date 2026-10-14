@@ -227,3 +227,9 @@ body.v2 .sf-col a:hover{color:var(--ivory)}
 .sf-base{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem 2rem;margin-top:3rem;padding-top:1.4rem;border-top:1px solid var(--line);font-size:.78rem;color:var(--faint)}
 @media(max-width:820px){.sf-grid{grid-template-columns:1fr 1fr;gap:2rem 1.5rem}.sf-brand{grid-column:1/-1}}
 @media(max-width:700px){.sf-col a{padding:.55rem 0}}
+
+/* Weiß und Schwarz matt: Platte ohne Rahmen, nur Wandschatten */
+body.v2 .wood-frame[data-wood=weiss],body.v2 .wood-frame[data-wood=mdf]{padding:0;background:none;box-shadow:0 30px 60px -28px rgba(0,0,0,.6)}
+body.v2 .wood-board[data-wood=weiss],body.v2 .wood-board[data-wood=mdf]{box-shadow:none}
+body.v2 .wood-frame{transition:padding .4s var(--ease),background-color .4s}
+.room-board.flat{stroke:none}

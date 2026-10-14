@@ -129,12 +129,12 @@
 <section class="sec wood-sec" data-label="Holz">
   <h2 class="h2">Sechs Untergründe.<br>Jeder mit eigener Maserung.</h2>
   <div class="wood">
-    <div class="wood-frame"><div class="wood-board" id="woodBoard" data-wood="nussbaum"><img src="{{ url_for('static', filename='img/art-katze.jpg') }}" alt="" loading="lazy"></div></div>
+    <div class="wood-frame" id="woodFrame" data-wood="weiss"><div class="wood-board" id="woodBoard" data-wood="weiss"><img src="{{ url_for('static', filename='img/art-katze.jpg') }}" alt="" loading="lazy"></div></div>
     <div>
-      <p class="wood-name" id="woodName" aria-live="polite">Nussbaum Premium</p>
+      <p class="wood-name" id="woodName" aria-live="polite">{% for k, name, extra in woods if k == 'weiss' %}{{ name }}{% endfor %}</p>
       <div class="wood-pick" role="radiogroup" aria-label="Untergrund wählen">
         {% for k, name, extra in woods %}
-        <button type="button" class="wood-sw{% if k == 'nussbaum' %} on{% endif %}" role="radio" aria-checked="{{ 'true' if k == 'nussbaum' else 'false' }}" data-wood="{{ k }}" data-name="{{ name }}">
+        <button type="button" class="wood-sw{% if k == 'weiss' %} on{% endif %}" role="radio" aria-checked="{{ 'true' if k == 'weiss' else 'false' }}" data-wood="{{ k }}" data-name="{{ name }}">
           <i style="background-image:url({{ url_for('static', filename='img/holz/klein/' ~ k ~ '.jpg') }})"></i>
           <span>{{ name }}</span><small>{% if extra %}+ {{ (extra * 100)|euro }}{% else %}inklusive{% endif %}</small>
         </button>
@@ -168,7 +168,7 @@
     <div class="room-view">
       <svg class="room-svg" id="roomSvg" viewBox="0 0 340 270" role="img" aria-label="Wand mit Möbel, darüber das Fadenbild in der gewählten Größe, maßstabsgetreu">
         <defs>
-          <pattern id="woodPat" patternUnits="userSpaceOnUse" width="120" height="120"><image href="{{ url_for('static', filename='img/holz/nussbaum.jpg') }}" width="120" height="120"/></pattern>
+          <pattern id="woodPat" patternUnits="userSpaceOnUse" width="120" height="120"><image href="{{ url_for('static', filename='img/holz/weiss.jpg') }}" width="120" height="120"/></pattern>
           <clipPath id="artClip"><circle id="artCircle" cx="170" cy="100" r="22"/></clipPath>
           <filter id="hang" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="1.6" stdDeviation="1.6" flood-opacity=".35"/></filter>
         </defs>
@@ -216,7 +216,7 @@
       <fieldset><legend>Größe</legend><div class="seg seg4 sizes-seg" data-k="size">
         {% for k in ['S','M','L','XL'] %}<button type="button" data-v="{{ k }}" class="{{ 'on' if k == 'M' }}" aria-pressed="{{ 'true' if k == 'M' else 'false' }}"><b>{{ k }}</b><small></small></button>{% endfor %}</div></fieldset>
       <fieldset><legend>Holz</legend><div class="dots" data-k="wood">
-        {% for k, name, extra in woods %}<button type="button" class="dot wood-dot{{ ' on' if k == 'nussbaum' }}" data-v="{{ k }}" aria-pressed="{{ 'true' if k == 'nussbaum' else 'false' }}" aria-label="{{ name }}" title="{{ name }}" style="background-image:url({{ url_for('static', filename='img/holz/klein/' ~ k ~ '.jpg') }})"></button>{% endfor %}</div></fieldset>
+        {% for k, name, extra in woods %}<button type="button" class="dot wood-dot{{ ' on' if k == 'weiss' }}" data-v="{{ k }}" aria-pressed="{{ 'true' if k == 'weiss' else 'false' }}" aria-label="{{ name }}" title="{{ name }}" style="background-image:url({{ url_for('static', filename='img/holz/klein/' ~ k ~ '.jpg') }})"></button>{% endfor %}</div></fieldset>
       <fieldset><legend>Wandfarbe</legend><div class="dots" data-k="wall">
         {% for v, name in [('#ece6dc','Weiß'),('#cfcac2','Hellgrau'),('#d8c7ad','Beige'),('#a9b29c','Salbei'),('#b8735a','Terrakotta'),('#6e4f3a','Braun'),('#2f4f55','Petrol'),('#3a3836','Anthrazit')] %}<button type="button" class="dot{{ ' on' if loop.first }}" data-v="{{ v }}" aria-pressed="{{ 'true' if loop.first else 'false' }}" aria-label="{{ name }}" title="{{ name }}" style="background:{{ v }}"></button>{% endfor %}</div></fieldset>
       <fieldset><legend id="furnLegend">Farbe des Sofas</legend><div class="dots" data-k="furn">
@@ -440,14 +440,13 @@
   const wb = $('#woodBoard'), wn = $('#woodName');
   $$('.wood-sw').forEach(b => b.addEventListener('click', () => {
     $$('.wood-sw').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', x === b); });
-    wb.dataset.wood = b.dataset.wood; wn.textContent = b.dataset.name;
-    $('#woodPat image').setAttribute('href', "{{ url_for('static', filename='img/holz/') }}" + b.dataset.wood + '.jpg');
+    wb.dataset.wood = $('#woodFrame').dataset.wood = b.dataset.wood; wn.textContent = b.dataset.name;
   }));
 
   /* Raum-Planer (1 Einheit im Bild = 1 cm) */
   (() => {
     const CFG = {{ room|tojson }};
-    const st = { room: 'wohn', fmt: 'quad', size: 'M', wood: 'nussbaum', wall: '#ece6dc', furn: '#7d7a74' };
+    const st = { room: 'wohn', fmt: 'quad', size: 'M', wood: 'weiss', wall: '#ece6dc', furn: '#7d7a74' };
     const svg = $('#roomSvg'), rect = $('#boardRect'), disc = $('#boardDisc'), art = $('#boardArt'), circ = $('#artCircle');
     const pat = $('#woodPat'), patImg = $('#woodPat image'), dim = $('#roomDim'), ref = $('#roomRef');
     const FMT = { rund: 'Rund', quad: 'Quadratisch', hoch: 'Hochformat', quer: 'Querformat' };
@@ -474,6 +473,7 @@
       svg.style.setProperty('--furn-dark', shade(st.furn, .82)); svg.style.setProperty('--furn-light', shade(st.furn, 1.12));
       const dark = parseInt(st.wall.slice(1, 3), 16) < 140; svg.classList.toggle('dark-wall', dark);
       patImg.setAttribute('href', "{{ url_for('static', filename='img/holz/') }}" + st.wood + '.jpg');
+      [rect, disc].forEach(el => el.classList.toggle('flat', st.wood === 'weiss' || st.wood === 'mdf'));   /* Weiß/Schwarz matt: ohne Rahmen */
       $$('.sizes-seg button').forEach(b => { const [bw, bh] = CFG.sizes[st.fmt][b.dataset.v];
         b.querySelector('small').textContent = round ? `Ø ${bw}` : `${bw}×${bh}`; });
       const area = w * h * (round ? CFG.round_area : 1);
