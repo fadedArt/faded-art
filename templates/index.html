@@ -10,8 +10,10 @@
 
 <section class="h-hero bleed" data-label="Start">
   <div class="h-hero-art">
-    <canvas id="heroCanvas" width="900" height="900" aria-label="Ein Fadenbild entsteht Linie für Linie"></canvas>
-    <img id="heroImg" src="{{ url_for('static', filename='img/art-katze.jpg') }}" alt="Fadenbild einer Katze aus schwarzem und weißem Faden auf schwarzem Grund" hidden>
+    <canvas id="heroCanvas" width="900" height="900" role="img" aria-label="Das Faded-Art-Siegel spannt sich Faden für Faden: eine goldene Kardioide im Ring"></canvas>
+    <svg class="seal-ring" viewBox="0 0 900 900" aria-hidden="true"><defs><path id="sealTop" d="M 85 450 A 365 365 0 0 1 815 450"/><path id="sealBot" d="M 75 450 A 375 375 0 0 0 825 450"/></defs>
+      <text><textPath href="#sealTop" startOffset="50%" text-anchor="middle">FADED ART</textPath></text>
+      <text class="sub"><textPath href="#sealBot" startOffset="50%" text-anchor="middle">· FADENKUNST ·</textPath></text></svg>
     <div class="h-count" aria-hidden="true"><b id="heroN">0</b> Fäden</div>
   </div>
   <div class="h-hero-copy">
@@ -152,27 +154,46 @@
   }), { threshold: .6 });
   $$('.stat b').forEach(b => cio.observe(b));
 
-  /* 3. Hero: Fadenbild entsteht Linie für Linie (echte Spannreihenfolge unserer Engine) */
-  const cv = $('#heroCanvas'), img = $('#heroImg'), cnt = $('#heroN');
-  const showFinal = () => { img.hidden = false; requestAnimationFrame(() => img.classList.add('on')); };
-  fetch('{{ url_for("static", filename="img/demo-katze.json") }}').then(r => r.json()).then(d => {
-    const ctx = cv.getContext('2d'), S = cv.width, c = (S - 1) / 2, R = c * .985, n = d.n;
-    const P = Array.from({ length: n }, (_, i) => [c + R * Math.cos(2 * Math.PI * i / n), c + R * Math.sin(2 * Math.PI * i / n)]);
-    const col = ['rgba(18,18,18,.42)', 'rgba(238,236,228,.42)'];
-    ctx.fillStyle = '#0e0e0e'; ctx.beginPath(); ctx.arc(c, c, c, 0, 7); ctx.fill();
-    ctx.lineWidth = 1;
-    const cur = d.s.slice(), N = d.p.length;
+  /* 3. Hero: das Faded-Art-Siegel spannt sich live (Kardioide: Nagel i -> Nagel 2i) */
+  const cv = $('#heroCanvas'), cnt = $('#heroN'), seal = $('.seal-ring');
+  (() => {
+    const ctx = cv.getContext('2d'), S = cv.width, c = S / 2, R = S * .355, n = 360;
+    const ang = i => Math.PI / 2 + 2 * Math.PI * i / n;                       /* Nagel 0 unten: Kardioide steht als Herz */
+    const P = Array.from({ length: n }, (_, i) => [c + R * Math.cos(ang(i)), c + R * Math.sin(ang(i))]);
+    const L = [];
+    for (let i = 0; i < n; i++) L.push([i, (2 * i) % n, 0]);                   /* Lage 1: Kardioide in Gold */
+    for (let i = 0; i < n; i += 2) L.push([i, (3 * i) % n, 1]);                /* Lage 2: Nephroide, feines Elfenbein */
+    const col = ['rgba(222,184,82,.55)', 'rgba(242,236,222,.16)'];
+    const bg = () => {
+      const g = ctx.createRadialGradient(c, c * .9, 0, c, c, c);
+      g.addColorStop(0, '#1a1712'); g.addColorStop(1, '#090807');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c, c, c, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(195,154,62,.55)'; ctx.lineWidth = 2;               /* Siegelringe */
+      [c - 6, c * .81].forEach(r => { ctx.beginPath(); ctx.arc(c, c, r, 0, 7); ctx.stroke(); });
+      ctx.strokeStyle = 'rgba(195,154,62,.25)'; ctx.lineWidth = 1;
+      [c - 14, c * .79].forEach(r => { ctx.beginPath(); ctx.arc(c, c, r, 0, 7); ctx.stroke(); });
+    };
+    const pins = (k = n) => { for (let i = 0; i < k; i++) { const [x, y] = P[i];
+      ctx.fillStyle = '#7a5f22'; ctx.beginPath(); ctx.arc(x, y, 2.6, 0, 7); ctx.fill();
+      ctx.fillStyle = '#f3dd96'; ctx.beginPath(); ctx.arc(x - .7, y - .7, 1.1, 0, 7); ctx.fill(); } };
     let i = 0;
-    const step = k => { for (let e = Math.min(N, i + k); i < e; i++) { const f = +d.k[i], a = P[cur[f]], b = P[d.p[i]];
-      ctx.strokeStyle = col[f]; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); cur[f] = d.p[i]; } };
-    const pins = () => { ctx.fillStyle = '#c39a3e'; P.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, 2.2, 0, 7); ctx.fill(); }); };
-    if (reduce) { step(N); pins(); cnt.textContent = N.toLocaleString('de-DE'); return showFinal(); }
-    const t0 = performance.now(), DUR = 7000;
-    const frame = t => { const p = Math.min(1, (t - t0) / DUR), want = Math.round(N * (p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2));
+    const step = k => { ctx.globalCompositeOperation = 'lighter'; ctx.lineWidth = 1.2;
+      for (let e = Math.min(L.length, i + k); i < e; i++) { const [a, b, f] = L[i];
+        ctx.strokeStyle = col[f]; ctx.beginPath(); ctx.moveTo(P[a][0], P[a][1]); ctx.lineTo(P[b][0], P[b][1]); ctx.stroke(); }
+      ctx.globalCompositeOperation = 'source-over'; };
+    const done = () => { pins(); cnt.textContent = L.length.toLocaleString('de-DE'); seal.classList.add('on'); };
+    bg();
+    if (reduce) { step(L.length); return done(); }
+    const t0 = performance.now(), PIN = 1200, DUR = 5200;                      /* erst Nägel setzen, dann spannen */
+    const frame = t => {
+      const e = t - t0;
+      if (e < PIN) { pins(Math.round(n * e / PIN)); return requestAnimationFrame(frame); }
+      const p = Math.min(1, (e - PIN) / DUR), want = Math.round(L.length * (p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2));
       step(want - i); cnt.textContent = i.toLocaleString('de-DE');
-      if (p < 1) requestAnimationFrame(frame); else { pins(); setTimeout(showFinal, 300); } };
-    pins(); requestAnimationFrame(frame);
-  }).catch(showFinal);
+      if (p < 1) requestAnimationFrame(frame); else done();
+    };
+    requestAnimationFrame(frame);
+  })();
 
   /* 4. Zoom-Abschnitt: von der Linie zum Bild */
   const zoom = $('.zoom'), zi = $('.zoom-img'), zt1 = $('.zt1'), zt2 = $('.zt2');
