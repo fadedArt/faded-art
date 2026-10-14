@@ -11,7 +11,11 @@
 <meta property="og:title" content="Faded Art">
 <meta property="og:description" content="Dein Foto als Fadenbild aus Schwarz und Weiß, berechnet und gespannt in Feldkirchen bei München.">
 <meta property="og:type" content="website">
-<meta property="og:image" content="{{ url_for('static', filename='img/teilen.jpg', _external=True) }}">
+<meta property="og:image" content="https://fadedart.de/static/img/teilen.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:url" content="https://fadedart.de{{ request.path }}">
+<meta property="og:site_name" content="Faded Art">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="{{ url_for('static', filename='img/siegel.svg') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=asset_v('style.css')) }}">

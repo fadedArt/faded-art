@@ -92,12 +92,17 @@
 <section class="sec cmp-sec" id="vergleich" data-label="Ausführungen">
   <h2 class="h2">Ein Foto. Drei Ausführungen.</h2>
   <p class="sub">Gleiches Foto, gleiche 360 Nägel. Der Unterschied liegt im Faden.</p>
-  <div class="cmp">
-    <figure class="cmp-orig"><img data-v="foto" src="{{ url_for('static', filename='img/foto-tiger.jpg') }}" alt="Originalfoto" loading="lazy"><figcaption><b>Original</b>Dein Foto, zugeschnitten auf den Kreis</figcaption></figure>
-    <figure><img data-v="schwarz" src="{{ url_for('static', filename='img/var-tiger-schwarz.jpg') }}" alt="Fadenbild nur aus schwarzem Faden auf weißem Grund" loading="lazy"><figcaption><b>Schwarz</b>Ein Faden auf hellem Grund. Inklusive</figcaption></figure>
-    <figure class="cmp-lux"><img data-v="sw" src="{{ url_for('static', filename='img/var-tiger-sw.jpg') }}" alt="Fadenbild aus schwarzem und weißem Faden auf dunklem Grund" loading="lazy"><figcaption><b>Schwarz und Weiß</b>Zwei Fäden, mehr Licht und Tiefe. + {{ (sw_eur * 100)|euro }}</figcaption></figure>
-    <figure><img data-v="gold" src="{{ url_for('static', filename='img/var-tiger-gold.jpg') }}" alt="Fadenbild aus schwarzem und goldenem Faden auf dunklem Grund" loading="lazy"><figcaption><b>Gold-Edition</b>Schwarz und Gold auf dunklem Grund. Noch nicht bestellbar, zeigt farbigen Faden.</figcaption></figure>
+  <div class="cmp-pick" role="radiogroup" aria-label="Foto wählen">
+    <button type="button" class="on" data-k="portrait" aria-pressed="true"><img src="{{ url_for('static', filename='img/foto-portrait.jpg') }}" alt="">Porträt</button>
+    <button type="button" data-k="tiger" aria-pressed="false"><img src="{{ url_for('static', filename='img/foto-tiger.jpg') }}" alt="">Tiger</button>
   </div>
+  <div class="cmp">
+    <figure class="cmp-orig"><img data-v="foto" src="{{ url_for('static', filename='img/foto-portrait.jpg') }}" alt="Originalfoto" loading="lazy"><figcaption><b>Original</b>Dein Foto, zugeschnitten auf den Kreis</figcaption></figure>
+    <figure><img data-v="schwarz" src="{{ url_for('static', filename='img/var-portrait-schwarz.jpg') }}" alt="Fadenbild nur aus schwarzem Faden auf weißem Grund" loading="lazy"><figcaption><b>Schwarz</b>Ein Faden auf hellem Grund. Inklusive</figcaption></figure>
+    <figure class="cmp-lux"><img data-v="sw" src="{{ url_for('static', filename='img/var-portrait-sw.jpg') }}" alt="Fadenbild aus schwarzem und weißem Faden auf dunklem Grund" loading="lazy"><figcaption><b>Schwarz und Weiß</b>Zwei Fäden, mehr Licht und Tiefe. + {{ (sw_eur * 100)|euro }}</figcaption></figure>
+    <figure><img data-v="gold" src="{{ url_for('static', filename='img/var-portrait-gold.jpg') }}" alt="Fadenbild aus schwarzem und goldenem Faden auf dunklem Grund" loading="lazy"><figcaption><b>Gold-Edition</b>Schwarz und Gold auf dunklem Grund. Noch nicht bestellbar, zeigt farbigen Faden.</figcaption></figure>
+  </div>
+  <p class="sub" style="font-size:.8rem;margin-top:1rem;opacity:.7">Beispielbilder: Alle Personen sind KI-generiert, keine echten Menschen.</p>
 </section>
 
 <!-- 3. Nah und fern -->
