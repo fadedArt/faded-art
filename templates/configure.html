@@ -133,6 +133,44 @@
         <button type="button" class="vopt wait" data-k="f"><canvas width="600" height="600"></canvas><img alt="Vorschlag Konturen betont"><span>S+W Konturen</span><small class="vp"></small><em class="xp"></em></button>
       </div>
     </div>
+    <div class="room-c" id="roomC" hidden>
+      <h3 class="sugg-h">So hängt es bei dir</h3>
+      <p class="hint" style="margin-bottom:.6rem">Deine gewählte Variante in echter Größe an der Wand. Wand und Möbel kannst du umfärben.</p>
+      <svg class="room-svg" id="rcSvg" viewBox="0 0 340 270" role="img" aria-label="Wand mit Möbel, darüber dein Fadenbild in der gewählten Größe, maßstabsgetreu">
+        <defs>
+          <pattern id="rcWood" patternUnits="userSpaceOnUse" width="120" height="120"><image href="{{ url_for('static', filename='img/holz/weiss.jpg') }}" width="120" height="120"/></pattern>
+          <clipPath id="rcClip"><circle id="rcCircle" cx="170" cy="100" r="22"/></clipPath>
+          <filter id="rcHang" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="1.6" stdDeviation="1.6" flood-opacity=".35"/></filter>
+        </defs>
+        <rect class="room-wall" x="0" y="0" width="340" height="270"/>
+        <rect class="room-floor" x="0" y="262" width="340" height="8"/>
+        <rect class="room-skirt" x="0" y="258" width="340" height="4"/>
+        <g id="rcSofa" class="furn"><g transform="translate(60 177)">
+          <rect class="f-main" x="0" y="0" width="220" height="48" rx="7"/><rect class="f-dark" x="-8" y="22" width="24" height="56" rx="7"/>
+          <rect class="f-dark" x="204" y="22" width="24" height="56" rx="7"/><rect class="f-main" x="10" y="44" width="200" height="22" rx="5"/>
+          <rect class="f-dark" x="10" y="62" width="200" height="12" rx="3"/><rect class="f-leg" x="6" y="78" width="4" height="7"/><rect class="f-leg" x="210" y="78" width="4" height="7"/></g></g>
+        <g id="rcBed" class="furn" hidden><g transform="translate(75 152)">
+          <rect class="f-dark" x="-58" y="50" width="46" height="58" rx="2"/><rect class="f-dark" x="202" y="50" width="46" height="58" rx="2"/>
+          <rect class="f-lamp" x="-41" y="36" width="12" height="14" rx="2"/><rect class="f-lamp" x="219" y="36" width="12" height="14" rx="2"/>
+          <rect class="f-main" x="0" y="0" width="190" height="110" rx="5"/><rect class="f-pillow" x="16" y="48" width="70" height="20" rx="8"/>
+          <rect class="f-pillow" x="104" y="48" width="70" height="20" rx="8"/><rect class="f-duvet" x="2" y="62" width="186" height="30" rx="6"/>
+          <rect class="f-dark" x="0" y="88" width="190" height="16" rx="2"/><rect class="f-leg" x="6" y="104" width="5" height="6"/><rect class="f-leg" x="179" y="104" width="5" height="6"/></g></g>
+        <g filter="url(#rcHang)">
+          <rect id="rcRect" class="room-board" x="145" y="77" width="50" height="50" fill="url(#rcWood)"/>
+          <circle id="rcDisc" class="room-board" cx="170" cy="102" r="25" fill="url(#rcWood)" hidden/>
+          <image id="rcArt" x="147.5" y="79.5" width="45" height="45" clip-path="url(#rcClip)" preserveAspectRatio="xMidYMid slice"/>
+        </g>
+        <text class="room-dim" id="rcDim" x="170" y="140"></text>
+        <text class="room-ref" id="rcRef" x="170" y="268">Sofa 2,20 m</text>
+      </svg>
+      <div class="room-ctl rc-ctl">
+        <div class="seg" data-rc="room"><button type="button" class="on" data-v="wohn" aria-pressed="true">Wohnzimmer</button><button type="button" data-v="schlaf" aria-pressed="false">Schlafzimmer</button></div>
+        <div class="dots" data-rc="wall" aria-label="Wandfarbe">
+          {% for v, name in [('#ece6dc','Weiß'),('#cfcac2','Hellgrau'),('#d8c7ad','Beige'),('#a9b29c','Salbei'),('#b8735a','Terrakotta'),('#6e4f3a','Braun'),('#2f4f55','Petrol'),('#3a3836','Anthrazit')] %}<button type="button" class="dot{{ ' on' if loop.first }}" data-v="{{ v }}" aria-pressed="{{ 'true' if loop.first else 'false' }}" aria-label="Wand {{ name }}" title="Wand {{ name }}" style="background:{{ v }}"></button>{% endfor %}</div>
+        <div class="dots" data-rc="furn" aria-label="Möbelfarbe">
+          {% for v, name in [('#7d7a74','Grau'),('#2a2726','Schwarz'),('#e5ded2','Weiß'),('#cdbb9d','Beige'),('#8a5530','Cognac'),('#4f5e4a','Grün'),('#34465e','Blau')] %}<button type="button" class="dot{{ ' on' if loop.first }}" data-v="{{ v }}" aria-pressed="{{ 'true' if loop.first else 'false' }}" aria-label="Möbel {{ name }}" title="Möbel {{ name }}" style="background:{{ v }}"></button>{% endfor %}</div>
+      </div>
+    </div>
   </div>
 </div>
 </form>

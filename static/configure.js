@@ -429,7 +429,7 @@ function pick(k) {
   saveState({ variant: k });
   if (SKEYS.includes(k)) { if (prices[k]) $('price').textContent = 'Preis mit diesem Vorschlag: ' + eur(prices[k]); }
   else if (basePrice != null) $('price').textContent = 'Preis: ' + eur(basePrice);
-  syncBig(); bigInfo();
+  syncBig(); bigInfo(); roomDraw();
 }
 function bigInfo() {                                             // unter dem großen Bild: Name, Anzahl Fäden, Zoom
   const k = variantKey, b = k && tile(k);
@@ -439,6 +439,45 @@ function bigInfo() {                                             // unter dem gr
   $('bigLines').textContent = name + ': ' + (nlines[k] ? fmtN(nlines[k]) + ' Fäden (Handgriffe)' : 'wird noch gezeichnet …');
   $('zoomBtn').hidden = !fin[k];
 }
+// ---- So hängt es bei dir: gewählte Variante maßstabsgetreu über Sofa oder Bett (1 Einheit = 1 cm) ----
+const RC = { room: 'wohn', wall: '#ece6dc', furn: '#7d7a74' }, SUGG_WOOD = { d: 'mdf', e: 'nussbaum' };
+const vis = (el, on) => el.toggleAttribute('hidden', !on);                 // SVG-Elemente kennen .hidden nicht
+const shade = (hex, f) => { const n = parseInt(hex.slice(1), 16), ch = s => Math.round(Math.min(255, Math.max(0, ((n >> s) & 255) * f))); return `rgb(${ch(16)},${ch(8)},${ch(0)})`; };
+function roomArt() {                                            // fertiges Bild oder die gerade gezeichnete Leinwand
+  const k = variantKey, b = k && tile(k);
+  if (!b) return null;
+  if (fin[k]) return b.querySelector('img').src;
+  try { return L[k] ? L[k].cvs.toDataURL('image/jpeg', .8) : null; } catch (e) { return null; }
+}
+function roomDraw() {
+  const box = $('roomC'); if (!box) return;
+  if (!variantKey) { box.hidden = true; return; }
+  box.hidden = false;
+  const c = cfg(), round = c.format === 'rund', w = c.w, h = c.h, cx = 170, wood = SUGG_WOOD[variantKey] || c.wood;
+  const bottom = RC.room === 'wohn' ? 152 : 127, x = cx - w / 2, y = bottom - h;
+  const pat = $('rcWood'); pat.setAttribute('x', x); pat.setAttribute('y', y);
+  pat.querySelector('image').setAttribute('href', '/static/img/holz/' + wood + '.jpg');
+  vis($('rcRect'), !round); vis($('rcDisc'), round);
+  if (round) { $('rcDisc').setAttribute('cx', cx); $('rcDisc').setAttribute('cy', y + h / 2); $('rcDisc').setAttribute('r', w / 2); }
+  else [['x', x], ['y', y], ['width', w], ['height', h]].forEach(([a, v]) => $('rcRect').setAttribute(a, v));
+  const d = (round ? .95 : .9) * Math.min(w, h), ay = y + h / 2, art = $('rcArt');
+  [['x', cx - d / 2], ['y', ay - d / 2], ['width', d], ['height', d]].forEach(([a, v]) => art.setAttribute(a, v));
+  $('rcCircle').setAttribute('cx', cx); $('rcCircle').setAttribute('cy', ay); $('rcCircle').setAttribute('r', d / 2);
+  const src = roomArt(); if (src) art.setAttribute('href', src);
+  $('rcDim').setAttribute('y', bottom + 7); $('rcDim').textContent = round ? `Ø ${w} cm` : `${w} × ${h} cm`;
+  vis($('rcSofa'), RC.room === 'wohn'); vis($('rcBed'), RC.room !== 'wohn');
+  $('rcRef').textContent = RC.room === 'wohn' ? 'Sofa 2,20 m' : 'Bett 1,80 m';
+  const svg = $('rcSvg'); svg.style.setProperty('--wall', RC.wall); svg.style.setProperty('--furn', RC.furn);
+  svg.style.setProperty('--furn-dark', shade(RC.furn, .82)); svg.classList.toggle('dark-wall', parseInt(RC.wall.slice(1, 3), 16) < 140);
+}
+document.querySelectorAll('[data-rc]').forEach(g => g.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  RC[g.dataset.rc] = b.dataset.v;
+  [...g.querySelectorAll('button')].forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
+  roomDraw();
+}));
+setInterval(() => { if (variantKey && !fin[variantKey] && !$('roomC').hidden) roomDraw(); }, 1000);   // während gezeichnet wird mitwachsen lassen
+
 function showSugg(d) {                                           // drei Vorschläge: Fortschritt, fertiges Bild, Aufpreis
   if (!d.suggestions) return;
   $('sugg').hidden = false;
@@ -451,7 +490,7 @@ function showSugg(d) {                                           // drei Vorschl
     if (sg.url && !fin[sg.key]) {
       fin[sg.key] = true; b.querySelector('img').src = sg.url; b.classList.add('fin'); b.classList.remove('wait');
       b.querySelector('.vp').textContent = sg.lines ? fmtN(sg.lines) + ' Fäden' : 'fertig ✓';
-      if (variantKey === sg.key) { syncBig(); bigInfo(); }
+      if (variantKey === sg.key) { syncBig(); bigInfo(); roomDraw(); }
     } else if (!sg.url) {
       b.querySelector('.vp').textContent = sg.pct ? sg.pct + ' %' : 'wartet';
       if (!(d.lines && d.lines[sg.key]) && d.live && d.live[sg.key] && liveSeen[sg.key] !== d.live[sg.key]) {           // Zwischenbild, solange gerechnet wird
@@ -471,7 +510,7 @@ function showVariants(d) {
     if (done) {
       if (done.lines) nlines[k] = done.lines;
       if (!fin[k]) { fin[k] = true; b.querySelector('img').src = done.url; b.classList.add('fin'); b.classList.remove('wait');
-        vp.textContent = done.lines ? fmtN(done.lines) + ' Fäden' : 'fertig ✓'; if (variantKey === k) { syncBig(); bigInfo(); } }
+        vp.textContent = done.lines ? fmtN(done.lines) + ' Fäden' : 'fertig ✓'; if (variantKey === k) { syncBig(); bigInfo(); roomDraw(); } }
       return;
     }
     vp.textContent = ((d.prog || {})[k] || 0) + ' %';
@@ -490,7 +529,7 @@ document.querySelectorAll('.vopt').forEach(b => b.addEventListener('click', () =
 function resetResults() {
   $('spin').hidden = false; $('checkout').hidden = true; $('variants').hidden = false; $('sugg').hidden = true; prices = {}; basePrice = null;
   $('vtext').textContent = 'Deine drei Varianten werden gerade live gezeichnet. Tippe auf eine, um sie groß zu sehen.';
-  variantKey = null; fin = {}; liveSeen = {}; nlines = {}; $('bigInfo').hidden = true;
+  variantKey = null; fin = {}; liveSeen = {}; nlines = {}; $('bigInfo').hidden = true; if ($('roomC')) $('roomC').hidden = true;
   $('big').hidden = true;
   $('result').hidden = true; cv.hidden = false;
   document.querySelectorAll('.vopt').forEach(x => { x.classList.add('wait'); x.classList.remove('sel'); x.classList.remove('fin'); x.querySelector('img').removeAttribute('src'); x.querySelector('.vp').textContent = ''; x.classList.remove('drawing'); const xp = x.querySelector('.xp'); if (xp) xp.textContent = ''; });
