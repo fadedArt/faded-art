@@ -8,6 +8,7 @@ const cv = $('cv'), ctx = cv.getContext('2d');
 const img = new Image();
 let step = 1, view = { x: S / 2, y: S / 2, s: 1, cover: 1 }, hasImg = false, orderRef = null, busy = false;
 let cut = null, segPromise = null, cutToken = 0;   // cut: freigestelltes Foto (Canvas mit transparentem Hintergrund)
+let cutBase = null, cutMask = null, cutAuto = null, cutVer = 0, tool = 'move', brush = 40, undo = [], hover = null;   // Nacharbeiten mit Radierer
 
 const cfg = () => { const fmt = $('format').value, size = $('size').value, [w, h] = SIZES[fmt][size];
   return { format: fmt, size, w, h, wood: $('wood').value, color: $('color').value,
@@ -71,8 +72,14 @@ function draw() {
   ctx.clearRect(0, 0, S, S);
   ctx.save(); ctx.beginPath(); ctx.arc(S / 2, S / 2, R, 0, 7); ctx.clip();
   ctx.fillStyle = step >= 4 ? c.discHex : '#fff'; ctx.fillRect(0, 0, S, S);   // ab Schritt 4: kein Bild, nur Kreisfarbe
-  if (step < 4) { const dw = img.width * view.s, dh = img.height * view.s; ctx.drawImage(cut || img, view.x - dw / 2, view.y - dh / 2, dw, dh); }
+  if (step < 4) { const dw = img.width * view.s, dh = img.height * view.s;
+    if (cut && tool !== 'move' && step === 1) {                   // beim Nacharbeiten: Entferntes rot und blass sichtbar
+      ctx.globalAlpha = .35; ctx.drawImage(img, view.x - dw / 2, view.y - dh / 2, dw, dh); ctx.globalAlpha = 1;
+      ctx.fillStyle = 'rgba(200,40,40,.18)'; ctx.fillRect(0, 0, S, S); }
+    ctx.drawImage(cut || img, view.x - dw / 2, view.y - dh / 2, dw, dh); }
   ctx.restore();
+  if (hover && cut && tool !== 'move' && step === 1) { ctx.save(); ctx.strokeStyle = tool === 'erase' ? '#ff6b6b' : '#7ee08a'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(hover.cx, hover.cy, brush / 2, 0, 7); ctx.stroke(); ctx.restore(); }
   if (step >= 4) { // Beispiel-Sehnen in Fadenfarbe (nur Look, nicht das echte Ergebnis)
     ctx.save(); ctx.strokeStyle = c.hex; ctx.globalAlpha = .5; ctx.lineWidth = Math.max(1, c.thick * 5);
     for (let i = 0; i < 120; i++) {
@@ -104,7 +111,7 @@ function useImage(url, v) {                                   // Foto anzeigen; 
   return new Promise(res => {
     img.onload = () => { hasImg = true; fit(); if (v) { view.x = v.x; view.y = v.y; view.s = v.s; $('zoom').value = v.s; }
       $('ph').hidden = true; cv.hidden = false; $('zoomBox').hidden = false; $('bgBox').hidden = false; $('result').hidden = true; orderRef = null;
-      cut = null; draw(); if ($('bgcut').checked) freistellen(); res(); };
+      cut = null; $('cutTools').hidden = true; setTool('move'); draw(); if ($('bgcut').checked) freistellen(); res(); };
     img.onerror = () => { msg('Das Bild konnte nicht gelesen werden.'); res(); };
     img.src = url;
   });
@@ -144,6 +151,46 @@ function segmenter() {
   })().catch(e => { segPromise = null; throw e; });
   return segPromise;
 }
+// Maske verfeinern: Guided Filter (Kanten folgen dem Foto, z. B. Haare), dann Reste und Schleier entfernen
+function boxBlur(src, w, h, r) {                               // Mittelwert über (2r+1)² per Summentabelle
+  const I = new Float64Array((w + 1) * (h + 1)), out = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) { let row = 0;
+    for (let x = 0; x < w; x++) { row += src[y * w + x]; I[(y + 1) * (w + 1) + x + 1] = I[y * (w + 1) + x + 1] + row; } }
+  for (let y = 0; y < h; y++) { const y0 = Math.max(0, y - r), y1 = Math.min(h, y + r + 1);
+    for (let x = 0; x < w; x++) { const x0 = Math.max(0, x - r), x1 = Math.min(w, x + r + 1);
+      out[y * w + x] = (I[y1 * (w + 1) + x1] - I[y0 * (w + 1) + x1] - I[y1 * (w + 1) + x0] + I[y0 * (w + 1) + x0]) / ((y1 - y0) * (x1 - x0)); } }
+  return out;
+}
+function refineMask(rgba, p, w, h) {
+  const n = w * h, I = new Float32Array(n);
+  for (let i = 0; i < n; i++) I[i] = (.299 * rgba[4 * i] + .587 * rgba[4 * i + 1] + .114 * rgba[4 * i + 2]) / 255;
+  const r = Math.max(3, Math.round(Math.max(w, h) / 160)), eps = 2e-3;
+  const mI = boxBlur(I, w, h, r), mP = boxBlur(p, w, h, r);
+  const II = new Float32Array(n), IP = new Float32Array(n);
+  for (let i = 0; i < n; i++) { II[i] = I[i] * I[i]; IP[i] = I[i] * p[i]; }
+  const cII = boxBlur(II, w, h, r), cIP = boxBlur(IP, w, h, r), A = new Float32Array(n), B = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const v = cII[i] - mI[i] * mI[i], cv = cIP[i] - mI[i] * mP[i]; A[i] = cv / (v + eps); B[i] = mP[i] - A[i] * mI[i]; }
+  const mA = boxBlur(A, w, h, r), mB = boxBlur(B, w, h, r), q = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const t = Math.min(1, Math.max(0, (mA[i] * I[i] + mB[i] - .42) / .2)), g = Math.min(1, Math.max(0, (p[i] - .15) / .35));
+    q[i] = t * t * (3 - 2 * t) * g; }                                       // klarer Rand, nie weiter als die Grundmaske reicht
+  // nur die größte zusammenhängende Fläche behalten (Reste im Hintergrund weg)
+  const lab = new Int32Array(n).fill(-1), stack = new Int32Array(n); let best = -1, bestN = 0, id = 0;
+  for (let s0 = 0; s0 < n; s0++) { if (q[s0] < .5 || lab[s0] >= 0) continue;
+    let sp = 0, cnt = 0; stack[sp++] = s0; lab[s0] = id;
+    while (sp) { const k = stack[--sp]; cnt++; const x = k % w, y = (k - x) / w;
+      for (const j of [x > 0 ? k - 1 : -1, x < w - 1 ? k + 1 : -1, y > 0 ? k - w : -1, y < h - 1 ? k + w : -1])
+        if (j >= 0 && lab[j] < 0 && q[j] >= .5) { lab[j] = id; stack[sp++] = j; } }
+    if (cnt > bestN) { bestN = cnt; best = id; } id++; }
+  if (best >= 0) { const near = boxBlur(Float32Array.from(lab, v => v === best ? 1 : 0), w, h, r);   // Rand der Hauptfläche darf weich bleiben
+    for (let i = 0; i < n; i++) if (near[i] < .02 || (lab[i] >= 0 && lab[i] !== best)) q[i] = 0; }
+  for (let i = 0; i < n; i++) if (q[i] < .06) q[i] = 0;
+  return q;
+}
+function compose() {                                            // freigestelltes Bild = Foto x Maske
+  const x = cut.getContext('2d'); x.globalCompositeOperation = 'copy'; x.drawImage(cutBase, 0, 0);
+  x.globalCompositeOperation = 'destination-in'; x.drawImage(cutMask, 0, 0); x.globalCompositeOperation = 'source-over';
+  cutVer++;
+}
 async function freistellen() {
   const token = ++cutToken, box = $('bgcut');
   $('bgHint').dataset.text = $('bgHint').dataset.text || $('bgHint').textContent;
@@ -152,36 +199,75 @@ async function freistellen() {
     const seg = await segmenter();
     const sc = Math.min(1, 1024 / Math.max(img.width, img.height));          // große Fotos verkleinert auswerten
     const c = document.createElement('canvas'); c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
-    const x = c.getContext('2d'); x.drawImage(img, 0, 0, c.width, c.height);
+    const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(img, 0, 0, c.width, c.height);
     const r = seg.segment(c), m = r.confidenceMasks[0], a = m.getAsFloat32Array();
     const mc = document.createElement('canvas'); mc.width = m.width; mc.height = m.height;
     const mx = mc.getContext('2d'), id = mx.createImageData(m.width, m.height);
     for (let i = 0; i < a.length; i++) id.data[4 * i + 3] = Math.round(255 * Math.min(1, Math.max(0, a[i])));
     r.confidenceMasks.forEach(q => q.close());
     mx.putImageData(id, 0, 0);
-    x.globalCompositeOperation = 'destination-in'; x.drawImage(mc, 0, 0, c.width, c.height);   // Maske = Deckung des Fotos
+    // grobe Maske auf Fotogröße bringen und an den Kanten des Fotos verfeinern
+    const W = c.width, H = c.height, up = document.createElement('canvas'); up.width = W; up.height = H;
+    const ux = up.getContext('2d', { willReadFrequently: true }); ux.drawImage(mc, 0, 0, W, H);
+    const ua = ux.getImageData(0, 0, W, H).data, p = new Float32Array(W * H);
+    for (let i = 0; i < p.length; i++) p[i] = ua[4 * i + 3] / 255;
+    const q = refineMask(x.getImageData(0, 0, W, H).data, p, W, H);
+    const out = ux.createImageData(W, H);
+    for (let i = 0; i < q.length; i++) { out.data[4 * i] = out.data[4 * i + 1] = out.data[4 * i + 2] = 255; out.data[4 * i + 3] = Math.round(255 * q[i]); }
+    ux.putImageData(out, 0, 0);
     if (token !== cutToken || !box.checked) return;                          // inzwischen neues Foto oder ausgeschaltet
-    cut = c; $('bgHint').textContent = $('bgHint').dataset.text; draw(); if (step === 5) specSoon();
+    cutBase = c; cutMask = up; cutAuto = ux.getImageData(0, 0, W, H); undo = [];
+    cut = document.createElement('canvas'); cut.width = W; cut.height = H; compose();
+    $('bgHint').textContent = $('bgHint').dataset.text; $('cutTools').hidden = false; draw(); if (step === 5) specSoon();
   } catch (e) {
     if (token !== cutToken) return;
     box.checked = false; cut = null; $('bgHint').textContent = $('bgHint').dataset.text; draw();
     msg('Freistellen ist auf diesem Gerät leider nicht möglich (' + (e.message || e) + ').');
   }
 }
+// Nacharbeiten: Radierer entfernt Hintergrund-Reste, "Zurückholen" malt abgeschnittene Stellen wieder ins Bild
+function setTool(t) {
+  tool = t; document.querySelectorAll('#cutTools [data-tool]').forEach(b => { b.classList.toggle('on', b.dataset.tool === t); b.setAttribute('aria-pressed', b.dataset.tool === t); });
+  cv.style.cursor = step !== 1 ? 'default' : t === 'move' ? 'grab' : 'crosshair'; draw();
+}
+document.querySelectorAll('#cutTools [data-tool]').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
+$('brush').addEventListener('input', e => { brush = +e.target.value; draw(); });
+$('cutUndo').addEventListener('click', () => { if (!undo.length) return; cutMask.getContext('2d').putImageData(undo.pop(), 0, 0); compose(); draw(); if (step === 5) specSoon(); });
+$('cutReset').addEventListener('click', () => { if (!cutAuto) return; undo.push(cutMask.getContext('2d').getImageData(0, 0, cutMask.width, cutMask.height));
+  cutMask.getContext('2d').putImageData(cutAuto, 0, 0); compose(); draw(); });
+function toImg(e) {                                             // Bildschirm -> Pixel der Maske
+  const rc = cv.getBoundingClientRect(), k = S / rc.width, cx = (e.clientX - rc.left) * k, cy = (e.clientY - rc.top) * k;
+  const dw = img.width * view.s, dh = img.height * view.s, f = cutMask.width / img.width;
+  return { cx, cy, x: (cx - (view.x - dw / 2)) / view.s * f, y: (cy - (view.y - dh / 2)) / view.s * f, r: brush / 2 / view.s * f };
+}
+function dab(e) {
+  const p = toImg(e), x = cutMask.getContext('2d'), g = x.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+  g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.7, 'rgba(255,255,255,1)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  x.globalCompositeOperation = tool === 'erase' ? 'destination-out' : 'source-over';
+  x.fillStyle = g; x.beginPath(); x.arc(p.x, p.y, p.r, 0, 7); x.fill(); x.globalCompositeOperation = 'source-over';
+  compose(); hover = p; draw();
+}
 $('bgcut').addEventListener('change', e => {
   if (e.target.checked) return freistellen();
-  cutToken++; cut = null; if ($('bgHint').dataset.text) $('bgHint').textContent = $('bgHint').dataset.text; draw();
+  cutToken++; cut = null; $('cutTools').hidden = true; setTool('move'); if ($('bgHint').dataset.text) $('bgHint').textContent = $('bgHint').dataset.text; draw();
 });
 
 let drag = null;
-cv.addEventListener('pointerdown', e => { if (step !== 1) return; drag = { x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; });
+let painting = false;
+cv.addEventListener('pointerdown', e => { if (step !== 1) return;
+  if (cut && tool !== 'move') { undo.push(cutMask.getContext('2d').getImageData(0, 0, cutMask.width, cutMask.height)); if (undo.length > 15) undo.shift();
+    painting = true; cv.setPointerCapture(e.pointerId); dab(e); return; }
+  drag = { x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; });
 cv.addEventListener('pointermove', e => {
+  if (cut && tool !== 'move' && step === 1) { if (painting) dab(e); else { hover = toImg(e); draw(); } return; }
   if (!drag) return;
   const k = S / cv.getBoundingClientRect().width;
   view.x += (e.clientX - drag.x) * k; view.y += (e.clientY - drag.y) * k;
   drag = { x: e.clientX, y: e.clientY }; draw();
 });
-['pointerup', 'pointercancel'].forEach(t => cv.addEventListener(t, () => { if (drag) saveState(); drag = null; cv.style.cursor = step === 1 ? 'grab' : 'default'; }));
+['pointerup', 'pointercancel'].forEach(t => cv.addEventListener(t, () => { if (painting) { painting = false; if (step === 5) specSoon(); return; }
+  if (drag) saveState(); drag = null; cv.style.cursor = step !== 1 ? 'default' : (cut && tool !== 'move') ? 'crosshair' : 'grab'; }));
+cv.addEventListener('pointerleave', () => { if (hover) { hover = null; draw(); } });
 $('zoom').addEventListener('input', e => { view.s = parseFloat(e.target.value); draw(); saveState(); });
 const zoomBy = f => { const z = $('zoom'); view.s = Math.min(+z.max, Math.max(+z.min, view.s * f)); z.value = view.s; draw(); };
 $('zin').addEventListener('click', () => zoomBy(1.1));
@@ -199,7 +285,7 @@ function show(n) {
   });
   $('back').style.visibility = n > 1 ? 'visible' : 'hidden';
   $('next').textContent = n === 5 ? 'Varianten berechnen' : 'Weiter';
-  cv.style.cursor = n === 1 ? 'grab' : 'default'; cv.style.touchAction = n === 1 ? 'none' : 'auto'; // Verschieben nur in Schritt 1
+  cv.style.cursor = n === 1 ? ((cut && tool !== 'move') ? 'crosshair' : 'grab') : 'default'; cv.style.touchAction = n === 1 ? 'none' : 'auto'; // Verschieben nur in Schritt 1
   msg(''); if (n >= 4 && lowContrast()) msg(MSG);
   draw(); saveState();
   if (n === 5) specSoon(); else if (spec && !busy) dropSpec();
@@ -207,7 +293,7 @@ function show(n) {
 
 // ---- Vorab-Berechnung: sobald Schritt 5 erreicht ist, rechnet der Server schon los ----
 let spec = null, specTimer = null;                               // spec = { sig, ref, ready: Promise }
-const sig = () => JSON.stringify([cfg(), Math.round(view.x), Math.round(view.y), +view.s.toFixed(4), !!cut, img.src.length]);
+const sig = () => JSON.stringify([cfg(), Math.round(view.x), Math.round(view.y), +view.s.toFixed(4), !!cut, cutVer, img.src.length]);
 function dropSpec() {
   const s0 = spec; spec = null;
   if (s0) s0.ready.then(ref => ref && fetch('/cancel/' + ref, { method: 'POST' }).catch(() => {}));

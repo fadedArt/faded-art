@@ -16,7 +16,18 @@
       <div class="row"><button type="button" class="btn zbtn" id="zout" aria-label="Wegzoomen">−</button><input type="range" id="zoom"><button type="button" class="btn zbtn" id="zin" aria-label="Näher heranzoomen">+</button></div>
       <button type="button" class="btn" id="center" style="margin-top:.75rem">Zentrieren</button></div>
     <div class="field" id="bgBox" hidden><label style="text-transform:none;font-weight:400"><input type="checkbox" id="bgcut">Hintergrund entfernen (für Fotos von Personen)</label>
-      <p class="hint" id="bgHint" style="margin-top:.4rem">Die Person wird freigestellt und hebt sich im Fadenbild klar ab. Das passiert direkt auf deinem Gerät, dein Foto wird dafür nirgends hochgeladen. Bei Tieren oder Landschaften besser ausgeschaltet lassen.</p></div>
+      <p class="hint" id="bgHint" style="margin-top:.4rem">Die Person wird freigestellt und hebt sich im Fadenbild klar ab. Das passiert direkt auf deinem Gerät, dein Foto wird dafür nirgends hochgeladen. Bei Tieren oder Landschaften besser ausgeschaltet lassen.</p>
+      <div id="cutTools" class="cut-tools" hidden>
+        <p class="hint">Nicht perfekt? Mit dem Radierer entfernst du Reste vom Hintergrund, mit „Zurückholen“ malst du abgeschnittene Haare oder Schultern wieder ins Bild. Entfernte Stellen siehst du dabei rot.</p>
+        <div class="cut-seg" role="group" aria-label="Werkzeug">
+          <button type="button" class="on" data-tool="move" aria-pressed="true">Verschieben</button>
+          <button type="button" data-tool="erase" aria-pressed="false">Radieren</button>
+          <button type="button" data-tool="restore" aria-pressed="false">Zurückholen</button>
+        </div>
+        <label for="brush" class="cut-l">Pinselgröße</label>
+        <input type="range" id="brush" min="10" max="120" value="40">
+        <div class="row"><button type="button" class="btn" id="cutUndo">Rückgängig</button><button type="button" class="btn" id="cutReset">Automatisch neu</button></div>
+      </div></div>
   </section>
   <section data-step="2" hidden>
     <h2>Format und Größe</h2>
