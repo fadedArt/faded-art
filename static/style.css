@@ -302,3 +302,16 @@ body.home .logo{white-space:nowrap}
 .seal-ring.on{opacity:1;transform:none}
 .seal-ring text{font-family:Cinzel,Georgia,serif;font-weight:600;font-size:46px;letter-spacing:.42em;fill:#d9b65a}
 .seal-ring text.sub{font-size:24px;font-weight:500;letter-spacing:.6em;fill:#a98a45}
+/* Nah & fern (ersetzt den Zoom) */
+.nf{display:grid;grid-template-columns:1fr 1fr;gap:clamp(1.25rem,4vw,3rem);max-width:860px;margin:0 auto}
+.nf figure{margin:0;text-align:center}
+.nf img{width:100%;max-width:380px;aspect-ratio:1;object-fit:cover;border-radius:50%;display:block;margin:0 auto 1.25rem;box-shadow:0 0 0 1px rgba(195,154,62,.4),0 30px 60px -25px rgba(0,0,0,.9)}
+.nf figcaption{color:#b4ab9d;font-size:.92rem;max-width:30ch;margin:0 auto}
+.nf figcaption b{display:block;font-family:Cinzel,Georgia,serif;font-weight:500;font-size:1.15rem;color:var(--paper);margin-bottom:.3rem}
+@media(max-width:600px){.nf{grid-template-columns:1fr 1fr;gap:1rem}.nf figcaption{font-size:.8rem}.nf figcaption b{font-size:.95rem}}
+/* Faden-Leiste: einfache Linien, gut sichtbar */
+.thread{width:24px}
+.t-line{position:relative;width:2px;margin-left:11px;background:rgba(242,237,228,.22);border-radius:2px}
+.t-fill{position:absolute;inset:0;background:linear-gradient(var(--gold-t),var(--gold));transform-origin:top;transform:scaleY(0);box-shadow:0 0 8px rgba(212,175,55,.7);border-radius:2px}
+.thread-pins{top:0;bottom:auto}
+@media(max-width:900px){.thread{width:14px;right:4px}.t-line{margin-left:6px}}

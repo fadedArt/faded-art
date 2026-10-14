@@ -4,7 +4,7 @@
 {% block content %}
 <!-- Faden-Leiste: zeigt beim Scrollen, wo man auf der Seite ist -->
 <nav class="thread" aria-label="Abschnitte der Seite">
-  <svg class="thread-svg" aria-hidden="true" preserveAspectRatio="none"><path class="t-base"/><path class="t-gold"/></svg>
+  <div class="t-line" aria-hidden="true"><div class="t-fill"></div></div>
   <ol class="thread-pins"></ol>
 </nav>
 
@@ -25,14 +25,12 @@
   <a href="#nah" class="scroll-hint" aria-label="Weiter nach unten"><span></span></a>
 </section>
 
-<!-- Apple-artiger Zoom: von der Linie zum Bild -->
-<section class="zoom bleed" id="nah" data-label="Nah & fern">
-  <div class="zoom-stick">
-    <div class="zoom-img"><img src="{{ url_for('static', filename='img/art-katze-hd.jpg') }}" alt="Fadenbild aus der Nähe: einzelne Fäden kreuzen sich" loading="lazy"></div>
-    <div class="zoom-text">
-      <p class="zt zt1"><span class="eyebrow">Aus der Nähe</span>Nur Linien.<br><em>Tausende gerade Fäden.</em></p>
-      <p class="zt zt2"><span class="eyebrow">Aus zwei Metern</span>Ein Blick,<br><em>der Sie ansieht.</em></p>
-    </div>
+<section class="h-block" id="nah" data-label="Nah & fern">
+  <p class="eyebrow center rv">Nah & fern</p>
+  <h2 class="h2 center rv" style="--d:.1s">Aus der Nähe Linien. <em>Aus der Ferne ein Blick.</em></h2>
+  <div class="nf">
+    <figure class="rv"><img src="{{ url_for('static', filename='img/detail-katze.jpg') }}" alt="Nahaufnahme: einzelne schwarze und weiße Fäden kreuzen sich" loading="lazy"><figcaption><b>Aus 20 cm</b>Tausende gerade Fäden, jeder zwischen zwei Nägeln.</figcaption></figure>
+    <figure class="rv" style="--d:.15s"><img src="{{ url_for('static', filename='img/art-katze.jpg') }}" alt="Dasselbe Fadenbild aus der Ferne: eine Katze" loading="lazy"><figcaption><b>Aus 2 Metern</b>Die Fäden verschmelzen zu einem Bild.</figcaption></figure>
   </div>
 </section>
 
@@ -195,39 +193,25 @@
     requestAnimationFrame(frame);
   })();
 
-  /* 4. Zoom-Abschnitt: von der Linie zum Bild */
-  const zoom = $('.zoom'), zi = $('.zoom-img'), zt1 = $('.zt1'), zt2 = $('.zt2');
-
   /* 5. Faden-Leiste mit Nägeln je Abschnitt */
-  const secs = $$('main [data-label]'), list = $('.thread-pins'), svg = $('.thread-svg'), base = $('.t-base'), gold = $('.t-gold');
+  const secs = $$('main [data-label]'), list = $('.thread-pins'), line = $('.t-line'), fill = $('.t-fill');
   secs.forEach((s, i) => { if (!s.id) s.id = 'sec-' + i;
     list.insertAdjacentHTML('beforeend', `<li><a href="#${s.id}"><i></i><span>${s.dataset.label}</span></a></li>`); });
   const pinsEl = [...list.children];
-  let len = 0;
   const layout = () => {
-    const mob = innerWidth <= 900, h = innerHeight - (mob ? 130 : 160), w = mob ? 14 : 24;
-    svg.setAttribute('viewBox', `0 0 ${w} ${h}`); svg.style.height = h + 'px';
-    const d = `M${w / 2} 0 L${w / 2} ${h}`;   /* gespannter Faden: gerade */
-    base.setAttribute('d', d); gold.setAttribute('d', d);
-    len = gold.getTotalLength(); gold.style.strokeDasharray = len;
-    const doc = document.documentElement.scrollHeight - innerHeight;
+    const h = innerHeight - (innerWidth <= 900 ? 130 : 160);
+    line.style.height = h + 'px'; list.style.height = h + 'px';
+    const doc = Math.max(1, document.documentElement.scrollHeight - innerHeight);
     secs.forEach((s, i) => { const y = Math.min(1, Math.max(0, (s.offsetTop - innerHeight * .35) / doc)); pinsEl[i].style.top = (y * h) + 'px'; pinsEl[i].dataset.y = y; });
   };
   let ticking = false;
   const onScroll = () => {
     ticking = false;
     const doc = document.documentElement.scrollHeight - innerHeight, p = doc > 0 ? scrollY / doc : 0;
-    gold.style.strokeDashoffset = len * (1 - p);
+    fill.style.transform = `scaleY(${p.toFixed(4)})`;
     let cur = 0; pinsEl.forEach((li, i) => { const on = p + .001 >= +li.dataset.y; li.classList.toggle('on', on); if (on) cur = i; });
     pinsEl.forEach((li, i) => li.classList.toggle('cur', i === cur));
     document.body.classList.toggle('scrolled', scrollY > 40);
-    if (zoom && !reduce) {
-      const r = zoom.getBoundingClientRect(), q = Math.min(1, Math.max(0, -r.top / (r.height - innerHeight)));
-      const s = 4.2 - 3.2 * Math.min(1, q / .8);
-      zi.style.transform = `scale(${s.toFixed(4)})`;
-      zt1.style.opacity = Math.max(0, 1 - q * 3.2); zt1.style.transform = `translateY(${-q * 60}px)`;
-      const o2 = Math.min(1, Math.max(0, (q - .55) * 3.5)); zt2.style.opacity = o2; zt2.style.transform = `translateY(${(1 - o2) * 40}px)`;
-    }
   };
   addEventListener('scroll', () => { if (!ticking) { ticking = true; requestAnimationFrame(onScroll); } }, { passive: true });
   addEventListener('resize', () => { layout(); onScroll(); });
