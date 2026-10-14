@@ -7,9 +7,9 @@
 <h2>Anbieter</h2>
 <p>Faded Art<br>Inhaber: {{ shop.name }}<br>{{ shop.strasse }}<br>{{ shop.ort }}<br>Deutschland</p>
 <h2>Kontakt</h2>
-<p>E-Mail: {% if shop.email %}<a href="mailto:{{ shop.email }}">{{ shop.email }}</a>{% else %}<mark>[E-Mail-Adresse]</mark>{% endif %}<br>Telefon: {% if shop.telefon %}{{ shop.telefon }}{% else %}<mark>[Telefonnummer]</mark>{% endif %}</p>
-<h2>Umsatzsteuer</h2>
-<p>{% if shop.ust == "klein" %}Kleinunternehmer gemäß § 19 UStG. Es wird keine Umsatzsteuer ausgewiesen.{% elif shop.ust %}Umsatzsteuer-Identifikationsnummer gemäß § 27a UStG: {{ shop.ust }}{% else %}<mark>[Kleinunternehmer oder USt-IdNr.]</mark>{% endif %}</p>
+<p>E-Mail: {% if shop.email %}<a href="mailto:{{ shop.email }}">{{ shop.email }}</a>{% else %}<mark>[E-Mail-Adresse]</mark>{% endif %}{% if shop.telefon %}<br>Telefon: {{ shop.telefon }}{% endif %}</p>
+{% if shop.ust %}<h2>Umsatzsteuer</h2>
+<p>{% if shop.ust == "klein" %}Kleinunternehmer gemäß § 19 UStG. Es wird keine Umsatzsteuer ausgewiesen.{% else %}Umsatzsteuer-Identifikationsnummer gemäß § 27a UStG: {{ shop.ust }}{% endif %}</p>{% endif %}
 <h2>Verantwortlich für Inhalte nach § 18 Abs. 2 MStV</h2>
 <p>{{ shop.name }}, {{ shop.strasse }}, {{ shop.ort }}</p>
 <h2>Verbraucherstreitbeilegung</h2>
