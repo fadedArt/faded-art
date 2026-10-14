@@ -26,11 +26,11 @@
       <div class="field"><label style="text-transform:none;font-weight:400"><input type="checkbox" id="agb">Ich akzeptiere die <a href="/agb" target="_blank" rel="noopener">AGB</a> und habe die <a href="/widerruf" target="_blank" rel="noopener">Widerrufsbelehrung</a> gelesen. Mir ist bekannt, dass für individuell angefertigte Ware kein Widerrufsrecht besteht.</label></div>
       <button type="button" class="btn btn-gold" id="pay" style="width:100%">Zahlungspflichtig bestellen</button>
       <p class="msg" id="msg" role="alert"></p>
-      <a href="/configure" class="btn" style="margin-top:.5rem">Weiteres Bild konfigurieren</a>
+      <a href="/configure?neu=1" class="btn" style="margin-top:.5rem">Weiteres Bild konfigurieren</a>
     </div>
   </div>
   {% else %}
-  <div class="cart-empty"><p style="margin-bottom:1.5rem">Dein Warenkorb ist leer.</p><a href="/configure" class="btn btn-gold">Jetzt konfigurieren</a></div>
+  <div class="cart-empty"><p style="margin-bottom:1.5rem">Dein Warenkorb ist leer.</p><a href="/configure?neu=1" class="btn btn-gold">Jetzt konfigurieren</a></div>
   {% endif %}
 </section>
 {% endblock %}

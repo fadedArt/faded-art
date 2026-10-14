@@ -104,7 +104,7 @@ function fit() {
 $('file').addEventListener('change', e => {
   const f = e.target.files[0]; if (!f) return;
   if (!/^image\/(jpeg|png)$/.test(f.type) || f.size > 15 * 1024 * 1024) { msg('Bitte JPG oder PNG bis 15 MB wählen.'); e.target.value = ''; return; }
-  msg(''); const url = URL.createObjectURL(f);
+  msg(''); forgotten = false; const url = URL.createObjectURL(f);          // neues Foto: wieder merken
   useImage(url, null).then(() => { URL.revokeObjectURL(url); storeImage(); saveState({ job: null, variant: null }); });
 });
 function useImage(url, v) {                                   // Foto anzeigen; v = gespeicherter Ausschnitt (nach Zurück-Taste)
@@ -118,8 +118,10 @@ function useImage(url, v) {                                   // Foto anzeigen; 
 }
 
 // ---- Zustand merken: Zurück-Taste / Wischgeste am iPhone darf nichts löschen ----
+let forgotten = false;                                          // true, sobald das Bild im Warenkorb liegt
 const SKEY = 'fa-konfig-v1', SEL = ['format', 'size', 'wood', 'color', 'circle', 'thick', 'pincolor', 'pins'];
 function saveState(extra) {
+  if (forgotten) return;
   try {
     const st = JSON.parse(sessionStorage.getItem(SKEY) || '{}');
     st.step = step; st.sel = {}; SEL.forEach(id => st.sel[id] = $(id).value); st.bgcut = $('bgcut').checked;
@@ -667,17 +669,20 @@ async function addToCart() {
 $('addcart').addEventListener('click', async () => {
   if (!orderRef) return msg('Bitte zuerst die Vorschau berechnen.');
   try {
-    const d = await addToCart();
-    $('cartinfo').innerHTML = 'Im Warenkorb (' + d.count + '). <a href="/warenkorb">Zum Warenkorb</a> oder <a href="/configure">weiteres Bild konfigurieren</a>';
+    const d = await addToCart(); forget();
+    $('cartinfo').innerHTML = 'Im Warenkorb (' + d.count + '). <a href="/warenkorb">Zum Warenkorb</a> oder <a href="/configure?neu=1">neues Bild konfigurieren</a>';
   } catch (err) { msg('Warenkorb nicht möglich: ' + err.message); }
 });
 $('buy').addEventListener('click', async () => {
   if (!orderRef) return msg('Bitte zuerst die Vorschau berechnen.');
-  try { await addToCart(); location.href = '/warenkorb'; }
+  try { await addToCart(); forget(); location.href = '/warenkorb'; }
   catch (err) { msg('Kauf nicht möglich: ' + err.message); }
 });
 
-const SAVED = (() => { try { return JSON.parse(sessionStorage.getItem(SKEY) || 'null'); } catch (e) { return null; } })();
+const FRESH = new URLSearchParams(location.search).has('neu');      // ?neu=1: nach einer Bestellung frisch anfangen
+if (FRESH) { try { sessionStorage.removeItem(SKEY); } catch (e) {} history.replaceState(null, '', location.pathname); }
+const SAVED = FRESH ? null : (() => { try { return JSON.parse(sessionStorage.getItem(SKEY) || 'null'); } catch (e) { return null; } })();
+const forget = () => { forgotten = true; try { sessionStorage.removeItem(SKEY); } catch (e) {} };   // Bild liegt im Warenkorb: nächstes Mal leer starten
 show(1); board();
 
 (async function restore() {                                     // gespeicherten Zustand wiederherstellen
