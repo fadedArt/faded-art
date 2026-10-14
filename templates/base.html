@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#111214">
-<script>try{var t=localStorage.getItem("fa-theme");if(t==="light")document.documentElement.dataset.theme="light";}catch(e){}</script>
-<link rel="preload" href="{{ url_for('static', filename='fonts/cinzel.woff') }}" as="font" type="font/woff" crossorigin>
+<meta name="theme-color" content="#ededea">
+<script>try{var t=localStorage.getItem("fa-theme");if(t!=="dark")document.documentElement.dataset.theme="light";}catch(e){}</script>
+<link rel="preload" href="{{ url_for('static', filename='fonts/bodoni-moda.woff') }}" as="font" type="font/woff" crossorigin>
 <title>{% block title %}Faded Art – Ihr Foto als String Art{% endblock %}</title>
 <meta name="description" content="{% block desc %}Dein Foto als Fadenbild: hochladen, drei Varianten ansehen, Holz und Größe wählen und sicher bestellen. Faded Art aus Feldkirchen bei München.{% endblock %}">
 <meta property="og:title" content="Faded Art">
@@ -16,6 +16,7 @@
 <link rel="icon" href="{{ url_for('static', filename='img/siegel.svg') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=asset_v('style.css')) }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='home.css', v=asset_v('home.css')) }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='clean.css', v=asset_v('clean.css')) }}">
 {% block head %}{% endblock %}
 </head>
 <body class="v2 {% block body_class %}page{% endblock %}">
@@ -53,7 +54,7 @@
     const light = root.dataset.theme !== 'light';
     if (light) root.dataset.theme = 'light'; else delete root.dataset.theme;
     try { localStorage.setItem('fa-theme', light ? 'light' : 'dark'); } catch (e) {}
-    const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = light ? '#f3f3f1' : '#111214';
+    const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = light ? '#ededea' : '#0f0f10';
     label(); window.dispatchEvent(new Event('fa-theme'));
   });
 })();
