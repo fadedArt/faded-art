@@ -1,0 +1,220 @@
+/* Faded Art – Startseite v2
+   Idee: das Material der Bretter. Grund ist dunkles Walnussholz, Gold ist der Faden, Elfenbein das Licht.
+   Ein einziger großer Moment: beim Scrollen spannt sich ein echtes Fadenbild. */
+body.v2{
+  --walnut:#17110c; --walnut-2:#1f1711; --walnut-3:#2a2017;
+  --gold:#c9a24a; --gold-hi:#e8c977; --ivory:#efe7d8; --muted:#a8998a; --faint:#7d6f60;
+  --line:rgba(201,162,74,.22);
+  --serif:Cormorant,Georgia,serif; --sans:"Plus Jakarta Sans",system-ui,sans-serif;
+  --ease:cubic-bezier(.2,.7,.15,1);
+  background:var(--walnut); color:var(--ivory); font-family:var(--sans); font-size:1.0625rem; line-height:1.65;
+}
+body.v2 .wrap{max-width:none;padding:0}
+body.v2 main{overflow:clip}
+
+/* Kopfzeile */
+body.v2 header.top{position:fixed;inset:0 0 auto 0;z-index:40;padding:1rem max(1.25rem,calc(50% - 620px));border-bottom:1px solid transparent;transition:background .5s,border-color .5s,padding .5s}
+body.v2.scrolled header.top{background:rgba(23,17,12,.78);-webkit-backdrop-filter:blur(18px) saturate(1.2);backdrop-filter:blur(18px) saturate(1.2);border-bottom-color:var(--line);padding-block:.65rem}
+body.v2 .logo{white-space:nowrap;font-size:1.15rem}
+body.v2 .menu summary{font-family:var(--sans);letter-spacing:.02em;font-size:.92rem;padding:.5rem 1.15rem}
+body.v2 .menu nav{background:var(--walnut-2)}
+body.v2 .cartlink{font-size:.92rem}
+body.v2 footer{max-width:1240px;margin:0 auto;padding-inline:1.25rem;border-top-color:var(--line)}
+
+/* Typo */
+body.v2 h1,body.v2 h2,body.v2 h3{font-family:var(--serif);font-weight:500;letter-spacing:0;color:var(--ivory)}
+.h2{font-size:clamp(2.1rem,5vw,3.9rem);line-height:1.05;margin:0 0 1.25rem;text-wrap:balance}
+.sub{color:var(--muted);max-width:56ch;margin-bottom:2.5rem}
+.lead{color:#d6cbb9;font-size:clamp(1.05rem,1.5vw,1.2rem);max-width:46ch}
+.fine{color:var(--faint);font-size:.85rem;margin-top:2rem;max-width:72ch}
+body.v2 .btn{font-family:var(--sans);letter-spacing:.01em;font-weight:600;font-size:.98rem;padding:.9rem 1.7rem;border-radius:999px}
+body.v2 .btn-gold{background:linear-gradient(180deg,var(--gold-hi),var(--gold));color:#1a120a}
+body.v2 .btn-quiet{border-color:transparent;color:var(--ivory);text-decoration:underline;text-decoration-color:var(--gold);text-underline-offset:.35em;padding-inline:.5rem}
+body.v2 .btn-quiet:hover{box-shadow:none;color:var(--gold-hi)}
+body.v2 .cta-row{display:flex;gap:1rem;flex-wrap:wrap;align-items:center}
+
+/* Abschnitte */
+.sec{max-width:1240px;margin:0 auto;padding:clamp(5rem,11vw,9rem) clamp(1.25rem,4vw,3rem)}
+.sec + .sec{border-top:1px solid var(--line)}
+
+/* 1. Hero */
+.hero{min-height:100svh;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);align-items:center;gap:clamp(2rem,5vw,5rem);
+  padding:6.5rem max(1.25rem,calc(50% - 620px)) 3rem;
+  background:radial-gradient(55% 60% at 30% 50%,#2a1f14 0%,transparent 70%),var(--walnut)}
+.hero-art{position:relative;width:min(100%,660px);aspect-ratio:1;justify-self:center}
+.hero-art canvas{width:100%;height:100%;display:block}
+.hero-count{position:absolute;right:6%;bottom:6%;font-size:.85rem;color:var(--muted)}
+.hero-count b{color:var(--gold-hi);font-weight:600;font-variant-numeric:tabular-nums}
+.mark{font-family:Cinzel,Georgia,serif;font-weight:600;letter-spacing:.32em;color:var(--gold);font-size:.95rem;margin-bottom:1.75rem}
+.hero h1{font-size:clamp(3rem,7.4vw,6.4rem);line-height:.98;margin:0 0 1.75rem;font-weight:400}
+.hero .lead{margin-bottom:2.25rem}
+
+/* 2. Wie es entsteht */
+.build{height:520vh;position:relative;background:linear-gradient(var(--walnut),#120d09 15%,#120d09 85%,var(--walnut))}
+.build-stick{position:sticky;top:0;height:100svh;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);align-items:center;gap:clamp(2rem,5vw,5rem);padding:5rem max(1.25rem,calc(50% - 620px)) 2rem}
+.build-stage{position:relative;width:min(100%,74svh,640px);aspect-ratio:1;justify-self:center}
+.build-art,.build-art canvas{width:100%;height:100%;display:block;border-radius:50%}
+.build-art{box-shadow:0 0 0 1px rgba(201,162,74,.45),0 40px 90px -30px #000}
+.build-orig{position:absolute;left:-4%;top:-4%;width:30%;margin:0;z-index:2}
+.build-orig img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:50%;display:block;box-shadow:0 0 0 3px var(--walnut),0 0 0 4px var(--gold),0 14px 30px -10px #000}
+.build-orig figcaption{text-align:center;font-size:.82rem;color:var(--muted);margin-top:.5rem}
+.build-meter{position:absolute;right:-2%;bottom:-2%;display:grid;gap:.15rem;text-align:right;background:rgba(23,17,12,.82);border:1px solid var(--line);border-radius:14px;padding:.75rem 1rem;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.build-meter p{display:flex;align-items:baseline;justify-content:flex-end;gap:.5rem;line-height:1.2}
+.build-meter b{font-family:var(--serif);font-weight:500;font-size:1.7rem;color:var(--gold-hi);font-variant-numeric:tabular-nums;min-width:3.6ch}
+.build-meter span{font-size:.8rem;color:var(--muted)}
+.build-steps{list-style:none;position:relative;min-height:16rem}
+.build-steps li{position:absolute;inset:0 auto auto 0;opacity:0;transform:translateY(24px);transition:opacity .7s var(--ease),transform .9s var(--ease);pointer-events:none}
+.build-steps li.on{opacity:1;transform:none}
+.build-steps h2{font-size:clamp(2rem,4.4vw,3.4rem);line-height:1.05;margin-bottom:1rem}
+.build-steps p{color:#cdbfaa;max-width:40ch}
+
+/* 3. Nah und fern */
+.nf-sec{text-align:center}
+.nf-sec .h2{margin-bottom:3.5rem}
+.nf{display:grid;grid-template-columns:1fr 1fr;gap:clamp(1rem,5vw,4rem);max-width:900px;margin:0 auto}
+.nf figure{margin:0}
+.nf img{width:100%;max-width:380px;aspect-ratio:1;object-fit:cover;border-radius:50%;display:block;margin:0 auto 1.25rem;box-shadow:0 0 0 1px rgba(201,162,74,.45),0 30px 60px -25px #000}
+.nf figcaption{color:var(--muted);font-size:.95rem;max-width:30ch;margin:0 auto}
+.nf figcaption b{display:block;font-family:var(--serif);font-weight:500;font-size:1.45rem;color:var(--ivory);margin-bottom:.2rem}
+
+/* 4. Schwarz und Weiß */
+.bw{display:grid;grid-template-columns:1.1fr 1fr;gap:clamp(2rem,6vw,6rem);align-items:center}
+.bw-img img{width:100%;display:block;border-radius:4px;box-shadow:0 40px 80px -30px #000}
+.bw-copy p:not(.fine){color:#cdbfaa;margin-bottom:1rem;max-width:52ch}
+
+/* 5. Holz */
+.wood{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(2rem,5vw,5rem);align-items:center;margin-top:3rem}
+.wood-frame{padding:14px;background:#0e0b08;box-shadow:inset 0 0 0 1px rgba(201,162,74,.6),0 50px 90px -30px #000;width:min(100%,520px);justify-self:center}
+.wood-board{aspect-ratio:1;display:grid;place-items:center;transition:background-image .4s}
+.wood-board img{width:88%;aspect-ratio:1;border-radius:50%;object-fit:cover;box-shadow:0 6px 18px rgba(0,0,0,.55)}
+.wood-name{font-family:var(--serif);font-size:clamp(1.8rem,3.4vw,2.6rem);line-height:1.1;margin-bottom:1.5rem;color:var(--gold-hi)}
+.wood-pick{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem}
+.wood-sw{display:grid;grid-template-columns:48px 1fr;column-gap:.85rem;align-items:center;text-align:left;padding:.6rem;border-radius:12px;background:var(--walnut-2);border:1px solid transparent;color:var(--ivory);font:inherit;cursor:pointer}
+.wood-sw i{grid-row:1/3;width:48px;height:48px;border-radius:8px;background-size:cover;box-shadow:inset 0 0 0 1px rgba(255,255,255,.1)}
+.wood-sw span{font-size:.92rem;font-weight:500;line-height:1.3}
+.wood-sw small{color:var(--faint);font-size:.8rem}
+.wood-sw:hover{border-color:var(--line)}
+.wood-sw.on{border-color:var(--gold);background:var(--walnut-3)}
+body.v2 .wood-board[data-wood=weiss]{background:url(img/holz/weiss.jpg) center/cover}
+body.v2 .wood-board[data-wood=mdf]{background:url(img/holz/mdf.jpg) center/cover}
+body.v2 .wood-board[data-wood=eiche]{background:url(img/holz/eiche.jpg) center/cover}
+body.v2 .wood-board[data-wood=nussbaum]{background:url(img/holz/nussbaum.jpg) center/cover}
+body.v2 .wood-board[data-wood=esche]{background:url(img/holz/esche.jpg) center/cover}
+body.v2 .wood-board[data-wood=beton]{background:url(img/holz/beton.jpg) center/cover}
+
+/* 6. Galerie */
+.gal{display:grid;grid-auto-flow:column;grid-auto-columns:min(78vw,520px);gap:1.5rem;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:1rem;scrollbar-width:thin;scrollbar-color:var(--gold) transparent}
+.gal-item{scroll-snap-align:start;position:relative;margin:0}
+.gal-wall{width:100%;aspect-ratio:1;object-fit:cover;display:block;border-radius:4px}
+.gal-orig{position:absolute;left:4%;top:calc(100% - 4% - 22% - 3.6rem);width:22%;aspect-ratio:1;object-fit:cover;border-radius:50%;box-shadow:0 0 0 3px var(--walnut),0 0 0 4px var(--gold),0 10px 20px -6px #000}
+.gal-item figcaption{color:var(--muted);font-size:.9rem;margin-top:.9rem;min-height:2.7rem}
+.gal-item figcaption b{display:block;font-family:var(--serif);font-weight:500;font-size:1.3rem;color:var(--ivory)}
+
+/* 7. Größen */
+.room{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:clamp(1.5rem,4vw,3.5rem);align-items:center;margin-top:2.5rem}
+.room-svg{width:100%;display:block;border-radius:6px;overflow:hidden}
+.room-wall{fill:#e9e1d3}
+.room-floor{fill:#b9a283}
+.room-sofa rect{fill:#5c6a63}
+.room-sofa rect:nth-child(4){fill:#4e5b54}
+.room-board{stroke:#0e0b08;stroke-width:1.2;filter:drop-shadow(0 2px 2px rgba(0,0,0,.35));transition:all .5s var(--ease)}
+#boardArt{transition:all .5s var(--ease)}
+.room-dim{font:500 5px var(--sans);fill:#5a4c3d;text-anchor:middle}
+.size-pick{display:grid;gap:.6rem}
+.size-b{display:grid;grid-template-columns:3rem 1fr auto;align-items:baseline;gap:.75rem;padding:1rem 1.1rem;background:var(--walnut-2);border:1px solid transparent;border-radius:12px;color:var(--ivory);font:inherit;cursor:pointer;text-align:left}
+.size-b b{font-family:var(--serif);font-weight:500;font-size:1.6rem;line-height:1}
+.size-b span{color:var(--muted);font-size:.92rem}
+.size-b em{font-style:normal;color:var(--gold-hi);font-weight:600}
+.size-b:hover{border-color:var(--line)}
+.size-b.on{border-color:var(--gold);background:var(--walnut-3)}
+
+/* 8. Ablauf (echte Reihenfolge, daher nummeriert) */
+.steps-v{list-style:none;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2rem;margin-top:3rem;counter-reset:s}
+.steps-v li{display:grid;gap:.9rem;align-content:start;position:relative;padding-top:1.4rem;border-top:1px solid var(--gold)}
+.steps-v .num{font-family:var(--serif);font-size:2.6rem;line-height:1;color:var(--gold)}
+.steps-v h3{font-size:1.5rem;margin-bottom:.35rem}
+.steps-v p{color:var(--muted);font-size:.95rem}
+
+/* 9. Gutschein */
+.gift{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1fr);gap:clamp(2rem,6vw,6rem);align-items:center}
+.gift p{color:#cdbfaa;max-width:48ch;margin-bottom:1.75rem}
+.gift-card{aspect-ratio:1.6;max-width:460px;width:100%;justify-self:center;border-radius:16px;padding:1.6rem 1.8rem;position:relative;overflow:hidden;
+  background:linear-gradient(135deg,#2c2117,#15100b 60%);box-shadow:inset 0 0 0 1px rgba(201,162,74,.55),0 40px 70px -30px #000;transform:rotate(-3deg)}
+.gift-card img{position:absolute;right:-18%;top:-22%;width:70%;opacity:.9}
+.gift-card .gc-mark{font-family:Cinzel,Georgia,serif;letter-spacing:.3em;font-size:.8rem;color:var(--gold);margin:0}
+.gift-card .gc-t{font-family:var(--serif);font-size:2.6rem;line-height:1;margin:1.6rem 0 .5rem;color:var(--ivory)}
+.gift-card .gc-v{color:var(--muted);font-size:.9rem;margin:0}
+
+/* 10. Fragen */
+.faq{max-width:820px;margin-top:2rem}
+.faq details{border-top:1px solid var(--line);padding:1.3rem 0}
+.faq details:last-child{border-bottom:1px solid var(--line)}
+.faq summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:1rem;font-family:var(--serif);font-size:1.45rem;line-height:1.3}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:"+";color:var(--gold);font-size:1.7rem;line-height:1;transition:transform .35s var(--ease)}
+.faq details[open] summary::after{transform:rotate(45deg)}
+.faq p{color:var(--muted);margin-top:.7rem;max-width:62ch}
+
+/* Schluss */
+.final{text-align:center;padding:clamp(6rem,14vw,10rem) 1.25rem;background:radial-gradient(45% 55% at 50% 50%,#2a1f14,transparent 70%);border-top:1px solid var(--line)}
+.final h2{font-size:clamp(2.6rem,6.4vw,5.2rem);line-height:1;margin-bottom:1rem}
+.final .lead{margin:0 auto 2.25rem}
+.final .cta-row{justify-content:center}
+
+/* Faden-Leiste rechts */
+.thread{position:fixed;right:clamp(8px,1.6vw,24px);top:96px;z-index:30;width:24px;pointer-events:none}
+.t-line{position:relative;width:2px;margin-left:11px;background:rgba(239,231,216,.2);border-radius:2px}
+.t-fill{position:absolute;inset:0;background:linear-gradient(var(--gold-hi),var(--gold));transform-origin:top;transform:scaleY(0);box-shadow:0 0 8px rgba(232,201,119,.7);border-radius:2px}
+.thread-pins{list-style:none;position:absolute;inset:0 0 auto 0}
+.thread-pins li{position:absolute;right:0;transform:translateY(-50%);pointer-events:auto}
+.thread-pins a{display:flex;align-items:center;justify-content:center;width:24px;height:24px;text-decoration:none;position:relative}
+.thread-pins i{width:9px;height:9px;border-radius:50%;background:var(--walnut-3);box-shadow:0 0 0 1px rgba(239,231,216,.35);transition:background .35s,box-shadow .35s,transform .35s}
+.thread-pins span{position:absolute;right:28px;white-space:nowrap;font-size:.8rem;color:var(--ivory);background:rgba(23,17,12,.9);border:1px solid var(--line);border-radius:999px;padding:.2rem .65rem;opacity:0;transform:translateX(6px);transition:opacity .35s,transform .35s}
+.thread-pins li.on i{background:var(--gold-hi);box-shadow:0 0 0 1px var(--gold),0 0 10px rgba(232,201,119,.7)}
+.thread-pins li.cur i{transform:scale(1.4)}
+.thread-pins li.cur span,.thread-pins a:hover span,.thread-pins a:focus-visible span{opacity:1;transform:none}
+
+/* Mobil */
+@media(max-width:900px){
+  body.v2 .logo{font-size:1rem;letter-spacing:.16em}
+  .hero{grid-template-columns:1fr;padding-top:5.5rem;padding-right:2rem;gap:1rem}
+  .hero-art{width:min(86vw,440px)}
+  .hero h1{font-size:clamp(2.7rem,12vw,3.6rem)}
+  .build{height:560vh}
+  .build-stick{grid-template-columns:1fr;grid-template-rows:auto 1fr;align-content:start;gap:1.4rem;padding:4.6rem 2rem 1rem 1.25rem}
+  .build-stage{width:min(100%,54svh)}
+  .build-orig{width:28%;left:-2%;top:-2%}
+  .build-meter{padding:.45rem .7rem;right:-1%}
+  .build-meter b{font-size:1.25rem}
+  .build-steps{min-height:11rem}
+  .build-steps h2{font-size:1.75rem;margin-bottom:.5rem}
+  .build-steps p{font-size:.95rem}
+  .sec{padding-right:2rem}
+  .bw,.wood,.room,.gift{grid-template-columns:1fr}
+  .nf{gap:1rem}
+  .nf figcaption{font-size:.82rem}.nf figcaption b{font-size:1.1rem}
+  .steps-v{grid-template-columns:1fr 1fr;gap:1.75rem 1.25rem}
+  .gift-card{transform:none}
+  .thread{right:4px;width:16px;top:84px}
+  .t-line{margin-left:7px}
+  .thread-pins a{width:16px;height:16px}
+  .thread-pins i{width:7px;height:7px}
+  .thread-pins span{display:none}
+}
+@media(max-width:520px){.wood-pick{grid-template-columns:1fr}.steps-v{grid-template-columns:1fr}.size-b{grid-template-columns:2.4rem 1fr auto}}
+@media(prefers-reduced-motion:reduce){
+  .build{height:auto}.build-stick{position:relative;height:auto}
+  .build-steps li{position:static;opacity:1;transform:none;margin-bottom:1.5rem}
+  .build-steps li:not(:last-child){display:none}
+}
+
+/* Altlasten aus style.css (alte Startseite) neutralisieren */
+body.v2 .hero,body.v2 .hero p{text-align:left}
+body.v2 .hero p{margin-inline:0}
+body.v2 .cta-row{justify-content:flex-start}
+body.v2 .final .cta-row{justify-content:center}
+body.v2 .steps-v li{grid-template-columns:none;padding-block:1.4rem 0;border-bottom:0}
+body.v2 .steps-v li:last-child{border-bottom:0}
+body.v2 .faq summary{font-family:var(--serif)}
+.gift-card img{right:-14%;top:auto;bottom:-30%;width:58%;opacity:.45}
+body.v2 .steps-v{max-width:none;margin:3rem 0 0}
