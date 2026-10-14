@@ -308,7 +308,7 @@
     rings();
     const done = () => { for (let k = 0; k < n; k++) pin(k); pd = n; cnt.textContent = de(L.length); $('.hero-ring').classList.add('on'); };
     if (reduce) { pinsTo(n); step(L.length); return done(); }
-    const t0 = performance.now(), PIN = 1800, DUR = 15000;
+    const t0 = performance.now(), PIN = 1200, DUR = 6800;                     /* Logo in rund 8 Sekunden fertig */
     const frame = t => { const e = t - t0;
       if (e < PIN) { pinsTo(Math.ceil(n * e / PIN)); return requestAnimationFrame(frame); }
       pinsTo(n);
@@ -351,7 +351,7 @@
       if (d < 0 && val <= 0) set(1);
       let last = performance.now();
       const f = t => { const dt = (t - last) / 1000; last = t;
-        set(val + d * dt / 12);                                                   /* ganzes Bild in 12 s */
+        set(val + d * dt / 24);                                                   /* ganzes Bild in 24 s */
         if ((d > 0 && val >= 1) || (d < 0 && val <= 0)) { play = null; return ui(); }
         play = requestAnimationFrame(f); };
       play = requestAnimationFrame(f); ui(); };
@@ -378,8 +378,10 @@
         cum[i + 1] = cum[i] + .45 * Math.sin(Math.PI * dd / n); c2[f] = q; });
       reset(); set(val);
       /* einmal von selbst abspielen, sobald der Abschnitt im Bild ist; jeder Griff an den Regler stoppt es */
-      const io = new IntersectionObserver(es => { if (es[0].isIntersecting) { io.disconnect(); run(1); } }, { threshold: .45 });
-      io.observe(sec);
+      const stage = $('.build-stage');                          /* erst starten, wenn das Katzenbild zu 70 % im Bild ist */
+      const check = () => { const r = stage.getBoundingClientRect(), vis = Math.min(r.bottom, innerHeight) - Math.max(r.top, 0);
+        if (vis >= .7 * r.height) { removeEventListener('scroll', check); run(1); } };
+      addEventListener('scroll', check, { passive: true }); check();
     });
   })();
 
