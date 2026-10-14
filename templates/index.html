@@ -236,6 +236,23 @@
   </ol>
 </section>
 
+{% if reviews %}
+<!-- Kundenstimmen (nur echte, freigegebene Bewertungen) -->
+<section class="sec rv-sec" id="bewertungen" data-label="Bewertungen">
+  <h2 class="h2">Was Kunden sagen.</h2>
+  <p class="rv-sum"><span class="rv-st" aria-hidden="true">{% for i in range(5) %}{{ '★' if i < avg|round(0, 'common') else '☆' }}{% endfor %}</span> <b>{{ '%.1f'|format(avg)|replace('.', ',') }}</b> von 5 · {{ reviews|length }} Bewertung{{ 'en' if reviews|length != 1 }}</p>
+  <div class="rv-list">
+    {% for r in reviews[:9] %}<figure class="kv">
+      {% if r.photo %}<img src="/bewertung-foto/{{ r.photo }}" alt="Fadenbild von {{ r.name }} an der Wand" loading="lazy">{% endif %}
+      <p class="rv-st" aria-label="{{ r.stars }} von 5 Sternen">{{ '★' * r.stars }}{{ '☆' * (5 - r.stars) }}</p>
+      <blockquote>{{ r.text }}</blockquote>
+      <figcaption>{{ r.name }} · {{ r.title }}</figcaption>
+    </figure>{% endfor %}
+  </div>
+  <p class="rv-note">Bewerten kann nur, wer bei uns gekauft hat: Den Bewertungslink gibt es nur zu einer bezahlten Bestellung. Wir veröffentlichen positive wie kritische Bewertungen und blenden nur Beleidigungen oder Spam aus.</p>
+</section>
+{% endif %}
+
 <!-- 9. Gutschein -->
 <section class="sec gift" data-label="Gutschein">
   <div class="gift-card" aria-hidden="true">

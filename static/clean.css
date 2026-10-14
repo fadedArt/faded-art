@@ -186,3 +186,20 @@ body.v2.page header.top{background:rgba(var(--bgrgb),.94);border-bottom-color:va
 .fmt-quer{width:26px;height:19px}
 .seg[data-k=fmt] button{padding:.7rem .3rem;display:grid;place-items:center}
 @media(max-width:600px){.seg[data-k=fmt]{grid-template-columns:repeat(4,1fr)}}
+
+/* Bewertungen */
+body.v2 .rv-sum{margin:.4rem 0 1.6rem;color:var(--ivory)}
+body.v2 .rv-st{color:var(--gold);letter-spacing:.12em}
+body.v2 .rv-list{display:grid;gap:1.2rem;grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
+body.v2 .kv{margin:0;padding:1.3rem;border:1px solid rgba(var(--acc),.25);background:rgba(var(--acc),.04);display:flex;flex-direction:column;gap:.6rem}
+body.v2 .kv img{width:100%;aspect-ratio:1;object-fit:cover}
+body.v2 .kv blockquote{margin:0;color:var(--ivory);line-height:1.6;white-space:pre-line}
+body.v2 .kv figcaption{font-size:.85rem;opacity:.7;margin-top:auto}
+body.v2 .rv-note{font-size:.8rem;opacity:.65;margin-top:1.4rem;max-width:70ch}
+.rv-stars{display:inline-flex;flex-direction:row-reverse;gap:.15rem}
+.rv-stars input{position:absolute;opacity:0;pointer-events:none}
+.rv-stars label{font-size:2.2rem;line-height:1;cursor:pointer;color:rgba(128,128,128,.45);text-transform:none}
+body.v2 .rv-stars label{color:rgba(128,128,128,.45)}
+body.v2 .rv-stars input:checked~label,body.v2 .rv-stars label:hover,body.v2 .rv-stars label:hover~label{color:var(--gold)}
+body.v2 .rv-stars input:focus-visible+label{outline:2px solid var(--gold)}
+.rv-form textarea{width:100%;font:inherit}

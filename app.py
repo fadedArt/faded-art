@@ -1101,13 +1101,149 @@ def admin():
                              cents=price_cents(m), created=time.strftime("%d.%m.%Y %H:%M", time.localtime(m.get("created", 0)))))
     rows.sort(key=lambda r: (not r["paid"], r["created"]), reverse=False)
     return render_template_string("""<!doctype html><meta name=viewport content="width=device-width,initial-scale=1"><title>Bestellungen</title>
-<body style="font-family:system-ui;background:#111;color:#eee;padding:1rem"><h1>Bestellungen</h1>
+<body style="font-family:system-ui;background:#111;color:#eee;padding:1rem"><h1>Bestellungen</h1><p><a style="color:#e6ca65" href="/admin/bewertungen?key={{ key }}">Bewertungen verwalten</a> · <a style="color:#e6ca65" href="/admin/creator?key={{ key }}">Creator-Codes</a></p>
 {% for r in rows %}<p style="border-bottom:1px solid #333;padding:.6rem 0"><b>{{ "BEZAHLT" if r.paid else "nicht bezahlt" }}</b> {{ r.created }}<br>
 {{ r.title }}, {{ (r.cents / 100)|round(2) }} €<br>{{ r.email }}<br>
 <a style="color:#e6ca65" href="/admin/{{ r.ref }}/anleitung.pdf?key={{ key }}">Anleitung (PDF)</a> |
 <a style="color:#e6ca65" href="/admin/{{ r.ref }}/anleitung.txt?key={{ key }}">als Text</a> |
 <a style="color:#e6ca65" href="/admin/{{ r.ref }}/final.png?key={{ key }}">Bild in voller Größe</a></p>{% else %}<p>Noch keine Bestellungen.</p>{% endfor %}""",
         rows=rows, key=request.args.get("key"))
+
+# ---------- Bewertungen: nur echte Käufer (Link mit Bestellnummer), Freigabe unter /admin/bewertungen?key=ADMIN_KEY ----------
+RV_FILE = os.path.join(DATA_DIR, "bewertungen.json")
+RV_PHOTOS = os.path.join(DATA_DIR, "bewertung_fotos")
+_rvlock = threading.Lock()
+
+def _rv_secret():
+    f = os.path.join(DATA_DIR, ".review_secret")
+    try:
+        with open(f) as fh:
+            return fh.read().strip()
+    except OSError:
+        k = secrets.token_hex(16)
+        with open(f, "w") as fh:
+            fh.write(k)
+        return k
+
+def rv_token(ref):
+    return hmac.new(_rv_secret().encode(), ref.encode(), hashlib.sha256).hexdigest()[:16]
+
+def rv_all():
+    try:
+        with open(RV_FILE) as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+def rv_save(rv):
+    with open(RV_FILE + ".tmp", "w") as fh:
+        json.dump(rv, fh)
+    os.replace(RV_FILE + ".tmp", RV_FILE)
+
+def rv_public():
+    """Freigegebene Bewertungen, neueste zuerst, plus Durchschnitt."""
+    items = sorted((r for r in rv_all().values() if r.get("status") == "ok"), key=lambda r: -r["t"])
+    avg = round(sum(r["stars"] for r in items) / len(items), 1) if items else 0
+    return items, avg
+
+def rv_link(ref):
+    return url_for("bewerten", ref=ref, t=rv_token(ref), _external=True)
+
+@app.route("/bewerten/<ref>", methods=["GET", "POST"])
+def bewerten(ref):
+    m = load(ref)
+    if not m or not m.get("paid") or not hmac.compare_digest(request.args.get("t", ""), rv_token(ref)):
+        abort(404)
+    done = False; err = ""
+    old = rv_all().get(ref)
+    if request.method == "POST":
+        f = request.form
+        stars = clamp(f.get("stars"), 0, 5)
+        name = f.get("name", "").strip()[:40]
+        text = f.get("text", "").strip()[:1200]
+        if not 1 <= stars <= 5:
+            err = "Bitte wähle 1 bis 5 Sterne."
+        elif not name or len(text) < 10:
+            err = "Bitte Vorname und ein paar Worte eingeben."
+        elif not f.get("ok"):
+            err = "Bitte bestätige die Veröffentlichung."
+        else:
+            photo = (old or {}).get("photo")
+            up = request.files.get("photo")
+            if up and up.filename:
+                try:
+                    from PIL import Image, ImageOps
+                    im = ImageOps.exif_transpose(Image.open(up.stream)).convert("RGB")
+                    im.thumbnail((1200, 1200))
+                    os.makedirs(RV_PHOTOS, exist_ok=True)
+                    photo = f"{ref}.jpg"
+                    im.save(os.path.join(RV_PHOTOS, photo), quality=85)
+                except Exception:
+                    err = "Das Foto konnte nicht gelesen werden (bitte JPG oder PNG)."
+            if not err:
+                with _rvlock:
+                    rv = rv_all()
+                    rv[ref] = dict(ref=ref, stars=stars, name=name, text=text, photo=photo, t=time.time(),
+                                   title=item_title(m), status="neu")
+                    rv_save(rv)
+                done = True
+                try:
+                    if os.environ.get("ORDER_MAIL_TO"):
+                        send_mail(os.environ["ORDER_MAIL_TO"], f"Neue Bewertung: {stars} Sterne von {name}",
+                                  f"{text}\n\nFreigeben: {request.host_url}admin/bewertungen?key=DEIN_ADMIN_KEY")
+                except Exception:
+                    app.logger.exception("Bewertungs-Mail fehlgeschlagen")
+    return render_template("bewerten.html", done=done, err=err, old=old, title=item_title(m))
+
+@app.get("/bewertung-foto/<name>")
+def rv_photo(name):
+    if not re.fullmatch(r"[0-9a-f]{32}\.jpg", name) or (rv_all().get(name[:-4]) or {}).get("status") != "ok" and not admin_ok():
+        abort(404)
+    path = os.path.join(RV_PHOTOS, name)
+    if not os.path.exists(path):
+        abort(404)
+    return send_file(path, mimetype="image/jpeg", max_age=86400)
+
+@app.route("/admin/bewertungen", methods=["GET", "POST"])
+def admin_reviews():
+    if not admin_ok():
+        abort(404)
+    if request.method == "POST":
+        ref, act = request.form.get("ref", ""), request.form.get("act", "")
+        with _rvlock:
+            rv = rv_all()
+            if ref in rv:
+                if act == "del":
+                    rv.pop(ref)
+                elif act in ("ok", "aus"):
+                    rv[ref]["status"] = act
+                rv_save(rv)
+    items = sorted(rv_all().values(), key=lambda r: -r["t"])
+    for r in items:
+        r["date"] = time.strftime("%d.%m.%Y", time.localtime(r["t"]))
+    paid = []
+    for ref in os.listdir(DATA_DIR):
+        m = load(ref)
+        if m and m.get("paid"):
+            paid.append(dict(ref=ref, title=item_title(m), email=m.get("email") or "", link=rv_link(ref),
+                             has=ref in rv_all(), created=m.get("created", 0)))
+    paid.sort(key=lambda r: -r["created"])
+    pub, avg = rv_public()
+    return render_template_string("""<!doctype html><meta name=viewport content="width=device-width,initial-scale=1"><title>Bewertungen</title>
+<body style="font-family:system-ui;background:#111;color:#eee;padding:1rem;max-width:760px">
+<h1>Bewertungen</h1><p>Auf der Startseite sichtbar: <b>{{ pub|length }}</b>{% if pub %}, Schnitt <b>{{ avg }} ★</b>{% endif %}.
+Neue Bewertungen erscheinen erst, wenn du sie freigibst. Wichtig: Negative echte Bewertungen nicht einfach verstecken, sonst ist die Gesamtbewertung irreführend (UWG). Ausblenden nur bei Beleidigungen, fremden Daten oder Spam.</p>
+{% for r in items %}<div style="border-top:1px solid #333;padding:.8rem 0">
+<b style="color:{{ '#7c7' if r.status=='ok' else ('#e6ca65' if r.status=='neu' else '#888') }}">{{ {'ok':'SICHTBAR','neu':'NEU – wartet','aus':'ausgeblendet'}[r.status] }}</b>
+{{ r.date }} · {{ '★' * r.stars }}{{ '☆' * (5 - r.stars) }} · {{ r.name }} · <span style="color:#999">{{ r.title }}</span>
+<p style="white-space:pre-wrap">{{ r.text }}</p>{% if r.photo %}<img src="/bewertung-foto/{{ r.photo }}?key={{ key }}" style="max-width:160px;border-radius:6px"><br>{% endif %}
+<form method=post style="display:inline"><input type=hidden name=ref value="{{ r.ref }}">
+<button name=act value=ok>freigeben</button> <button name=act value=aus>ausblenden</button> <button name=act value=del onclick="return confirm('Endgültig löschen?')">löschen</button></form></div>
+{% else %}<p>Noch keine Bewertungen.</p>{% endfor %}
+<h2 style="margin-top:2rem">Bewertungslinks</h2><p style="color:#999">Schick den Link dem Kunden, wenn das Bild angekommen ist (z. B. per WhatsApp oder Mail). Nur wer den Link hat, kann bewerten, eine Bewertung pro Bestellung.</p>
+{% for p in paid %}<p style="border-top:1px solid #333;padding:.5rem 0">{{ p.title }} · {{ p.email }} {% if p.has %}<b>(bewertet)</b>{% endif %}<br>
+<input readonly value="{{ p.link }}" style="width:100%" onclick="this.select()"></p>{% else %}<p>Noch keine bezahlten Bestellungen.</p>{% endfor %}""",
+        items=items, paid=paid, pub=pub, avg=avg, key=request.args.get("key"))
 
 @app.get("/admin/stripe-check")
 def stripe_check():
@@ -1434,7 +1570,12 @@ def index():
           "offers": {"@type": "AggregateOffer", "priceCurrency": "EUR", "lowPrice": f"{min(c for *_, c in sizes) / 100:.2f}",
                      "highPrice": f"{max(c for *_, c in sizes) / 100 + max(v[2] for v in WOOD.values()) + PINS[360] + SW_EUR:.2f}",
                      "offerCount": len(sizes), "availability": "https://schema.org/PreOrder"}}
-    return render_template("index.html", sizes=sizes, woods=woods, sw_eur=SW_EUR, pins_eur=PINS[360], note=PREORDER_NOTE, room=room, ld=ld)
+    reviews, avg = rv_public()
+    if reviews:   # Sterne für Google nur mit echten, freigegebenen Bewertungen
+        ld["aggregateRating"] = {"@type": "AggregateRating", "ratingValue": f"{avg:.1f}", "reviewCount": len(reviews), "bestRating": "5", "worstRating": "1"}
+        ld["review"] = [{"@type": "Review", "author": {"@type": "Person", "name": r["name"]}, "reviewBody": r["text"],
+                         "reviewRating": {"@type": "Rating", "ratingValue": r["stars"], "bestRating": "5"}} for r in reviews[:10]]
+    return render_template("index.html", sizes=sizes, woods=woods, sw_eur=SW_EUR, pins_eur=PINS[360], note=PREORDER_NOTE, room=room, ld=ld, reviews=reviews, avg=avg)
 
 @app.get("/configure")
 def configure():
@@ -1723,7 +1864,7 @@ PUBLIC_PAGES = ["/", "/configure", "/gutschein", "/ueber-uns", "/impressum", "/d
 def robots():
     body = ("User-agent: *\nAllow: /\n"
             "Disallow: /admin\nDisallow: /api/\nDisallow: /status/\nDisallow: /live/\nDisallow: /preview/\n"
-            "Disallow: /thumb/\nDisallow: /zoom/\nDisallow: /warenkorb\nDisallow: /success\n"
+            "Disallow: /thumb/\nDisallow: /zoom/\nDisallow: /warenkorb\nDisallow: /success\nDisallow: /bewerten/\n"
             f"\nSitemap: {request.url_root}sitemap.xml\n")
     return app.response_class(body, mimetype="text/plain")
 

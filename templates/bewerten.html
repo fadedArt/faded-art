@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Bewertung abgeben – Faded Art{% endblock %}
+{% block head %}<meta name="robots" content="noindex">{% endblock %}
+{% block content %}
+<section class="block">
+  <h2 class="title">{% if done %}Danke für deine Bewertung!{% else %}Wie gefällt dir dein Fadenbild?{% endif %}</h2>
+  {% if done %}
+  <p class="hint" style="max-width:60ch">Wir haben sie erhalten. Sie erscheint nach einer kurzen Prüfung auf unserer Seite.</p>
+  <a href="/" class="btn btn-gold" style="margin-top:1rem">Zur Startseite</a>
+  {% else %}
+  <p class="hint" style="max-width:60ch;margin-bottom:1rem">Bestellung: {{ title }}. Deine ehrliche Meinung hilft anderen bei der Entscheidung und uns beim Besserwerden.</p>
+  {% if err %}<p class="msg" style="color:#c55">{{ err }}</p>{% endif %}
+  <form method="post" enctype="multipart/form-data" class="card rv-form" style="max-width:560px">
+    <div class="field"><label>Sterne</label>
+      <div class="rv-stars">{% for i in range(5, 0, -1) %}<input type="radio" name="stars" id="s{{ i }}" value="{{ i }}"{% if (old and old.stars == i) %} checked{% endif %}><label for="s{{ i }}" title="{{ i }} Sterne">★</label>{% endfor %}</div></div>
+    <div class="field"><label for="rname">Vorname (wird angezeigt)</label><input type="text" id="rname" name="name" maxlength="40" required value="{{ old.name if old else '' }}"></div>
+    <div class="field"><label for="rtext">Deine Bewertung</label><textarea id="rtext" name="text" rows="5" maxlength="1200" required>{{ old.text if old else '' }}</textarea></div>
+    <div class="field"><label for="rphoto">Foto vom Bild an deiner Wand (optional)</label><input type="file" id="rphoto" name="photo" accept="image/*"></div>
+    <div class="field"><label style="text-transform:none;font-weight:400"><input type="checkbox" name="ok" value="1" required> Faded Art darf Vorname, Text, Sterne und Foto auf faded-art veröffentlichen. Ich kann das jederzeit per Nachricht widerrufen.</label></div>
+    <button class="btn btn-gold" style="width:100%">Bewertung senden</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}
