@@ -113,13 +113,16 @@ DISC = {  # Farbe des Kreises in der Mitte
 }
 THICKS = ("0.15", "0.20", "0.30", "0.40", "0.60")   # echte Fadendicke in mm
 E_REF, D0_CM = 0.274, 45.0     # Referenz: 0,20 mm Faden auf einem Bild von 45 cm Durchmesser (50-cm-Brett)
+E_PHYS = 0.444                 # physikalisch: 0,20 mm Faden / 0,45 mm Pixelbreite (45 cm auf 1000 px). Einfarbig und Schwarz + Weiß
+                               # rechnen und zeichnen damit (Test 14.10.2026: Ähnlichkeit 81,9 -> 93,2, Vorschau so dunkel wie das echte Brett)
 ROUND_FORMATS = {"rund"}; ROUND_AREA = 0.785   # Rundes Holz: Fläche = Kreis, Preis nach Fläche
 PINCOL = {  # Farbe der Nägel
     "gold": ("Gold", (212, 175, 55)), "silber": ("Silber", (205, 205, 205)),
     "schwarz": ("Schwarz", (30, 30, 30)), "weiss": ("Weiß", (245, 245, 245)),
     "kupfer": ("Kupfer", (184, 115, 51)),
 }
-LINES = {240: 3500, 360: 4500}   # Fäden je Pin-Zahl (Einfarbig)
+LINES = {240: 3500, 360: 4500}   # Fäden je Pin-Zahl (Basis für Mehrfarbig)
+LINES_ONE = {240: 1600, 360: 2000}   # Einfarbig (14.10.2026): 4.500 Fäden machten das Bild zu dunkel; 2.000 mit E_PHYS ist am nächsten am Foto
 LINES_MULTI = {240: 8000, 360: 10000}   # Höchstzahl für Mehrfarbig
 MAX_USE = 1                   # Einfarbig: so oft darf dieselbe Sehne gezogen werden
 BG_TONE = 0.0                 # freigestellter Hintergrund: gleichmäßige Dunkelheit (0 = neutral; < 0: Linien meiden ihn, wirkt fleckig)
@@ -593,8 +596,8 @@ def compute_string_art(ref, m, key="a"):
     # Maßstab: derselbe Faden wirkt auf einem größeren Bild feiner, auf einem kleineren kräftiger
     disc_cm = max(10.0, ring_cm(m))
     t_mm = float(m["thick"])
-    a = min(0.4, max(0.02, E_REF * (t_mm / 0.20) * (D0_CM / disc_cm) / LW))     # Deckkraft pro Faden
-    n_lines = int((LINES[n] * MULTI_LINES_F if K > 1 and MULTI_LINEAR else (LINES if K == 1 else LINES_MULTI)[n]) * min(1.6, max(1.0, (0.20 / t_mm) * (disc_cm / D0_CM))))   # feinerer Faden braucht mehr Linien
+    a = min(0.4, max(0.02, (E_PHYS if K == 1 else E_REF) * (t_mm / 0.20) * (D0_CM / disc_cm) / LW))     # Deckkraft pro Faden
+    n_lines = int((LINES[n] * MULTI_LINES_F if K > 1 and MULTI_LINEAR else (LINES_ONE if K == 1 else LINES_MULTI)[n]) * min(1.6, max(1.0, (0.20 / t_mm) * (disc_cm / D0_CM))))   # feinerer Faden braucht mehr Linien
     geo = geometry(n)
     px, py, rp, ok, nsc = geo["px"], geo["py"], geo["rp"], geo["ok"], geo["nsc"]
     ln = ((1 if K == 1 or MULTI_LINEAR else geo["L"]) / nsc).astype(np.float32)   # lineares Modell: Durchschnitt, Farbmodell: Summe
@@ -754,7 +757,7 @@ def compute_sw(ref, m, key):
     LIVE, lk = 600, 600 / W_IMG                             # Live-Bild wie bei compute_string_art
     live = Image.new("RGB", (LIVE, LIVE), disc)
     ld = ImageDraw.Draw(live, "RGBA")
-    a = min(0.4, max(0.02, E_REF * (t_mm / 0.20) * (D0_CM / disc_cm) / LINE_W))
+    a = min(0.4, max(0.02, E_PHYS * (t_mm / 0.20) * (D0_CM / disc_cm) / LINE_W))   # Zeichnen wie Engine 2 rechnet (physikalisch)
     lalpha = min(255, int(255 * a * LINE_W * lk))
     state = {"drawn": 0, "n": 0}
     seq, cseq, started = [], [], set()                      # Live-Linien für den Browser (jede Linie einzeln gezeichnet)
