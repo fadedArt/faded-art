@@ -774,6 +774,14 @@ def compute_sw(ref, m, key):
     update_variant(ref, key, used=list(pal))
     write_instructions(ref, mm, runs, pal, px, py, rp, key, max_lines)
 
+def wood_texture(wood, size):
+    """Holzmaserung aus static/img/holz (900 px, prozedural erzeugt) in Bildgröße; None, wenn die Datei fehlt."""
+    p = os.path.join(app.static_folder, "img", "holz", f"{wood}.jpg")
+    try:
+        return Image.open(p).convert("RGB").resize((size, size), Image.Resampling.LANCZOS)
+    except OSError:
+        return None
+
 def render_final(ref, m, key, runs, cols, px, py, a, LW):
     """Rendern in 2000 px, Abschnitt für Abschnitt (spätere Fäden liegen oben); Deckkraft überlagert sich physikalisch."""
     d, W, S = odir(ref), W_IMG, S_RENDER
@@ -798,7 +806,7 @@ def render_final(ref, m, key, runs, cols, px, py, a, LW):
 
     mask = Image.new("L", (W, W), 0)
     ImageDraw.Draw(mask).ellipse([0, 0, W, W], fill=255)
-    final = Image.new("RGB", (W, W), bg)
+    final = wood_texture(m["wood"], W) or Image.new("RGB", (W, W), bg)   # echte Holzmaserung statt Flächenfarbe
     final.paste(art, (0, 0), mask)
     final.save(os.path.join(d, f"final_{key}.png"), compress_level=3)              # privat, nur nach Zahlung nutzbar (Stufe 3: schneller und kleiner als Standard)
     preview_img(final).save(os.path.join(d, f"preview_{key}.png"), compress_level=3)   # Vorschau ohne Wasserzeichen
@@ -1392,7 +1400,9 @@ def machine_done(ref):
 # ---------- Seiten ----------
 @app.get("/")
 def index():
-    return render_template("index.html")
+    sizes = [(k, w, h, BASE_CENTS + round(max(0, w * h - BASE_AREA) * CENTS_PER_CM2)) for k, (w, h) in SIZES["quad"].items()]
+    woods = [(k, v[0], v[2]) for k, v in WOOD.items()]
+    return render_template("index.html", sizes=sizes, woods=woods, sw_eur=SW_EUR, pins_eur=PINS[360], note=PREORDER_NOTE)
 
 @app.get("/configure")
 def configure():

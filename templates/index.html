@@ -1,28 +1,224 @@
 {% extends "base.html" %}
+{% block title %}Faded Art – Ihr Foto als Fadenbild aus Schwarz und Weiß{% endblock %}
+{% block body_class %}home{% endblock %}
 {% block content %}
-<section class="hero">
-  <h1 class="gold-text">Ihr Foto als String Art, gespannt aus einem einzigen Faden</h1>
-  <p>Laden Sie ein Foto hoch, wählen Sie Größe, Untergrund und Fadenfarbe und sehen Sie das berechnete Ergebnis, bevor Sie bestellen.</p>
-  <div class="cta-row"><a href="/configure" class="btn btn-gold">Jetzt konfigurieren</a><a href="/gutschein" class="btn">Gutschein verschenken</a><a href="/ueber-uns" class="btn">Unsere Geschichte</a></div>
+<!-- Faden-Leiste: zeigt beim Scrollen, wo man auf der Seite ist -->
+<nav class="thread" aria-label="Abschnitte der Seite">
+  <svg class="thread-svg" aria-hidden="true" preserveAspectRatio="none"><path class="t-base"/><path class="t-gold"/></svg>
+  <ol class="thread-pins"></ol>
+</nav>
+
+<section class="h-hero bleed" data-label="Start">
+  <div class="h-hero-art">
+    <canvas id="heroCanvas" width="900" height="900" aria-label="Ein Fadenbild entsteht Linie für Linie"></canvas>
+    <img id="heroImg" src="{{ url_for('static', filename='img/art-katze.jpg') }}" alt="Fadenbild einer Katze aus schwarzem und weißem Faden auf schwarzem Grund" hidden>
+    <div class="h-count" aria-hidden="true"><b id="heroN">0</b> Fäden</div>
+  </div>
+  <div class="h-hero-copy">
+    <p class="eyebrow rv">Faded Art · Fadenkunst</p>
+    <h1 class="rv" style="--d:.1s">Ein Faden.<br><em>Tausende Linien.</em><br>Ihr Moment.</h1>
+    <p class="lead rv" style="--d:.2s">Aus Ihrem Foto berechnen wir den Weg eines schwarzen und eines weißen Fadens um 360 Nägel. Aus der Nähe sind es Linien, aus zwei Metern ein Gesicht.</p>
+    <div class="cta-row rv" style="--d:.3s"><a href="/configure" class="btn btn-gold">Ihr Bild gestalten</a><a href="/gutschein" class="btn">Gutschein verschenken</a></div>
+  </div>
+  <a href="#nah" class="scroll-hint" aria-label="Weiter nach unten"><span></span></a>
 </section>
 
-<section class="block">
-  <h2 class="title">So funktioniert's</h2>
-  <div class="grid">
-    <div class="card"><h3>1. Foto wählen</h3><p>Ausschnitt im Kreis zoomen und verschieben.</p></div>
-    <div class="card"><h3>2. Gestalten</h3><p>Größe, Untergrund, Fadenfarbe und Pin-Anzahl festlegen.</p></div>
-    <div class="card"><h3>3. Vorschau prüfen</h3><p>Das Ergebnis wird berechnet und als Vorschau gezeigt.</p></div>
-    <div class="card"><h3>4. Sicher bezahlen</h3><p>Bezahlung über Stripe, danach geht Ihr Bild in Fertigung.</p></div>
+<!-- Apple-artiger Zoom: von der Linie zum Bild -->
+<section class="zoom bleed" id="nah" data-label="Nah & fern">
+  <div class="zoom-stick">
+    <div class="zoom-img"><img src="{{ url_for('static', filename='img/art-katze-hd.jpg') }}" alt="Fadenbild aus der Nähe: einzelne Fäden kreuzen sich" loading="lazy"></div>
+    <div class="zoom-text">
+      <p class="zt zt1"><span class="eyebrow">Aus der Nähe</span>Nur Linien.<br><em>Tausende gerade Fäden.</em></p>
+      <p class="zt zt2"><span class="eyebrow">Aus zwei Metern</span>Ein Blick,<br><em>der Sie ansieht.</em></p>
+    </div>
   </div>
 </section>
 
-<section class="block">
-  <h2 class="title">Beispiele</h2>
-  <div class="grid">
-    <article class="card"><div class="disc-mock ex">Beispiel<img src="/static/img/beispiel-portrait-klassik.jpg" alt="String Art Porträt, schwarzer Faden auf weißem Kreis" loading="lazy" onerror="this.remove()"></div><h3>String Art Porträt, klassisch</h3><p>360 Pins, schwarzer Faden auf weißem Kreis</p></article>
-    <article class="card"><div class="disc-mock ex">Beispiel<img src="/static/img/beispiel-portrait-gold.jpg" alt="String Art Porträt, goldener Faden auf schwarzem Kreis" loading="lazy" onerror="this.remove()"></div><h3>String Art Porträt in Gold</h3><p>360 Pins, goldener Faden auf schwarzem Kreis, goldene Nägel</p></article>
-    <article class="card"><div class="disc-mock ex">Beispiel<img src="/static/img/beispiel-portrait-brille.jpg" alt="String Art Porträt mit Brille, schwarzer Faden auf weißem Kreis" loading="lazy" onerror="this.remove()"></div><h3>String Art Porträt mit Brille</h3><p>360 Pins, schwarzer Faden auf weißem Kreis</p></article>
+<section class="h-block" data-label="In Zahlen">
+  <p class="eyebrow center rv">Was in einem Bild steckt</p>
+  <h2 class="h2 center rv" style="--d:.1s">Präzision, die man <em>sieht</em>.</h2>
+  <div class="stats">
+    <div class="stat rv"><b data-to="360">0</b><span>Nägel im Kreis</span></div>
+    <div class="stat rv" style="--d:.1s"><b data-to="12000" data-sep>0</b><span>gerade Fadenwege, höchstens</span></div>
+    <div class="stat rv" style="--d:.2s"><b data-to="3" data-unit=" km">0</b><span>Faden in einem 50-cm-Bild, etwa</span></div>
+    <div class="stat rv" style="--d:.3s"><b data-to="2">0</b><span>durchgehende Fäden: Schwarz und Weiß</span></div>
   </div>
+</section>
+
+<section class="h-block" data-label="So entsteht es">
+  <p class="eyebrow center rv">Vom Foto zum Kunstwerk</p>
+  <h2 class="h2 center rv" style="--d:.1s">Vier Schritte. <em>Ein Faden.</em></h2>
+  <ol class="steps-v">
+    <li class="rv"><span class="num">01</span><div><h3>Ihr Foto</h3><p>Sie laden ein Foto hoch und legen den Ausschnitt im Kreis fest. Am besten wirkt ein Gesicht, das den Kreis gut füllt, mit klarem Licht.</p></div></li>
+    <li class="rv"><span class="num">02</span><div><h3>Die Berechnung</h3><p>Unser Algorithmus prüft für jede neue Linie alle Nägel und wählt die, die Ihr Bild am stärksten verbessert. So entsteht Linie für Linie die Spannreihenfolge. Sie sehen drei Varianten und wählen Ihren Favoriten.</p></div></li>
+    <li class="rv"><span class="num">03</span><div><h3>Das Spannen</h3><p>Ihr Brett wird exakt nach dieser Reihenfolge gespannt, Nagel für Nagel. Der schwarze Faden zeichnet Schatten, der weiße das Licht.</p></div></li>
+    <li class="rv"><span class="num">04</span><div><h3>Zu Ihnen</h3><p>Sorgfältig verpackt und verschickt. {{ note }}</p></div></li>
+  </ol>
+</section>
+
+<section class="h-split bleed" data-label="Schwarz & Weiß">
+  <div class="split-img rv"><img src="{{ url_for('static', filename='img/wand-matisse.jpg') }}" alt="Fadenbild eines Porträts in schwarzem Rahmen auf Schwarzer Esche, an dunkler Wand" loading="lazy"></div>
+  <div class="split-copy">
+    <p class="eyebrow rv">Unsere Signatur</p>
+    <h2 class="h2 rv" style="--d:.1s">Schwarz <em>und</em> Weiß.</h2>
+    <p class="rv" style="--d:.2s">Die meisten Fadenbilder kennen nur einen schwarzen Faden auf hellem Grund. Wir spannen zwei: Schwarz für die Schatten, Weiß für das Licht, auf dunklem Grund. Das ergibt mehr Tiefe, hellere Augen und echte Lichtkanten.</p>
+    <p class="rv" style="--d:.25s">In unseren Tests mit 15 Porträts lag Schwarz + Weiß bei jedem einzelnen Foto vor der reinen Schwarz-Variante.</p>
+    <p class="fine rv" style="--d:.3s">Aufpreis Schwarz + Weiß: {{ (sw_eur * 100)|euro }}</p>
+  </div>
+</section>
+
+<section class="h-block" data-label="Holz">
+  <p class="eyebrow center rv">Material</p>
+  <h2 class="h2 center rv" style="--d:.1s">Echtes Holz. <em>Echte Maserung.</em></h2>
+  <div class="wood rv" style="--d:.15s">
+    <div class="wood-board" id="woodBoard" data-wood="nussbaum">
+      <img src="{{ url_for('static', filename='img/art-katze.jpg') }}" alt="" loading="lazy">
+    </div>
+    <div class="wood-pick" role="radiogroup" aria-label="Holz wählen">
+      {% for k, name, extra in woods %}
+      <button type="button" class="wood-sw{% if k == 'nussbaum' %} on{% endif %}" role="radio" aria-checked="{{ 'true' if k == 'nussbaum' else 'false' }}" data-wood="{{ k }}">
+        <i style="background-image:url({{ url_for('static', filename='img/holz/' ~ k ~ '.jpg') }})"></i>
+        <span>{{ name }}</span><small>{% if extra %}+ {{ (extra * 100)|euro }}{% else %}inklusive{% endif %}</small>
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="h-block" data-label="Galerie">
+  <p class="eyebrow center rv">Galerie</p>
+  <h2 class="h2 center rv" style="--d:.1s">An der Wand.</h2>
+  <div class="gallery">
+    <figure class="rv"><img src="{{ url_for('static', filename='img/wand-katze.jpg') }}" alt="Fadenbild einer Katze auf Nussbaum im schwarzen Rahmen" loading="lazy"><figcaption>Katze · Nussbaum · 360 Nägel</figcaption></figure>
+    <figure class="rv" style="--d:.1s"><img src="{{ url_for('static', filename='img/wand-matisse.jpg') }}" alt="Fadenbild nach Matisse auf Schwarzer Esche" loading="lazy"><figcaption>Nach Matisse, „Frau mit Hut“ · Schwarze Esche</figcaption></figure>
+    <figure class="rv" style="--d:.2s"><img src="{{ url_for('static', filename='img/wand-schrei.jpg') }}" alt="Fadenbild nach Munch auf Eiche" loading="lazy"><figcaption>Nach Munch, „Der Schrei“ · Eiche</figcaption></figure>
+  </div>
+  <p class="fine center rv">Simulation unserer Engine mit 0,2-mm-Faden, Brett 50 × 50 cm. Vorlagen: gemeinfreie Gemälde und ein frei lizenziertes Katzenfoto.</p>
+</section>
+
+<section class="h-block" data-label="Größen">
+  <p class="eyebrow center rv">Größen & Preise</p>
+  <h2 class="h2 center rv" style="--d:.1s">Je größer, <em>desto feiner</em>.</h2>
+  <div class="sizes">
+    {% for k, w, h, cents in sizes %}
+    <div class="size rv" style="--d:{{ loop.index0 * 0.08 }}s;--s:{{ w }}">
+      <div class="size-sq"><span></span></div>
+      <h3>{{ k }}</h3><p>{{ w }} × {{ h }} cm</p><b>ab {{ cents|euro }}</b>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="fine center rv">Quadratisch, mit 240 Nägeln und Klassik-Holz. 360 Nägel + {{ (pins_eur * 100)|euro }}. Rund, hoch und quer im Konfigurator.</p>
+</section>
+
+<section class="h-block narrow" data-label="Fragen">
+  <p class="eyebrow center rv">Gut zu wissen</p>
+  <h2 class="h2 center rv" style="--d:.1s">Fragen & Antworten</h2>
+  <div class="faq">
+    <details class="rv"><summary>Welches Foto eignet sich am besten?</summary><p>Ein Gesicht von vorn oder leicht seitlich, gut belichtet, das den Kreis füllt. Starke Kontraste helfen, Sonnenbrillen und sehr kleine Gesichter nicht. Haustiere funktionieren hervorragend.</p></details>
+    <details class="rv"><summary>Sehe ich das Ergebnis vor dem Kauf?</summary><p>Ja. Nach dem Hochladen berechnen wir Ihr Bild live im Browser, Sie sehen drei Varianten und wählen eine aus. Erst dann bezahlen Sie.</p></details>
+    <details class="rv"><summary>Wann wird mein Bild gefertigt?</summary><p>{{ note }}</p></details>
+    <details class="rv"><summary>Wie pflege ich das Bild?</summary><p>Nicht in direkte Sonne hängen und Staub gelegentlich mit einem weichen Pinsel oder Föhn auf kalter Stufe entfernen. Die Fäden nicht ziehen oder knicken.</p></details>
+    <details class="rv"><summary>Kann ich das verschenken, ohne das Foto zu kennen?</summary><p>Ja, mit unserem Gutschein. Der Beschenkte lädt sein Foto selbst hoch und wählt sein Bild. <a href="/gutschein">Zum Gutschein</a></p></details>
+  </div>
+</section>
+
+<section class="h-final bleed" data-label="Gestalten">
+  <h2 class="h2 rv">Welcher Moment soll <em>bleiben</em>?</h2>
+  <p class="lead rv" style="--d:.1s">Foto hochladen, Varianten ansehen, erst dann entscheiden.</p>
+  <div class="cta-row rv" style="--d:.2s"><a href="/configure" class="btn btn-gold">Jetzt gestalten</a><a href="/ueber-uns" class="btn">Unsere Geschichte</a></div>
 </section>
 {% endblock %}
 
+{% block scripts %}
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+
+  /* 1. Einblenden von unten beim Scrollen */
+  const io = new IntersectionObserver(es => es.forEach(e => {
+    if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+  }), { rootMargin: '0px 0px -12% 0px' });
+  $$('.rv').forEach(el => reduce ? el.classList.add('in') : io.observe(el));
+
+  /* 2. Zahlen hochzählen */
+  const fmt = (v, sep) => sep ? v.toLocaleString('de-DE') : String(v);
+  const cio = new IntersectionObserver(es => es.forEach(e => {
+    if (!e.isIntersecting) return; cio.unobserve(e.target);
+    const el = e.target, to = +el.dataset.to, unit = el.dataset.unit || '', sep = 'sep' in el.dataset, t0 = performance.now();
+    const tick = t => { const p = reduce ? 1 : Math.min(1, (t - t0) / 1600), v = Math.round(to * (1 - Math.pow(1 - p, 3)));
+      el.textContent = fmt(v, sep) + unit; if (p < 1) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  }), { threshold: .6 });
+  $$('.stat b').forEach(b => cio.observe(b));
+
+  /* 3. Hero: Fadenbild entsteht Linie für Linie (echte Spannreihenfolge unserer Engine) */
+  const cv = $('#heroCanvas'), img = $('#heroImg'), cnt = $('#heroN');
+  const showFinal = () => { img.hidden = false; requestAnimationFrame(() => img.classList.add('on')); };
+  fetch('{{ url_for("static", filename="img/demo-katze.json") }}').then(r => r.json()).then(d => {
+    const ctx = cv.getContext('2d'), S = cv.width, c = (S - 1) / 2, R = c * .985, n = d.n;
+    const P = Array.from({ length: n }, (_, i) => [c + R * Math.cos(2 * Math.PI * i / n), c + R * Math.sin(2 * Math.PI * i / n)]);
+    const col = ['rgba(18,18,18,.42)', 'rgba(238,236,228,.42)'];
+    ctx.fillStyle = '#0e0e0e'; ctx.beginPath(); ctx.arc(c, c, c, 0, 7); ctx.fill();
+    ctx.lineWidth = 1;
+    const cur = d.s.slice(), N = d.p.length;
+    let i = 0;
+    const step = k => { for (let e = Math.min(N, i + k); i < e; i++) { const f = +d.k[i], a = P[cur[f]], b = P[d.p[i]];
+      ctx.strokeStyle = col[f]; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); cur[f] = d.p[i]; } };
+    const pins = () => { ctx.fillStyle = '#c39a3e'; P.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, 2.2, 0, 7); ctx.fill(); }); };
+    if (reduce) { step(N); pins(); cnt.textContent = N.toLocaleString('de-DE'); return showFinal(); }
+    const t0 = performance.now(), DUR = 7000;
+    const frame = t => { const p = Math.min(1, (t - t0) / DUR), want = Math.round(N * (p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2));
+      step(want - i); cnt.textContent = i.toLocaleString('de-DE');
+      if (p < 1) requestAnimationFrame(frame); else { pins(); setTimeout(showFinal, 300); } };
+    pins(); requestAnimationFrame(frame);
+  }).catch(showFinal);
+
+  /* 4. Zoom-Abschnitt: von der Linie zum Bild */
+  const zoom = $('.zoom'), zi = $('.zoom-img'), zt1 = $('.zt1'), zt2 = $('.zt2');
+
+  /* 5. Faden-Leiste mit Nägeln je Abschnitt */
+  const secs = $$('main [data-label]'), list = $('.thread-pins'), svg = $('.thread-svg'), base = $('.t-base'), gold = $('.t-gold');
+  secs.forEach((s, i) => { if (!s.id) s.id = 'sec-' + i;
+    list.insertAdjacentHTML('beforeend', `<li><a href="#${s.id}"><i></i><span>${s.dataset.label}</span></a></li>`); });
+  const pinsEl = [...list.children];
+  let len = 0;
+  const layout = () => {
+    const mob = innerWidth <= 900, h = innerHeight - (mob ? 130 : 160), w = mob ? 14 : 24;
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`); svg.style.height = h + 'px';
+    const d = `M${w / 2} 0 L${w / 2} ${h}`;   /* gespannter Faden: gerade */
+    base.setAttribute('d', d); gold.setAttribute('d', d);
+    len = gold.getTotalLength(); gold.style.strokeDasharray = len;
+    const doc = document.documentElement.scrollHeight - innerHeight;
+    secs.forEach((s, i) => { const y = Math.min(1, Math.max(0, (s.offsetTop - innerHeight * .35) / doc)); pinsEl[i].style.top = (y * h) + 'px'; pinsEl[i].dataset.y = y; });
+  };
+  let ticking = false;
+  const onScroll = () => {
+    ticking = false;
+    const doc = document.documentElement.scrollHeight - innerHeight, p = doc > 0 ? scrollY / doc : 0;
+    gold.style.strokeDashoffset = len * (1 - p);
+    let cur = 0; pinsEl.forEach((li, i) => { const on = p + .001 >= +li.dataset.y; li.classList.toggle('on', on); if (on) cur = i; });
+    pinsEl.forEach((li, i) => li.classList.toggle('cur', i === cur));
+    document.body.classList.toggle('scrolled', scrollY > 40);
+    if (zoom && !reduce) {
+      const r = zoom.getBoundingClientRect(), q = Math.min(1, Math.max(0, -r.top / (r.height - innerHeight)));
+      const s = 4.2 - 3.2 * Math.min(1, q / .8);
+      zi.style.transform = `scale(${s.toFixed(4)})`;
+      zt1.style.opacity = Math.max(0, 1 - q * 3.2); zt1.style.transform = `translateY(${-q * 60}px)`;
+      const o2 = Math.min(1, Math.max(0, (q - .55) * 3.5)); zt2.style.opacity = o2; zt2.style.transform = `translateY(${(1 - o2) * 40}px)`;
+    }
+  };
+  addEventListener('scroll', () => { if (!ticking) { ticking = true; requestAnimationFrame(onScroll); } }, { passive: true });
+  addEventListener('resize', () => { layout(); onScroll(); });
+  addEventListener('load', () => { layout(); onScroll(); });
+  layout(); onScroll();
+
+  /* 6. Holz-Auswahl */
+  const wb = $('#woodBoard');
+  $$('.wood-sw').forEach(b => b.addEventListener('click', () => {
+    $$('.wood-sw').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', x === b); });
+    wb.dataset.wood = b.dataset.wood;
+  }));
+})();
+</script>
+{% endblock %}
