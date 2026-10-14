@@ -1379,14 +1379,24 @@ def send_mail(to, subject, text, files=()):
     """E-Mail über Resend (RESEND_API_KEY) oder SMTP. files: [(Name, MIME-Typ, Bytes)]."""
     key = mail_env("RESEND_API_KEY")
     if key:
-        body = json.dumps({"from": os.environ.get("MAIL_FROM", "Faded Art <onboarding@resend.dev>"), "to": [to], "subject": subject,
-                           "text": text, "attachments": [{"filename": n, "content": base64.b64encode(b).decode()} for n, _, b in files]})
-        req = urllib.request.Request("https://api.resend.com/emails", data=body.encode(), method="POST",
-                                     headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json", "User-Agent": "faded-art"})
-        try:
+        def resend(sender):
+            body = json.dumps({"from": sender, "to": [to], "subject": subject, "reply_to": mail_env("MAIL_REPLY_TO", "info@fadedart.de"),
+                               "text": text, "attachments": [{"filename": n, "content": base64.b64encode(b).decode()} for n, _, b in files]})
+            req = urllib.request.Request("https://api.resend.com/emails", data=body.encode(), method="POST",
+                                         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json", "User-Agent": "faded-art"})
             urllib.request.urlopen(req, timeout=60).read()
+        sender, fallback = mail_env("MAIL_FROM") or "Faded Art <onboarding@resend.dev>", "Faded Art <onboarding@resend.dev>"
+        try:
+            resend(sender)
         except urllib.error.HTTPError as e:
-            raise RuntimeError(f"Resend {e.code}: {e.read().decode(errors='replace')[:300]}") from None
+            err = e.read().decode(errors="replace")[:300]
+            if e.code in (403, 422) and sender != fallback:   # eigene Domain bei Resend (noch) nicht bestätigt: über Resend-Testabsender schicken
+                app.logger.warning("Resend lehnt Absender %s ab (%s), sende über %s", sender, err, fallback)
+                try:
+                    return resend(fallback)
+                except urllib.error.HTTPError as e2:
+                    raise RuntimeError(f"Resend {e2.code}: {e2.read().decode(errors='replace')[:300]}") from None
+            raise RuntimeError(f"Resend {e.code}: {err}") from None
     elif mail_env("SMTP_HOST"):
         msg = EmailMessage()
         msg["Subject"], msg["To"], msg["From"] = subject, to, mail_env("MAIL_FROM") or mail_env("SMTP_USER", to)
@@ -1916,7 +1926,7 @@ SHOP = {   # Anbieterdaten für Impressum, AGB, Datenschutz. Fehlende Angaben pe
     "name": os.environ.get("SHOP_NAME", "Tobias Appelt"),
     "strasse": os.environ.get("SHOP_STRASSE", "Olympiastraße 12b"),
     "ort": os.environ.get("SHOP_ORT", "85622 Feldkirchen"),
-    "email": os.environ.get("SHOP_EMAIL", ""),
+    "email": os.environ.get("SHOP_EMAIL", "info@fadedart.de"),
     "telefon": os.environ.get("SHOP_TELEFON", ""),
     "ust": os.environ.get("SHOP_UST", ""),          # "klein" = Kleinunternehmer nach § 19 UStG, sonst die USt-IdNr. (DE...)
     "lieferzeit": os.environ.get("SHOP_LIEFERZEIT", ""),   # Freitext, z. B. "bis zu zwei Monate"

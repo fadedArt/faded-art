@@ -21,7 +21,7 @@
   <div class="hero-copy">
     <p class="mark">Faded Art</p>
     <h1>Dein Foto,<br>gespannt aus Faden.</h1>
-    <p class="lead">Wir berechnen aus deinem Bild den Weg eines schwarzen und eines weißen Fadens um 360 Nägel. Aus der Nähe siehst du Linien, aus zwei Metern ein Gesicht.</p>
+    <p class="lead">Für dich allein, als Paar, mit Freunden oder als Familie. Wir berechnen aus deinem Bild den Weg eines schwarzen und eines weißen Fadens um 360 Nägel. Aus der Nähe siehst du Linien, aus zwei Metern ein Gesicht.</p>
     <div class="cta-row"><a href="/configure" class="btn btn-gold">Bild gestalten</a><a href="#entsteht" class="btn btn-quiet">Sehen, wie es entsteht</a></div>
   </div>
 </section>
@@ -34,6 +34,18 @@
     <li><b>Aus Feldkirchen bei München</b><span>Software, Maschine und Fertigung aus einer Hand.</span></li>
     <li><b>Gutschein drei Jahre gültig</b><span>Verschenken, ohne das Foto zu kennen.</span></li>
   </ul>
+</section>
+
+<!-- Für wen: allein, als Paar, mit Freunden, als Familie -->
+<section class="sec who-sec" id="fuer-wen" data-label="Für wen">
+  <h2 class="h2">Für dich allein. Als Paar.<br>Mit Freunden. Als Familie.</h2>
+  <p class="sub">Ein Gesicht oder vier: Wir rechnen jedes Foto so, dass alle darauf erkennbar bleiben.</p>
+  <div class="who">
+    {% for k, t, d in [('portrait','Allein','Dein Porträt, ein Blick.'), ('paare','Als Paar','Zwei Gesichter, ein Faden.'), ('freunde','Mit Freunden','Das Foto, das ihr nie vergesst.'), ('familie','Als Familie','Alle zusammen an einer Wand.')] %}
+    <a class="who-item" href="#vergleich" data-k="{{ k }}"><img src="{{ url_for('static', filename='img/var-' ~ k ~ '-sw.jpg') }}" alt="Fadenbild {{ t }}" loading="lazy" width="380" height="380"><b>{{ t }}</b><span>{{ d }}</span></a>
+    {% endfor %}
+  </div>
+  <p class="sub" style="font-size:.8rem;margin-top:1rem;opacity:.7">Beispielbilder, alle Personen KI-generiert.</p>
 </section>
 
 <!-- Echtes Foto eines gespannten Bildes -->
@@ -93,9 +105,11 @@
   <h2 class="h2">Ein Foto. Drei Ausführungen.</h2>
   <p class="sub">Gleiches Foto, gleiche 360 Nägel. Der Unterschied liegt im Faden.</p>
   <div class="cmp-pick" role="radiogroup" aria-label="Foto wählen">
-    <button type="button" class="on" data-k="portrait" aria-pressed="true"><img src="{{ url_for('static', filename='img/foto-portrait.jpg') }}" alt="">Porträt</button>
+    <button type="button" class="on" data-k="portrait" aria-pressed="true"><img src="{{ url_for('static', filename='img/foto-portrait.jpg') }}" alt="">Allein</button>
+    <button type="button" data-k="paare" aria-pressed="false"><img src="{{ url_for('static', filename='img/foto-paare.jpg') }}" alt="">Paar</button>
     <button type="button" data-k="freunde" aria-pressed="false"><img src="{{ url_for('static', filename='img/foto-freunde.jpg') }}" alt="">Freunde</button>
-    <button type="button" data-k="tiger" aria-pressed="false"><img src="{{ url_for('static', filename='img/foto-tiger.jpg') }}" alt="">Tiger</button>
+    <button type="button" data-k="familie" aria-pressed="false"><img src="{{ url_for('static', filename='img/foto-familie.jpg') }}" alt="">Familie</button>
+    <button type="button" data-k="tiger" aria-pressed="false"><img src="{{ url_for('static', filename='img/foto-tiger.jpg') }}" alt="">Tier</button>
   </div>
   <div class="cmp">
     <figure class="cmp-orig"><img data-v="foto" src="{{ url_for('static', filename='img/foto-portrait.jpg') }}" alt="Originalfoto" loading="lazy"><figcaption><b>Original</b>Dein Foto, zugeschnitten auf den Kreis</figcaption></figure>
@@ -406,6 +420,7 @@
   })();
 
   /* Vergleich: Foto wechseln */
+  $$('.who-item').forEach(a => a.addEventListener('click', () => { const b = $('.cmp-pick button[data-k="' + a.dataset.k + '"]'); if (b) b.click(); }));
   $$('.cmp-pick button').forEach(b => b.addEventListener('click', () => {
     $$('.cmp-pick button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
     $$('.cmp img[data-v]').forEach(im => { const v = im.dataset.v;
