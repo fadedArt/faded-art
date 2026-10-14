@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block title %}Faded Art – Ihr Foto, gespannt aus Faden{% endblock %}
-{% block body_class %}v2{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='home.css', v=asset_v('home.css')) }}">{% endblock %}
+{% block title %}Faded Art – Dein Foto, gespannt aus Faden{% endblock %}
+{% block body_class %}home2{% endblock %}
+
 {% block content %}
 <!-- Faden-Leiste rechts: füllt sich beim Scrollen, ein Nagel je Abschnitt -->
 <nav class="thread" aria-label="Abschnitte der Seite">
@@ -19,9 +19,30 @@
   </div>
   <div class="hero-copy">
     <p class="mark">Faded Art</p>
-    <h1>Ihr Foto,<br>gespannt aus Faden.</h1>
-    <p class="lead">Wir berechnen aus Ihrem Bild den Weg eines schwarzen und eines weißen Fadens um 360 Nägel. Aus der Nähe sehen Sie Linien, aus zwei Metern ein Gesicht.</p>
+    <h1>Dein Foto,<br>gespannt aus Faden.</h1>
+    <p class="lead">Wir berechnen aus deinem Bild den Weg eines schwarzen und eines weißen Fadens um 360 Nägel. Aus der Nähe siehst du Linien, aus zwei Metern ein Gesicht.</p>
     <div class="cta-row"><a href="/configure" class="btn btn-gold">Bild gestalten</a><a href="#entsteht" class="btn btn-quiet">Sehen, wie es entsteht</a></div>
+  </div>
+</section>
+
+<!-- Vertrauen: kurze Fakten direkt unter dem Einstieg -->
+<section class="trust" aria-label="Gut zu wissen">
+  <ul>
+    <li><b>Erst ansehen, dann zahlen</b><span>Du siehst drei berechnete Varianten, bevor du bestellst.</span></li>
+    <li><b>Sicher bezahlen</b><span>Zahlung über Stripe, mit Karte, Apple Pay oder Google Pay.</span></li>
+    <li><b>Aus Feldkirchen bei München</b><span>Software, Maschine und Fertigung aus einer Hand.</span></li>
+    <li><b>Gutschein drei Jahre gültig</b><span>Verschenken, ohne das Foto zu kennen.</span></li>
+  </ul>
+</section>
+
+<!-- Echtes Foto eines gespannten Bildes -->
+<section class="sec real" data-label="Echt gespannt">
+  <figure class="real-img"><img src="{{ url_for('static', filename='img/echt-wand.jpg') }}" alt="Echtes Fadenbild an einer weißen Wand: Paarporträt aus schwarzem Faden auf weißem Brett, unten rechts signiert" loading="lazy"></figure>
+  <div>
+    <h2 class="h2">Echt gespannt.</h2>
+    <p>Das ist ein echtes Fadenbild an einer echten Wand, fotografiert mit dem Handy. Ein Paarporträt aus schwarzem Faden auf weißem Brett, Nagel für Nagel gespannt und unten rechts signiert.</p>
+    <p>Aus der Nähe sind es nur Fäden. Ein paar Schritte zurück, und die beiden Gesichter sind da.</p>
+    <p class="fine">Die übrigen Bilder auf dieser Seite sind Simulationen unserer Software mit derselben Spannreihenfolge, nach der auch gespannt wird.</p>
   </div>
 </section>
 
@@ -45,11 +66,11 @@
       </div>
     </div>
     <div class="build-copy">
-      <h2 class="h2">Ziehen Sie am Faden.</h2>
+      <h2 class="h2">Zieh am Faden.</h2>
       <ol class="build-steps">
         <li class="on"><h3>Erst die großen Flächen.</h3><p>Die ersten Fäden legen hell und dunkel an. Noch ist kaum etwas zu erkennen.</p></li>
         <li><h3>Dann Schatten und Kontur.</h3><p>Der schwarze Faden zeichnet die Schatten, der weiße das Licht. Die Form tritt hervor.</p></li>
-        <li><h3>Zum Schluss der Blick.</h3><p>Die letzten Fäden schärfen Augen und Fell. So viel Arbeit steckt in jedem Bild, das wir für Sie spannen.</p></li>
+        <li><h3>Zum Schluss der Blick.</h3><p>Die letzten Fäden schärfen Augen und Fell. So viel Arbeit steckt in jedem Bild, das wir für dich spannen.</p></li>
       </ol>
       <div class="build-meter">
         <p><b id="bN">0</b><span>Fäden</span></p>
@@ -61,7 +82,7 @@
         <button type="button" id="pFwd" aria-label="Vorwärts abspielen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 6l8 6-8 6zM4 6l8 6-8 6z"/></svg></button>
         <span class="player-note" id="pNote">Spannt sich</span>
       </div>
-      <p class="fine">Das ist die echte Spannreihenfolge unserer Software für dieses Foto. Sie können auch am Regler ziehen.</p>
+      <p class="fine">Das ist die echte Spannreihenfolge unserer Software für dieses Foto. Du kannst auch am Regler ziehen.</p>
     </div>
   </div>
 </section>
@@ -75,10 +96,10 @@
     <button type="button" data-k="tiger" aria-pressed="false"><img src="{{ url_for('static', filename='img/foto-tiger.jpg') }}" alt="">Tiger</button>
   </div>
   <div class="cmp">
-    <figure class="cmp-orig"><img data-v="foto" src="{{ url_for('static', filename='img/foto-frau-stadt.jpg') }}" alt="Originalfoto" loading="lazy"><figcaption><b>Original</b>Ihr Foto, zugeschnitten auf den Kreis</figcaption></figure>
+    <figure class="cmp-orig"><img data-v="foto" src="{{ url_for('static', filename='img/foto-frau-stadt.jpg') }}" alt="Originalfoto" loading="lazy"><figcaption><b>Original</b>Dein Foto, zugeschnitten auf den Kreis</figcaption></figure>
     <figure><img data-v="schwarz" src="{{ url_for('static', filename='img/var-frau-stadt-schwarz.jpg') }}" alt="Fadenbild nur aus schwarzem Faden auf weißem Grund" loading="lazy"><figcaption><b>Schwarz</b>Ein Faden auf hellem Grund. Inklusive</figcaption></figure>
     <figure class="cmp-lux"><img data-v="sw" src="{{ url_for('static', filename='img/var-frau-stadt-sw.jpg') }}" alt="Fadenbild aus schwarzem und weißem Faden auf dunklem Grund" loading="lazy"><figcaption><b>Schwarz und Weiß</b>Zwei Fäden, mehr Licht und Tiefe. + {{ (sw_eur * 100)|euro }}</figcaption></figure>
-    <figure><img data-v="gold" src="{{ url_for('static', filename='img/var-frau-stadt-gold.jpg') }}" alt="Fadenbild aus schwarzem und goldenem Faden auf dunklem Grund" loading="lazy"><figcaption><b>Gold-Edition</b>Schwarz und Gold auf dunklem Grund. Bald erhältlich</figcaption></figure>
+    <figure><img data-v="gold" src="{{ url_for('static', filename='img/var-frau-stadt-gold.jpg') }}" alt="Fadenbild aus schwarzem und goldenem Faden auf dunklem Grund" loading="lazy"><figcaption><b>Gold-Edition</b>Schwarz und Gold auf dunklem Grund. Noch nicht bestellbar, zeigt farbigen Faden.</figcaption></figure>
   </div>
 </section>
 
@@ -112,7 +133,7 @@
       <div class="wood-pick" role="radiogroup" aria-label="Untergrund wählen">
         {% for k, name, extra in woods %}
         <button type="button" class="wood-sw{% if k == 'nussbaum' %} on{% endif %}" role="radio" aria-checked="{{ 'true' if k == 'nussbaum' else 'false' }}" data-wood="{{ k }}" data-name="{{ name }}">
-          <i style="background-image:url({{ url_for('static', filename='img/holz/' ~ k ~ '.jpg') }})"></i>
+          <i style="background-image:url({{ url_for('static', filename='img/holz/klein/' ~ k ~ '.jpg') }})"></i>
           <span>{{ name }}</span><small>{% if extra %}+ {{ (extra * 100)|euro }}{% else %}inklusive{% endif %}</small>
         </button>
         {% endfor %}
@@ -124,7 +145,7 @@
 <!-- 6. Galerie mit Original -->
 <section class="sec gal-sec" data-label="Galerie">
   <h2 class="h2">Original und Fadenbild.</h2>
-  <p class="sub">Wischen Sie durch die Beispiele. Unten links sehen Sie jeweils die Vorlage.</p>
+  <p class="sub">Wisch durch die Beispiele. Unten links siehst du jeweils die Vorlage.</p>
   <div class="gal" tabindex="0" aria-label="Galerie, seitlich wischen">
     {% for k, title, wood in [('katze','Katze','Nussbaum'), ('matisse','Nach Matisse, Frau mit Hut','Schwarze Esche'), ('schrei','Nach Munch, Der Schrei','Eiche')] %}
     <figure class="gal-item">
@@ -139,8 +160,8 @@
 
 <!-- 7. Raum-Planer: Größe, Format und Holz im echten Maßstab -->
 <section class="sec size-sec" data-label="Größen">
-  <h2 class="h2">Wie wirkt es bei Ihnen?</h2>
-  <p class="sub">Wählen Sie Raum, Format, Größe und Holz. Wand und Möbel färben Sie wie bei sich zu Hause. Alles ist maßstabsgetreu.</p>
+  <h2 class="h2">Wie wirkt es bei dir?</h2>
+  <p class="sub">Wähl Raum, Format, Größe und Holz. Wand und Möbel färbst du wie bei dir zu Hause. Alles ist maßstabsgetreu.</p>
   <div class="room">
     <div class="room-view">
       <svg class="room-svg" id="roomSvg" viewBox="0 0 340 270" role="img" aria-label="Wand mit Möbel, darüber das Fadenbild in der gewählten Größe, maßstabsgetreu">
@@ -193,7 +214,7 @@
       <fieldset><legend>Größe</legend><div class="seg seg4 sizes-seg" data-k="size">
         {% for k in ['S','M','L','XL'] %}<button type="button" data-v="{{ k }}" class="{{ 'on' if k == 'M' }}" aria-pressed="{{ 'true' if k == 'M' else 'false' }}"><b>{{ k }}</b><small></small></button>{% endfor %}</div></fieldset>
       <fieldset><legend>Holz</legend><div class="dots" data-k="wood">
-        {% for k, name, extra in woods %}<button type="button" class="dot wood-dot{{ ' on' if k == 'nussbaum' }}" data-v="{{ k }}" aria-pressed="{{ 'true' if k == 'nussbaum' else 'false' }}" aria-label="{{ name }}" title="{{ name }}" style="background-image:url({{ url_for('static', filename='img/holz/' ~ k ~ '.jpg') }})"></button>{% endfor %}</div></fieldset>
+        {% for k, name, extra in woods %}<button type="button" class="dot wood-dot{{ ' on' if k == 'nussbaum' }}" data-v="{{ k }}" aria-pressed="{{ 'true' if k == 'nussbaum' else 'false' }}" aria-label="{{ name }}" title="{{ name }}" style="background-image:url({{ url_for('static', filename='img/holz/klein/' ~ k ~ '.jpg') }})"></button>{% endfor %}</div></fieldset>
       <fieldset><legend>Wandfarbe</legend><div class="dots" data-k="wall">
         {% for v, name in [('#ece6dc','Weiß'),('#cfcac2','Hellgrau'),('#d8c7ad','Beige'),('#a9b29c','Salbei'),('#b8735a','Terrakotta'),('#6e4f3a','Braun'),('#2f4f55','Petrol'),('#3a3836','Anthrazit')] %}<button type="button" class="dot{{ ' on' if loop.first }}" data-v="{{ v }}" aria-pressed="{{ 'true' if loop.first else 'false' }}" aria-label="{{ name }}" title="{{ name }}" style="background:{{ v }}"></button>{% endfor %}</div></fieldset>
       <fieldset><legend id="furnLegend">Farbe des Sofas</legend><div class="dots" data-k="furn">
@@ -205,12 +226,12 @@
 
 <!-- 8. Ablauf -->
 <section class="sec steps-sec" data-label="Ablauf">
-  <h2 class="h2">Von Ihrem Foto bis an Ihre Wand.</h2>
+  <h2 class="h2">Von deinem Foto bis an deine Wand.</h2>
   <ol class="steps-v">
     <li><span class="num">1</span><div><h3>Foto hochladen</h3><p>Ausschnitt im Kreis wählen. Am besten wirkt ein Gesicht, das den Kreis füllt, mit klarem Licht.</p></div></li>
-    <li><span class="num">2</span><div><h3>Varianten ansehen</h3><p>Ihr Bild wird live berechnet. Sie sehen drei Varianten und wählen Ihren Favoriten, bevor Sie bezahlen.</p></div></li>
-    <li><span class="num">3</span><div><h3>Wir spannen</h3><p>Ihr Brett wird exakt nach der berechneten Reihenfolge gespannt, Nagel für Nagel.</p></div></li>
-    <li><span class="num">4</span><div><h3>Lieferung</h3><p>Sorgfältig verpackt zu Ihnen. {{ note }}</p></div></li>
+    <li><span class="num">2</span><div><h3>Varianten ansehen</h3><p>Dein Bild wird live berechnet. Du siehst drei Varianten und wählst deinen Favoriten, bevor du bezahlst.</p></div></li>
+    <li><span class="num">3</span><div><h3>Wir spannen</h3><p>Dein Brett wird exakt nach der berechneten Reihenfolge gespannt, Nagel für Nagel.</p></div></li>
+    <li><span class="num">4</span><div><h3>Lieferung</h3><p>Sorgfältig verpackt zu dir. {{ note }}</p></div></li>
   </ol>
 </section>
 
@@ -220,11 +241,11 @@
     <img src="{{ url_for('static', filename='img/logo-siegel.svg') }}" alt="">
     <p class="gc-mark">Faded Art</p>
     <p class="gc-t">Gutschein</p>
-    <p class="gc-v">für ein Fadenbild<br>aus Ihrem Lieblingsfoto</p>
+    <p class="gc-v">für ein Fadenbild<br>aus deinem Lieblingsfoto</p>
   </div>
   <div>
     <h2 class="h2">Verschenken, ohne das Foto zu kennen.</h2>
-    <p>Sie kaufen den Gutschein, der Beschenkte lädt sein Foto selbst hoch und wählt sein Bild. Den Gutschein bekommen Sie sofort als PDF zum Ausdrucken.</p>
+    <p>Du kaufst den Gutschein, der Beschenkte lädt sein Foto selbst hoch und wählt sein Bild. Den Gutschein bekommst du sofort als PDF zum Ausdrucken.</p>
     <div class="cta-row"><a href="/gutschein" class="btn btn-gold">Gutschein kaufen</a></div>
   </div>
 </section>
@@ -234,7 +255,7 @@
   <h2 class="h2">Häufige Fragen</h2>
   <div class="faq">
     <details><summary>Welches Foto eignet sich am besten?</summary><p>Ein Gesicht von vorn oder leicht seitlich, gut belichtet, das den Kreis füllt. Starke Kontraste helfen. Sonnenbrillen und sehr kleine Gesichter funktionieren schlecht. Haustiere klappen hervorragend.</p></details>
-    <details><summary>Sehe ich das Ergebnis vor dem Kauf?</summary><p>Ja. Nach dem Hochladen berechnen wir Ihr Bild live, Sie sehen drei Varianten und wählen eine aus. Erst dann bezahlen Sie.</p></details>
+    <details><summary>Sehe ich das Ergebnis vor dem Kauf?</summary><p>Ja. Nach dem Hochladen berechnen wir dein Bild live, du siehst drei Varianten und wählst eine aus. Erst dann bezahlst du.</p></details>
     <details><summary>Wann wird mein Bild gefertigt?</summary><p>{{ note }}</p></details>
     <details><summary>Wie pflege ich das Bild?</summary><p>Nicht in direkte Sonne hängen. Staub gelegentlich mit einem weichen Pinsel oder dem Föhn auf kalter Stufe entfernen. Die Fäden nicht ziehen oder knicken.</p></details>
   </div>

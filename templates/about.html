@@ -1,20 +1,23 @@
 {% extends "base.html" %}
 {% block title %}Über uns – Faded Art{% endblock %}
-{% block desc %}Die Geschichte von Faded Art und wie aus Ihrem Foto ein Fadenbild entsteht.{% endblock %}
+{% block desc %}Faded Art aus Feldkirchen bei München: wer hinter den Fadenbildern steckt und wie aus deinem Foto ein Fadenbild entsteht.{% endblock %}
 {% block content %}
-<article class="card legal">
-<h1>Unsere Geschichte</h1>
-<p>Faded Art begann <mark>[Jahr]</mark> in einer kleinen Werkstatt in <mark>[Ort]</mark> mit einer einfachen Frage: Wie viel Gesicht steckt in ein paar Kilometern Faden? Aus dem ersten Versuchsbild, gespannt um Nägel auf einem Stück Holz, wurde eine Leidenschaft für Fadenkunst. Heute entstehen bei uns Porträts, Haustiere und Erinnerungen, die aus der Ferne wie ein Foto wirken und aus der Nähe aus tausenden feinen Linien bestehen.</p>
-<p><mark>[Persönlichen Absatz zu Gründer oder Team ergänzen, das schafft Vertrauen.]</mark></p>
+<article class="card legal about">
+<h1>Wer hinter Faded Art steckt</h1>
+<p>Faded Art kommt aus Feldkirchen bei München und wurde 2026 gegründet. Hinter der Marke stehen drei Freunde. Tobias Appelt ist Elektriker und angehender Techniker. Er entwickelt die Software, die aus deinem Foto die Spannreihenfolge berechnet, und baut die Maschine, die den Faden spannt. Zwei Freunde kümmern sich um die Website und darum, dass Faded Art gesehen wird.</p>
+<p>Angefangen hat es mit einer Frage: Wie viel Gesicht steckt in ein paar Kilometern Faden? Die Antwort hat uns nicht mehr losgelassen.</p>
 
-<h1 style="margin-top:2.5rem">So entsteht Ihr Bild</h1>
 <h2>Vom Foto zur Fadenlinie</h2>
-<p>Sie laden ein Foto hoch und wählen den Ausschnitt. Wir rechnen daraus den Weg eines einzigen Fadens: Schritt für Schritt wird immer die Linie zwischen zwei Nägeln gewählt, die dem Bild am meisten hilft. Bei 240 Nägeln sind das rund 3.000 Linien, bei 360 Nägeln rund 4.200.</p>
-<h2>Vom Holz zum Kunstwerk</h2>
-<p>Das Brett wird passend zu Ihrer Größe vorbereitet, die Nägel werden im Kreis gesetzt und der Faden Linie für Linie gespannt. <mark>[Passt das zu Ihrer Fertigung? Beschreiben Sie hier genau, was per Hand und was maschinell passiert. Nur was stimmt, sonst ist „handgefertigt“ eine unzulässige Werbeaussage.]</mark></p>
+<p>Du lädst ein Foto hoch und wählst den Ausschnitt. Unsere Software berechnet daraus, Linie für Linie, welcher Weg zwischen den Nägeln dem Bild am meisten hilft. Bei Schwarz und Weiß sind es zwei Fäden: Schwarz zeichnet die Schatten, Weiß das Licht. Ein Bild auf einem 50-cm-Brett braucht so mehrere tausend Fadenwege und rund zwei bis drei Kilometer Faden.</p>
+
+<h2>Vom Holz zum Bild an deiner Wand</h2>
+<p>Das Brett wird passend zu deiner Größe vorbereitet und die Nägel werden im Kreis gesetzt. Gespannt wird exakt nach der berechneten Reihenfolge. Dafür bauen wir gerade unsere eigene Spannmaschine. {{ note }}</p>
+
 <h2>Material</h2>
-<p>Zur Wahl stehen Holzuntergründe von Weiß und Schwarz matt bis Eiche, Nussbaum, Schwarze Esche und Beton-Look. Den Faden gibt es in Schwarz, Weiß, Gold und Silber, in drei Stärken.</p>
-<div class="cta-row" style="margin-top:2rem"><a href="/configure" class="btn btn-gold">Jetzt konfigurieren</a></div>
+<p>Zur Wahl stehen Klassik Weiß matt, MDF Schwarz matt, Eiche Natur geölt, Nussbaum, Schwarze Esche und Beton-Look. Faden gibt es in Schwarz, Weiß und weiteren Farben, in mehreren Stärken.</p>
+
+<h2>Kontakt</h2>
+<p>{{ shop.name }}, {{ shop.strasse }}, {{ shop.ort }}{% if shop.email %}<br><a href="mailto:{{ shop.email }}">{{ shop.email }}</a>{% endif %}</p>
+<div class="cta-row" style="margin-top:2rem"><a href="/configure" class="btn btn-gold">Bild gestalten</a></div>
 </article>
 {% endblock %}
-

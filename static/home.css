@@ -210,7 +210,7 @@ body.v2 .wood-board[data-wood=beton]{background:url(img/holz/beton.jpg) center/c
 .dot{width:34px;height:34px;border-radius:50%;border:0;cursor:pointer;background-size:cover;background-position:center;box-shadow:inset 0 0 0 1px rgba(255,255,255,.15),0 0 0 2px var(--walnut);transition:box-shadow .2s,transform .2s}
 .dot:hover{transform:scale(1.08)}
 .dot.on{box-shadow:inset 0 0 0 1px rgba(255,255,255,.15),0 0 0 2px var(--walnut),0 0 0 4px var(--gold)}
-.wood-dot{background-size:400%}
+.wood-dot{background-size:cover}
 
 /* Faden-Leiste rechts */
 .thread{position:fixed;right:clamp(8px,1.6vw,24px);top:96px;z-index:30;width:24px;pointer-events:none}
@@ -310,3 +310,30 @@ body.v2 .steps-v{max-width:none;margin:3rem 0 0}
 .build-orig{position:absolute}
 .build-orig figcaption{position:absolute;left:50%;bottom:4%;transform:translateX(-50%);margin:0;padding:.15rem .6rem;border-radius:999px;background:rgba(23,17,12,.85);border:1px solid var(--line);font-size:.75rem;color:var(--ivory);white-space:nowrap}
 @media(max-width:900px) and (orientation:portrait),(max-width:600px){.build-meter{gap:1.5rem;margin-top:1rem}.build-meter b{font-size:1.6rem}}
+
+/* Unterseiten (Konfigurator, Warenkorb, Gutschein, Rechtstexte) im selben Stil */
+body.v2.page main{max-width:1240px;margin:0 auto;padding:6.5rem max(1.25rem,env(safe-area-inset-left,0px)) 3rem}
+body.v2.page .card{background:var(--walnut-2);border-color:var(--line)}
+body.v2.page h2.title{font-size:clamp(2rem,4.5vw,3rem);text-align:left;margin-bottom:1.5rem}
+body.v2.page .legal{max-width:760px}
+body.v2.page .legal h1{font-size:clamp(2rem,4vw,2.8rem)}
+body.v2.page .legal h2{font-family:var(--serif);font-size:1.4rem;color:var(--gold-hi)}
+body.v2.page .legal p,body.v2.page .legal li{color:#d6cbb9}
+body.v2.page .panel h2{font-size:1.9rem}
+body.v2.page .steps b{border-color:var(--walnut-3)}
+body.v2.page .field label{font-family:var(--sans)}
+body.v2.page .menu summary{color:var(--gold-hi)}
+/* Vertrauensleiste */
+.trust{border-block:1px solid var(--line);background:var(--walnut-2)}
+.trust ul{list-style:none;max-width:1240px;margin:0 auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1.5rem;padding:1.6rem max(1.25rem,calc(50% - 620px))}
+.trust li{display:grid;gap:.2rem;min-width:0}
+.trust b{font-family:var(--serif);font-weight:500;font-size:1.2rem;color:var(--gold-hi)}
+.trust span{color:var(--muted);font-size:.88rem}
+@media(max-width:900px) and (orientation:portrait),(max-width:600px){.trust ul{grid-template-columns:1fr 1fr;gap:1.1rem 1rem;padding-right:2rem}.trust b{font-size:1.05rem}.trust span{font-size:.8rem}}
+/* Echtes Foto */
+.real{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(2rem,6vw,5rem);align-items:center}
+.real-img{margin:0}
+.real-img img{width:100%;display:block;border-radius:4px;box-shadow:0 40px 80px -30px #000}
+.real p:not(.fine){color:#cdbfaa;max-width:48ch;margin-bottom:1rem}
+@media(max-width:900px) and (orientation:portrait),(max-width:600px){.real{grid-template-columns:1fr}}
+@media(max-width:600px){.seg[data-k=fmt]{grid-template-columns:1fr 1fr}}

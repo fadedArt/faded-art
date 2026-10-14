@@ -5,18 +5,15 @@
 <h1>Impressum</h1>
 <p>Angaben gemäß § 5 DDG</p>
 <h2>Anbieter</h2>
-<p><mark>[Vor- und Nachname bzw. Firmenname mit Rechtsform]</mark><br>
-<mark>[Straße und Hausnummer]</mark><br>
-<mark>[PLZ und Ort]</mark><br>Deutschland</p>
+<p>{{ shop.name }}<br>Faded Art<br>{{ shop.strasse }}<br>{{ shop.ort }}<br>Deutschland</p>
 <h2>Kontakt</h2>
-<p>E-Mail: <mark>[E-Mail-Adresse]</mark><br>Telefon: <mark>[Telefonnummer]</mark></p>
+<p>E-Mail: {% if shop.email %}<a href="mailto:{{ shop.email }}">{{ shop.email }}</a>{% else %}<mark>[E-Mail-Adresse]</mark>{% endif %}<br>Telefon: {% if shop.telefon %}{{ shop.telefon }}{% else %}<mark>[Telefonnummer]</mark>{% endif %}</p>
 <h2>Umsatzsteuer</h2>
-<p><mark>[Entweder: Umsatzsteuer-Identifikationsnummer gemäß § 27a UStG: DE…]</mark><br>
-<mark>[Oder: Kleinunternehmer gemäß § 19 UStG, es wird keine Umsatzsteuer ausgewiesen]</mark></p>
+<p>{% if shop.ust == "klein" %}Kleinunternehmer gemäß § 19 UStG. Es wird keine Umsatzsteuer ausgewiesen.{% elif shop.ust %}Umsatzsteuer-Identifikationsnummer gemäß § 27a UStG: {{ shop.ust }}{% else %}<mark>[Kleinunternehmer oder USt-IdNr.]</mark>{% endif %}</p>
 <h2>Verantwortlich für Inhalte nach § 18 Abs. 2 MStV</h2>
-<p><mark>[Name und Anschrift, falls abweichend]</mark></p>
+<p>{{ shop.name }}, {{ shop.strasse }}, {{ shop.ort }}</p>
 <h2>Verbraucherstreitbeilegung</h2>
-<p>Wir sind weder bereit noch verpflichtet, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen. <mark>[Prüfen, ob das für Sie zutrifft]</mark></p>
+<p>Wir sind weder bereit noch verpflichtet, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen.</p>
 </article>
 {% endblock %}
 

@@ -458,6 +458,26 @@ def _start_prebuild():
     if not _prebuild_started:
         _prebuild_started.append(1)
         threading.Thread(target=_prebuild, daemon=True).start()
+        threading.Thread(target=_cleanup_loop, daemon=True).start()
+
+UPLOAD_KEEP_DAYS = int(os.environ.get("UPLOAD_LOESCHEN_TAGE", "30"))   # nicht bestellte Uploads so lange behalten (steht so in der Datenschutzerklärung)
+
+def _cleanup_loop():
+    """Einmal täglich: Uploads und Berechnungen ohne Bezahlung nach UPLOAD_KEEP_DAYS Tagen löschen. Bezahlte Bestellungen bleiben."""
+    while True:
+        try:
+            cutoff = time.time() - UPLOAD_KEEP_DAYS * 86400
+            for ref in os.listdir(DATA_DIR):
+                if not REF_RE.match(ref):
+                    continue
+                m = load(ref)
+                if m is None or m.get("paid"):
+                    continue
+                if m.get("created", time.time()) < cutoff:
+                    shutil.rmtree(odir(ref), ignore_errors=True)
+        except Exception as e:                                  # nie den Server stören
+            app.logger.warning("Aufräumen fehlgeschlagen: %s", e)
+        time.sleep(86400)
 
 def warm_up_once():
     pass                                     # passiert jetzt direkt beim Serverstart (_prebuild), nicht erst beim Besuch
@@ -1652,9 +1672,19 @@ def asset_v(name):
     except OSError:
         return 0
 
+SHOP = {   # Anbieterdaten für Impressum, AGB, Datenschutz. Fehlende Angaben per Umgebungsvariable bei Render nachtragen.
+    "name": os.environ.get("SHOP_NAME", "Tobias Appelt"),
+    "strasse": os.environ.get("SHOP_STRASSE", "Olympiastraße 12b"),
+    "ort": os.environ.get("SHOP_ORT", "85622 Feldkirchen"),
+    "email": os.environ.get("SHOP_EMAIL", ""),
+    "telefon": os.environ.get("SHOP_TELEFON", ""),
+    "ust": os.environ.get("SHOP_UST", ""),          # "klein" = Kleinunternehmer nach § 19 UStG, sonst die USt-IdNr. (DE...)
+    "lieferzeit": os.environ.get("SHOP_LIEFERZEIT", ""),   # z. B. "10 bis 15"
+}
+
 @app.context_processor
 def inject_cart():
-    return {"cart_count": len(session.get("cart", [])), "asset_v": asset_v}
+    return {"cart_count": len(session.get("cart", [])), "asset_v": asset_v, "shop": SHOP}
 
 @app.errorhandler(413)
 def too_big(e):

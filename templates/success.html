@@ -2,8 +2,8 @@
 {% block title %}Vielen Dank – Faded Art{% endblock %}
 {% block content %}
 <section class="hero">
-  <h1 class="gold-text">Vielen Dank für Ihre Bestellung</h1>
-  {% if request.args.get('gutschein') %}<p>Ihre Bestellung ist mit dem Gutschein bezahlt.</p>{% else %}<p>Ihre Zahlung wird bestätigt. Sie erhalten in Kürze eine E-Mail von Stripe mit dem Beleg. Wir melden uns, sobald Ihr Werk in Fertigung geht.</p>{% endif %}
+  <h1 class="gold-text">Vielen Dank für deine Bestellung</h1>
+  {% if request.args.get('gutschein') %}<p>Deine Bestellung ist mit dem Gutschein bezahlt.</p>{% else %}<p>Deine Zahlung wird bestätigt. Du bekommst gleich eine E-Mail von Stripe mit dem Beleg. Wir melden uns, sobald dein Bild in Fertigung geht.</p>{% endif %}
   <a href="/" class="btn btn-gold">Zur Startseite</a>
 </section>
 {% endblock %}

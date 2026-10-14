@@ -6,14 +6,18 @@
 <meta name="theme-color" content="#0a0908">
 <link rel="preload" href="{{ url_for('static', filename='fonts/cinzel.woff') }}" as="font" type="font/woff" crossorigin>
 <title>{% block title %}Faded Art – Ihr Foto als String Art{% endblock %}</title>
-<meta name="description" content="{% block desc %}Verwandeln Sie Ihr Foto in String Art aus einem einzigen Faden. Konfigurieren, Vorschau ansehen und sicher bestellen.{% endblock %}">
+<meta name="description" content="{% block desc %}Dein Foto als Fadenbild: hochladen, drei Varianten ansehen, Holz und Größe wählen und sicher bestellen. Faded Art aus Feldkirchen bei München.{% endblock %}">
 <meta property="og:title" content="Faded Art">
-<meta property="og:description" content="Ihr Foto als String Art aus einem einzigen Faden.">
+<meta property="og:description" content="Dein Foto als Fadenbild aus Schwarz und Weiß, berechnet und gespannt in Feldkirchen bei München.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="{{ url_for('static', filename='img/teilen.jpg', _external=True) }}">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="{{ url_for('static', filename='img/siegel.svg') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=asset_v('style.css')) }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='home.css', v=asset_v('home.css')) }}">
 {% block head %}{% endblock %}
 </head>
-<body class="{% block body_class %}{% endblock %}">
+<body class="v2 {% block body_class %}page{% endblock %}">
 <div class="wrap">
 <header class="top" id="top">
   <a href="/" class="logo gold-text">FADED ART</a>

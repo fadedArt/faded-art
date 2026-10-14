@@ -4,7 +4,7 @@
 @font-face{font-family:Cormorant;src:url(fonts/cormorant.woff) format("woff");font-weight:300 700;font-display:swap}
 @font-face{font-family:Cormorant;src:url(fonts/cormorant-italic.woff) format("woff");font-weight:300 700;font-style:italic;font-display:swap}
 @font-face{font-family:"Plus Jakarta Sans";src:url(fonts/plus-jakarta-sans.woff) format("woff");font-weight:200 800;font-display:swap}
-:root{--bg:#0b0b0b;--card:#141414;--gold:#d4af37;--gold-t:#e6ca65;--grad:linear-gradient(135deg,#d4af37,#f3e5ab 50%,#aa771c);--text:#f5f5f5;--muted:#a8a8a8;--line:rgba(212,175,55,.3)}
+:root{--bg:#17110c;--card:#1f1711;--gold:#c9a24a;--gold-t:#e8c977;--grad:linear-gradient(180deg,#e8c977,#c9a24a);--text:#efe7d8;--muted:#a8998a;--line:rgba(201,162,74,.25)}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);font:400 1rem/1.6 "Plus Jakarta Sans",system-ui,sans-serif;overflow-x:hidden}
 h1,h2,h3,.logo,.btn{font-family:Cinzel,Georgia,serif}
@@ -42,7 +42,7 @@ footer a{margin:0 .6rem;text-decoration:none}
 .panel h2{font-size:1.4rem;margin-bottom:1.5rem}
 .field{margin-bottom:1.25rem}
 .field label{display:block;margin-bottom:.4rem;font-size:.85rem;color:var(--gold-t);font-weight:500}
-input,select{width:100%;padding:.85rem;background:#1f1f1f;color:#fff;border:1px solid var(--line);border-radius:8px;font:inherit}
+input,select{width:100%;padding:.85rem;background:#2a2017;color:#fff;border:1px solid var(--line);border-radius:8px;font:inherit}
 input[type=range]{padding:0;accent-color:var(--gold)}
 input[type=checkbox]{width:auto;margin-right:.5rem}
 .row{display:flex;gap:1rem}.row>*{flex:1}
