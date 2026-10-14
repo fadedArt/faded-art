@@ -1096,17 +1096,19 @@ def admin():
     rows = []
     for ref in os.listdir(DATA_DIR):
         m = load(ref)
-        if m and m.get("status") == "done":
+        if m and m.get("status") == "done" and (m.get("paid") or m.get("variant") or request.args.get("alle")):
             rows.append(dict(ref=ref, paid=m.get("paid", False), email=m.get("email") or "", title=item_title(m),
                              cents=price_cents(m), created=time.strftime("%d.%m.%Y %H:%M", time.localtime(m.get("created", 0)))))
     rows.sort(key=lambda r: (not r["paid"], r["created"]), reverse=False)
     return render_template_string("""<!doctype html><meta name=viewport content="width=device-width,initial-scale=1"><title>Bestellungen</title>
-<body style="font-family:system-ui;background:#111;color:#eee;padding:1rem"><h1>Bestellungen</h1><p><a style="color:#e6ca65" href="/admin/bewertungen?key={{ key }}">Bewertungen verwalten</a> · <a style="color:#e6ca65" href="/admin/creator?key={{ key }}">Creator-Codes</a></p>
+<body style="font-family:system-ui;background:#111;color:#eee;padding:1rem"><h1>Bestellungen</h1><p><a style="color:#e6ca65" href="/admin/bewertungen?key={{ key|urlencode }}">Bewertungen verwalten</a> · <a style="color:#e6ca65" href="/admin/creator?key={{ key|urlencode }}">Creator-Codes</a></p>
 {% for r in rows %}<p style="border-bottom:1px solid #333;padding:.6rem 0"><b>{{ "BEZAHLT" if r.paid else "nicht bezahlt" }}</b> {{ r.created }}<br>
 {{ r.title }}, {{ (r.cents / 100)|round(2) }} €<br>{{ r.email }}<br>
-<a style="color:#e6ca65" href="/admin/{{ r.ref }}/anleitung.pdf?key={{ key }}">Anleitung (PDF)</a> |
-<a style="color:#e6ca65" href="/admin/{{ r.ref }}/anleitung.txt?key={{ key }}">als Text</a> |
-<a style="color:#e6ca65" href="/admin/{{ r.ref }}/final.png?key={{ key }}">Bild in voller Größe</a></p>{% else %}<p>Noch keine Bestellungen.</p>{% endfor %}""",
+<a style="color:#e6ca65" href="/admin/{{ r.ref }}/anleitung.pdf?key={{ key|urlencode }}">Anleitung (PDF)</a> |
+<a style="color:#e6ca65" href="/admin/{{ r.ref }}/anleitung.txt?key={{ key|urlencode }}">als Text</a> |
+<a style="color:#e6ca65" href="/admin/{{ r.ref }}/pinfolge.txt?key={{ key|urlencode }}">Pinfolge</a> |
+<a style="color:#e6ca65" href="/admin/{{ r.ref }}/final.png?key={{ key|urlencode }}">Bild in voller Größe</a></p>{% else %}<p>Noch keine Bestellungen.</p>{% endfor %}
+<p style="color:#999;margin-top:1.5rem">Gezeigt: bezahlte Bestellungen und Bilder im Warenkorb. <a style="color:#e6ca65" href="?key={{ key|urlencode }}&alle=1">Alle Berechnungen zeigen</a></p>""",
         rows=rows, key=request.args.get("key"))
 
 # ---------- Bewertungen: nur echte Käufer (Link mit Bestellnummer), Freigabe unter /admin/bewertungen?key=ADMIN_KEY ----------
@@ -1262,9 +1264,16 @@ def stripe_check():
 
 @app.get("/admin/<ref>/<name>")
 def admin_file(ref, name):
-    if not admin_ok() or name not in ("anleitung.pdf", "anleitung.txt", "final.png", "pinfolge.txt") or not load(ref) or not os.path.exists(os.path.join(odir(ref), name)):
+    m = load(ref) if admin_ok() else None
+    if not m or name not in ("anleitung.pdf", "anleitung.txt", "final.png", "pinfolge.txt"):
         abort(404)
-    return send_file(os.path.join(odir(ref), name), as_attachment=(name != "final.png"), max_age=0)
+    path = os.path.join(odir(ref), name)
+    if not os.path.exists(path):             # noch keine Variante gewählt (nicht im Warenkorb): Datei der gewählten bzw. ersten Variante
+        stem, ext = name.rsplit(".", 1)
+        path = os.path.join(odir(ref), f"{stem}_{m.get('variant') or 'a'}.{ext}")
+        if not os.path.exists(path):
+            return f"Datei fehlt: Für diese Berechnung wurde {name} nicht erzeugt (ältere Berechnung oder abgebrochen).", 404
+    return send_file(path, as_attachment=False, max_age=0)
 
 
 # ---------- Gutscheine: Seiten und PDF ----------
