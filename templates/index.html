@@ -36,10 +36,6 @@
       <div class="build-art">
         <canvas id="buildCanvas" width="1000" height="1000" role="img" aria-label="Das Fadenbild der Katze, so weit gespannt wie der Regler steht"></canvas>
       </div>
-      <div class="build-meter">
-        <p><b id="bN">0</b><span>Fäden</span></p>
-        <p><b id="bM">0</b><span>Meter Faden</span></p>
-      </div>
     </div>
     <div class="scrub-wrap">
       <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="Gespannte Fäden" aria-valuemin="0" aria-valuemax="6110" aria-valuenow="0">
@@ -55,6 +51,10 @@
         <li><h3>Dann Schatten und Kontur.</h3><p>Der schwarze Faden zeichnet die Schatten, der weiße das Licht. Die Form tritt hervor.</p></li>
         <li><h3>Zum Schluss der Blick.</h3><p>Die letzten Fäden schärfen Augen und Fell. So viel Arbeit steckt in jedem Bild, das wir für Sie spannen.</p></li>
       </ol>
+      <div class="build-meter">
+        <p><b id="bN">0</b><span>Fäden</span></p>
+        <p><b id="bM">0</b><span>Meter Faden</span></p>
+      </div>
       <div class="player" role="group" aria-label="Spannen steuern">
         <button type="button" id="pBack" aria-label="Rückwärts abspielen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 6 3 12l8 6zM20 6l-8 6 8 6z"/></svg></button>
         <button type="button" id="pPlay" class="main" aria-label="Pause"><svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg><svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
