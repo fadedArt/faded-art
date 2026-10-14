@@ -10,10 +10,7 @@
 
 <section class="h-hero bleed" data-label="Start">
   <div class="h-hero-art">
-    <canvas id="heroCanvas" width="900" height="900" role="img" aria-label="Das Faded-Art-Siegel spannt sich Faden für Faden: eine goldene Kardioide im Ring"></canvas>
-    <svg class="seal-ring" viewBox="0 0 900 900" aria-hidden="true"><defs><path id="sealTop" d="M 85 450 A 365 365 0 0 1 815 450"/><path id="sealBot" d="M 75 450 A 375 375 0 0 0 825 450"/></defs>
-      <text><textPath href="#sealTop" startOffset="50%" text-anchor="middle">FADED ART</textPath></text>
-      <text class="sub"><textPath href="#sealBot" startOffset="50%" text-anchor="middle">· FADENKUNST ·</textPath></text></svg>
+    <canvas id="heroCanvas" width="900" height="900" role="img" aria-label="Das Faded-Art-Logo spannt sich Faden für Faden: ein goldener Fadenring, der zu einer Seite verblasst"></canvas>
     <div class="h-count" aria-hidden="true"><b id="heroN">0</b> Fäden</div>
   </div>
   <div class="h-hero-copy">
@@ -152,42 +149,47 @@
   }), { threshold: .6 });
   $$('.stat b').forEach(b => cio.observe(b));
 
-  /* 3. Hero: das Faded-Art-Siegel spannt sich live (Kardioide: Nagel i -> Nagel 2i) */
-  const cv = $('#heroCanvas'), cnt = $('#heroN'), seal = $('.seal-ring');
+  /* 3. Hero: Logo "Faded" spannt sich live. Fadenring, der zur einen Seite verblasst; Nagel i -> Nagel i+75 */
+  const cv = $('#heroCanvas'), cnt = $('#heroN');
   (() => {
-    const ctx = cv.getContext('2d'), S = cv.width, c = S / 2, R = S * .355, n = 360;
-    const ang = i => Math.PI / 2 + 2 * Math.PI * i / n;                       /* Nagel 0 unten: Kardioide steht als Herz */
+    const ctx = cv.getContext('2d'), S = cv.width, c = S / 2, R = S * .40, n = 240;
+    const ang = i => Math.PI / 2 + 2 * Math.PI * (i % n) / n;
     const P = Array.from({ length: n }, (_, i) => [c + R * Math.cos(ang(i)), c + R * Math.sin(ang(i))]);
     const L = [];
-    for (let i = 0; i < n; i++) L.push([i, (2 * i) % n, 0]);                   /* Lage 1: Kardioide in Gold */
-    for (let i = 0; i < n; i += 2) L.push([i, (3 * i) % n, 1]);                /* Lage 2: Nephroide, feines Elfenbein */
-    const col = ['rgba(222,184,82,.55)', 'rgba(242,236,222,.16)'];
+    for (let i = 0; i < n; i++) {                                                /* Lage 1: Gold, verblasst */
+      const f = Math.pow(Math.cos(2 * Math.PI * i / n + Math.PI) * .5 + .5, 1.6);
+      L.push([i, (i + 75) % n, 'rgba(222,184,82,' + (.05 + .5 * f).toFixed(3) + ')', 1.3]);
+    }
+    for (let i = 0; i < n; i++) {                                                /* Lage 2: Elfenbein-Kante */
+      const f = Math.pow(Math.cos(2 * Math.PI * i / n + Math.PI) * .5 + .5, 1.6);
+      if (f > .25) L.push([i, (i + 100) % n, 'rgba(242,236,222,' + (.18 * f).toFixed(3) + ')', 1.1]);
+    }
     const bg = () => {
-      const g = ctx.createRadialGradient(c, c * .9, 0, c, c, c);
+      const g = ctx.createRadialGradient(c, c * .92, 0, c, c, c);
       g.addColorStop(0, '#1a1712'); g.addColorStop(1, '#090807');
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c, c, c, 0, 7); ctx.fill();
-      ctx.strokeStyle = 'rgba(195,154,62,.55)'; ctx.lineWidth = 2;               /* Siegelringe */
-      [c - 6, c * .81].forEach(r => { ctx.beginPath(); ctx.arc(c, c, r, 0, 7); ctx.stroke(); });
-      ctx.strokeStyle = 'rgba(195,154,62,.25)'; ctx.lineWidth = 1;
-      [c - 14, c * .79].forEach(r => { ctx.beginPath(); ctx.arc(c, c, r, 0, 7); ctx.stroke(); });
+      ctx.strokeStyle = 'rgba(195,154,62,.6)'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(c, c, R + 20, 0, 7); ctx.stroke();
+      ctx.strokeStyle = 'rgba(195,154,62,.3)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(c, c, R + 31, 0, 7); ctx.stroke();
     };
-    const pins = (k = n) => { for (let i = 0; i < k; i++) { const [x, y] = P[i];
-      ctx.fillStyle = '#7a5f22'; ctx.beginPath(); ctx.arc(x, y, 2.6, 0, 7); ctx.fill();
-      ctx.fillStyle = '#f3dd96'; ctx.beginPath(); ctx.arc(x - .7, y - .7, 1.1, 0, 7); ctx.fill(); } };
-    let i = 0;
-    const step = k => { ctx.globalCompositeOperation = 'lighter'; ctx.lineWidth = 1.2;
-      for (let e = Math.min(L.length, i + k); i < e; i++) { const [a, b, f] = L[i];
-        ctx.strokeStyle = col[f]; ctx.beginPath(); ctx.moveTo(P[a][0], P[a][1]); ctx.lineTo(P[b][0], P[b][1]); ctx.stroke(); }
+    const pin = i => { const [x, y] = P[i];
+      ctx.fillStyle = '#8a6b26'; ctx.beginPath(); ctx.arc(x, y, 3, 0, 7); ctx.fill();
+      ctx.fillStyle = '#f3dd96'; ctx.beginPath(); ctx.arc(x - .8, y - .8, 1.2, 0, 7); ctx.fill(); };
+    let i = 0, pd = 0;
+    const pinsTo = k => { for (; pd < Math.min(n, k); pd++) pin(pd); };
+    const step = k => { ctx.globalCompositeOperation = 'lighter';
+      for (let e = Math.min(L.length, i + k); i < e; i++) { const [a, b, col, w] = L[i];
+        ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(P[a][0], P[a][1]); ctx.lineTo(P[b][0], P[b][1]); ctx.stroke(); }
       ctx.globalCompositeOperation = 'source-over'; };
-    const done = () => { pins(); cnt.textContent = L.length.toLocaleString('de-DE'); seal.classList.add('on'); };
+    const done = () => { for (let k = 0; k < n; k++) pin(k); cnt.textContent = L.length.toLocaleString('de-DE'); };
     bg();
-    if (reduce) { step(L.length); return done(); }
-    const t0 = performance.now(), PIN = 1200, DUR = 5200;                      /* erst Nägel setzen, dann spannen */
+    if (reduce) { pinsTo(n); step(L.length); return done(); }
+    const t0 = performance.now(), PIN = 1800, DUR = 15000;                     /* erst alle Nägel, dann langsam spannen */
     const frame = t => {
       const e = t - t0;
-      if (e < PIN) { pins(Math.round(n * e / PIN)); return requestAnimationFrame(frame); }
-      const p = Math.min(1, (e - PIN) / DUR), want = Math.round(L.length * (p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2));
-      step(want - i); cnt.textContent = i.toLocaleString('de-DE');
+      if (e < PIN) { pinsTo(Math.ceil(n * e / PIN)); return requestAnimationFrame(frame); }
+      pinsTo(n);                                                                 /* alle Nägel stehen, bevor der erste Faden kommt */
+      const p = Math.min(1, (e - PIN) / DUR);
+      step(Math.round(L.length * p) - i); cnt.textContent = i.toLocaleString('de-DE');
       if (p < 1) requestAnimationFrame(frame); else done();
     };
     requestAnimationFrame(frame);
