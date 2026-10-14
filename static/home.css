@@ -41,7 +41,7 @@ body.v2 .cta-row{display:flex;gap:1rem;flex-wrap:wrap;align-items:center}
 .hero{min-height:100svh;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);align-items:center;gap:clamp(2rem,5vw,5rem);
   padding:6.5rem max(1.25rem,calc(50% - 620px)) 3rem;
   background:radial-gradient(55% 60% at 30% 50%,#2a1f14 0%,transparent 70%),var(--walnut)}
-.hero-art{position:relative;width:min(100%,660px);aspect-ratio:1;justify-self:center}
+.hero-art{position:relative;width:min(100%,660px,78svh);aspect-ratio:1;justify-self:center}
 .hero-art canvas{width:100%;height:100%;display:block}
 .hero-count{position:absolute;right:6%;bottom:6%;font-size:.85rem;color:var(--muted)}
 .hero-count b{color:var(--gold-hi);font-weight:600;font-variant-numeric:tabular-nums}
@@ -49,24 +49,36 @@ body.v2 .cta-row{display:flex;gap:1rem;flex-wrap:wrap;align-items:center}
 .hero h1{font-size:clamp(3rem,7.4vw,6.4rem);line-height:.98;margin:0 0 1.75rem;font-weight:400}
 .hero .lead{margin-bottom:2.25rem}
 
-/* 2. Wie es entsteht */
-.build{height:520vh;position:relative;background:linear-gradient(var(--walnut),#120d09 15%,#120d09 85%,var(--walnut))}
-.build-stick{position:sticky;top:0;height:100svh;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);align-items:center;gap:clamp(2rem,5vw,5rem);padding:5rem max(1.25rem,calc(50% - 620px)) 2rem}
-.build-stage{position:relative;width:min(100%,74svh,640px);aspect-ratio:1;justify-self:center}
+/* 2. Wie es entsteht: Regler zum Ziehen */
+.build{background:linear-gradient(var(--walnut),#120d09 20%,#120d09 80%,var(--walnut));padding:clamp(4.5rem,9vw,7rem) max(1.25rem,calc(50% - 620px))}
+.build-in{display:grid;grid-template-columns:minmax(0,1.2fr) auto minmax(0,1fr);align-items:center;gap:clamp(1.25rem,3vw,2.75rem)}
+.build-stage{position:relative;width:min(100%,78svh,620px);aspect-ratio:1;justify-self:center}
 .build-art,.build-art canvas{width:100%;height:100%;display:block;border-radius:50%}
 .build-art{box-shadow:0 0 0 1px rgba(201,162,74,.45),0 40px 90px -30px #000}
 .build-orig{position:absolute;left:-4%;top:-4%;width:30%;margin:0;z-index:2}
 .build-orig img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:50%;display:block;box-shadow:0 0 0 3px var(--walnut),0 0 0 4px var(--gold),0 14px 30px -10px #000}
 .build-orig figcaption{text-align:center;font-size:.82rem;color:var(--muted);margin-top:.5rem}
-.build-meter{position:absolute;right:-2%;bottom:-2%;display:grid;gap:.15rem;text-align:right;background:rgba(23,17,12,.82);border:1px solid var(--line);border-radius:14px;padding:.75rem 1rem;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.build-meter{position:absolute;right:-2%;bottom:-2%;display:grid;gap:.15rem;text-align:right;background:rgba(23,17,12,.85);border:1px solid var(--line);border-radius:14px;padding:.7rem 1rem;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
 .build-meter p{display:flex;align-items:baseline;justify-content:flex-end;gap:.5rem;line-height:1.2}
 .build-meter b{font-family:var(--serif);font-weight:500;font-size:1.7rem;color:var(--gold-hi);font-variant-numeric:tabular-nums;min-width:3.6ch}
 .build-meter span{font-size:.8rem;color:var(--muted)}
-.build-steps{list-style:none;position:relative;min-height:16rem}
-.build-steps li{position:absolute;inset:0 auto auto 0;opacity:0;transform:translateY(24px);transition:opacity .7s var(--ease),transform .9s var(--ease);pointer-events:none}
+.build-steps{list-style:none;display:grid;margin:1.25rem 0 0}
+.build-steps li{grid-area:1/1;opacity:0;transform:translateY(10px);transition:opacity .45s var(--ease),transform .55s var(--ease)}
 .build-steps li.on{opacity:1;transform:none}
-.build-steps h2{font-size:clamp(2rem,4.4vw,3.4rem);line-height:1.05;margin-bottom:1rem}
+.build-steps h3{font-size:clamp(1.5rem,2.6vw,2rem);line-height:1.1;margin-bottom:.6rem;color:var(--gold-hi)}
 .build-steps p{color:#cdbfaa;max-width:40ch}
+body.v2 .linkbtn{color:var(--gold-hi)}
+/* Regler: senkrechtes Lineal mit Raster, Knopf zum Ziehen */
+.scrub-wrap{height:min(78svh,620px);display:flex;align-items:stretch;padding:0 2.6rem 0 .5rem}
+.scrub{position:relative;width:44px;cursor:grab;touch-action:none;outline:none}
+.scrub.drag{cursor:grabbing}
+.scrub::before{content:"";position:absolute;left:21px;top:0;bottom:0;width:2px;background:rgba(239,231,216,.18);border-radius:2px}
+.scrub-fill{position:absolute;left:21px;top:0;width:2px;height:0;background:linear-gradient(var(--gold-hi),var(--gold));box-shadow:0 0 8px rgba(232,201,119,.6)}
+.scrub-ticks span{position:absolute;top:var(--p);left:14px;width:8px;height:1px;background:rgba(239,231,216,.35)}
+.scrub-ticks span.big{width:14px;left:8px;background:rgba(239,231,216,.6)}
+.scrub-ticks em{position:absolute;left:30px;top:0;transform:translateY(-50%);font-style:normal;font-size:.72rem;color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap}
+.scrub-knob{position:absolute;left:22px;top:0;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#f6e3a6,var(--gold) 60%,#7a5c1f);box-shadow:0 0 0 4px rgba(201,162,74,.18),0 4px 12px rgba(0,0,0,.6);transition:box-shadow .2s}
+.scrub:focus-visible .scrub-knob,.scrub.drag .scrub-knob{box-shadow:0 0 0 7px rgba(232,201,119,.32),0 4px 12px rgba(0,0,0,.6)}
 
 /* 3. Nah und fern */
 .nf-sec{text-align:center}
@@ -161,6 +173,45 @@ body.v2 .wood-board[data-wood=beton]{background:url(img/holz/beton.jpg) center/c
 .final .lead{margin:0 auto 2.25rem}
 .final .cta-row{justify-content:center}
 
+/* Hero-Schriftzug auf dem Logo */
+.hero-ring{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:0;transition:opacity 1.6s var(--ease)}
+.hero-ring.on{opacity:1}
+.hero-ring text{font-family:Cinzel,Georgia,serif;font-weight:600;font-size:44px;letter-spacing:.5em;fill:var(--gold-hi)}
+
+/* 7. Raum-Planer */
+.room{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:clamp(1.5rem,4vw,3.5rem);align-items:start;margin-top:2rem}
+.room-view{display:grid;gap:1rem}
+.room-svg{width:100%;display:block;border-radius:6px;overflow:hidden;--wall:#ece6dc;--furn:#7d7a74;--furn-dark:#666;--furn-light:#999}
+.room-wall{fill:var(--wall);transition:fill .4s}
+.room-floor{fill:#9c8467}.room-skirt{fill:#e9e3d8}
+.furn .f-main{fill:var(--furn)}.furn .f-dark{fill:var(--furn-dark)}.furn .f-leg{fill:#2b241e}
+.furn .f-duvet{fill:#efebe4}.furn .f-pillow{fill:#e2dccf}.furn .f-lamp{fill:#d9c9a3}
+.furn rect{transition:fill .4s}
+.room-board{stroke:rgba(0,0,0,.45);stroke-width:.5}
+.room-dim,.room-ref{font:500 4.4px var(--sans);fill:rgba(40,32,24,.75);text-anchor:middle}
+.room-ref{font-size:3.6px;fill:rgba(40,32,24,.6)}
+.dark-wall .room-dim{fill:rgba(255,248,236,.8)}
+.room-price{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;padding:1rem 1.25rem;background:var(--walnut-2);border:1px solid var(--line);border-radius:12px}
+.room-price p{display:grid;gap:.1rem;min-width:0}
+.room-price span{color:var(--muted);font-size:.9rem}
+.room-price b{font-family:var(--serif);font-weight:500;font-size:1.9rem;color:var(--gold-hi);line-height:1.1}
+.room-ctl{display:grid;gap:1.15rem}
+.room-ctl fieldset{border:0;padding:0;margin:0;min-width:0}
+.room-ctl legend{font-size:.85rem;color:var(--muted);margin-bottom:.45rem;padding:0}
+.seg{display:grid;grid-template-columns:repeat(2,1fr);gap:4px;padding:4px;background:var(--walnut-2);border-radius:12px}
+.seg4{grid-template-columns:repeat(4,1fr)}
+.seg button{font:inherit;font-size:.86rem;color:var(--ivory);background:transparent;border:0;border-radius:9px;padding:.6rem .3rem;cursor:pointer;line-height:1.2;min-width:0}
+.seg button:hover{background:rgba(239,231,216,.06)}
+.seg button.on{background:var(--walnut-3);box-shadow:inset 0 0 0 1px var(--gold);color:var(--gold-hi)}
+.sizes-seg button{display:grid;gap:.1rem}
+.sizes-seg b{font-family:var(--serif);font-weight:500;font-size:1.25rem}
+.sizes-seg small{font-size:.72rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.dots{display:flex;flex-wrap:wrap;gap:.55rem}
+.dot{width:34px;height:34px;border-radius:50%;border:0;cursor:pointer;background-size:cover;background-position:center;box-shadow:inset 0 0 0 1px rgba(255,255,255,.15),0 0 0 2px var(--walnut);transition:box-shadow .2s,transform .2s}
+.dot:hover{transform:scale(1.08)}
+.dot.on{box-shadow:inset 0 0 0 1px rgba(255,255,255,.15),0 0 0 2px var(--walnut),0 0 0 4px var(--gold)}
+.wood-dot{background-size:400%}
+
 /* Faden-Leiste rechts */
 .thread{position:fixed;right:clamp(8px,1.6vw,24px);top:96px;z-index:30;width:24px;pointer-events:none}
 .t-line{position:relative;width:2px;margin-left:11px;background:rgba(239,231,216,.2);border-radius:2px}
@@ -175,20 +226,26 @@ body.v2 .wood-board[data-wood=beton]{background:url(img/holz/beton.jpg) center/c
 .thread-pins li.cur span,.thread-pins a:hover span,.thread-pins a:focus-visible span{opacity:1;transform:none}
 
 /* Mobil */
-@media(max-width:900px){
+@media(max-width:900px) and (orientation:portrait),(max-width:600px){
   body.v2 .logo{font-size:1rem;letter-spacing:.16em}
   .hero{grid-template-columns:1fr;padding-top:5.5rem;padding-right:2rem;gap:1rem}
   .hero-art{width:min(86vw,440px)}
   .hero h1{font-size:clamp(2.7rem,12vw,3.6rem)}
-  .build{height:560vh}
-  .build-stick{grid-template-columns:1fr;grid-template-rows:auto 1fr;align-content:start;gap:1.4rem;padding:4.6rem 2rem 1rem 1.25rem}
-  .build-stage{width:min(100%,54svh)}
+  .build{padding-right:2rem}
+  .build-in{grid-template-columns:1fr;gap:1.25rem}
+  .build-stage{width:100%}
   .build-orig{width:28%;left:-2%;top:-2%}
   .build-meter{padding:.45rem .7rem;right:-1%}
   .build-meter b{font-size:1.25rem}
-  .build-steps{min-height:11rem}
-  .build-steps h2{font-size:1.75rem;margin-bottom:.5rem}
-  .build-steps p{font-size:.95rem}
+  .scrub-wrap{height:auto;padding:.75rem .5rem 1.6rem}
+  .scrub{width:100%;height:44px}
+  .scrub::before{left:0;right:0;top:21px;bottom:auto;width:auto;height:2px}
+  .scrub-fill{top:21px;left:0;height:2px;width:0}
+  .scrub-ticks span{left:var(--p);top:14px;width:1px;height:8px}
+  .scrub-ticks span.big{top:8px;left:var(--p);width:1px;height:14px}
+  .scrub-ticks em{left:0;top:22px;transform:translateX(-50%)}
+  .scrub-knob{top:22px;left:0}
+  .room{grid-template-columns:1fr}
   .sec{padding-right:2rem}
   .bw,.wood,.room,.gift{grid-template-columns:1fr}
   .nf{gap:1rem}
@@ -201,12 +258,8 @@ body.v2 .wood-board[data-wood=beton]{background:url(img/holz/beton.jpg) center/c
   .thread-pins i{width:7px;height:7px}
   .thread-pins span{display:none}
 }
-@media(max-width:520px){.wood-pick{grid-template-columns:1fr}.steps-v{grid-template-columns:1fr}.size-b{grid-template-columns:2.4rem 1fr auto}}
-@media(prefers-reduced-motion:reduce){
-  .build{height:auto}.build-stick{position:relative;height:auto}
-  .build-steps li{position:static;opacity:1;transform:none;margin-bottom:1.5rem}
-  .build-steps li:not(:last-child){display:none}
-}
+@media(max-width:520px) and (orientation:portrait){.wood-pick{grid-template-columns:1fr}.steps-v{grid-template-columns:1fr}.size-b{grid-template-columns:2.4rem 1fr auto}}
+@media(prefers-reduced-motion:reduce){.build-steps li{transition:none}.hero-ring{transition:none}}
 
 /* Altlasten aus style.css (alte Startseite) neutralisieren */
 body.v2 .hero,body.v2 .hero p{text-align:left}
@@ -218,3 +271,12 @@ body.v2 .steps-v li:last-child{border-bottom:0}
 body.v2 .faq summary{font-family:var(--serif)}
 .gift-card img{right:-14%;top:auto;bottom:-30%;width:58%;opacity:.45}
 body.v2 .steps-v{max-width:none;margin:3rem 0 0}
+/* Handy quer: Desktop-Aufbau, aber an die geringe Höhe angepasst */
+@media(max-height:520px) and (orientation:landscape){
+  .hero{min-height:auto;padding-top:4.6rem;padding-bottom:2rem}
+  .hero h1{font-size:clamp(2rem,6vw,2.8rem);margin-bottom:1rem}
+  .hero .lead{font-size:.95rem;margin-bottom:1.25rem}
+  .mark{margin-bottom:.8rem}
+  .build-stage{width:min(100%,80svh)}
+  .scrub-wrap{height:min(80svh,620px)}
+}

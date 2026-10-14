@@ -13,6 +13,8 @@
 <section class="hero" id="start" data-label="Start">
   <div class="hero-art">
     <canvas id="heroCanvas" width="1000" height="1000" role="img" aria-label="Das Faded-Art-Logo spannt sich Faden für Faden: ein goldener Fadenring, der zu einer Seite verblasst"></canvas>
+    <svg class="hero-ring" viewBox="0 0 1000 1000" aria-hidden="true"><defs><path id="ringTop" d="M 50 500 A 450 450 0 0 1 950 500"/></defs>
+      <text><textPath href="#ringTop" startOffset="50%" text-anchor="middle">FADED ART</textPath></text></svg>
     <p class="hero-count" aria-hidden="true"><b id="heroN">0</b> Fäden</p>
   </div>
   <div class="hero-copy">
@@ -23,28 +25,38 @@
   </div>
 </section>
 
-<!-- 2. Der Wow-Moment: Scrollen spannt das Bild -->
+<!-- 2. Der Wow-Moment: am Regler ziehen, das Bild spannt sich -->
 <section class="build" id="entsteht" data-label="Wie es entsteht">
-  <div class="build-stick">
+  <div class="build-in">
     <div class="build-stage">
       <figure class="build-orig">
         <img src="{{ url_for('static', filename='img/foto-katze.jpg') }}" alt="Originalfoto einer Katze" loading="lazy">
         <figcaption>Original</figcaption>
       </figure>
       <div class="build-art">
-        <canvas id="buildCanvas" width="1000" height="1000" role="img" aria-label="Das Fadenbild der Katze entsteht beim Scrollen Faden für Faden"></canvas>
+        <canvas id="buildCanvas" width="1000" height="1000" role="img" aria-label="Das Fadenbild der Katze, so weit gespannt wie der Regler steht"></canvas>
       </div>
       <div class="build-meter">
         <p><b id="bN">0</b><span>Fäden</span></p>
         <p><b id="bM">0</b><span>Meter Faden</span></p>
       </div>
     </div>
-    <ol class="build-steps">
-      <li class="on"><h2>Scrollen Sie langsam.</h2><p>Was Sie gleich sehen, ist die echte Spannreihenfolge unserer Software für dieses Foto, Faden für Faden.</p></li>
-      <li><h2>Erst die großen Flächen.</h2><p>Die ersten Fäden legen hell und dunkel an. Noch ist kaum etwas zu erkennen.</p></li>
-      <li><h2>Dann Schatten und Kontur.</h2><p>Der schwarze Faden zeichnet die Schatten, der weiße das Licht. Die Form tritt hervor.</p></li>
-      <li><h2>Zum Schluss der Blick.</h2><p>Die letzten Fäden schärfen Augen und Fell. So viel Arbeit steckt in jedem Bild, das wir für Sie spannen.</p></li>
-    </ol>
+    <div class="scrub-wrap">
+      <div class="scrub" id="scrub" role="slider" tabindex="0" aria-label="Gespannte Fäden" aria-valuemin="0" aria-valuemax="6110" aria-valuenow="0">
+        <div class="scrub-ticks" aria-hidden="true"></div>
+        <div class="scrub-fill" aria-hidden="true"></div>
+        <div class="scrub-knob" aria-hidden="true"></div>
+      </div>
+    </div>
+    <div class="build-copy">
+      <h2 class="h2">Ziehen Sie am Faden.</h2>
+      <ol class="build-steps">
+        <li class="on"><h3>Erst die großen Flächen.</h3><p>Die ersten Fäden legen hell und dunkel an. Noch ist kaum etwas zu erkennen.</p></li>
+        <li><h3>Dann Schatten und Kontur.</h3><p>Der schwarze Faden zeichnet die Schatten, der weiße das Licht. Die Form tritt hervor.</p></li>
+        <li><h3>Zum Schluss der Blick.</h3><p>Die letzten Fäden schärfen Augen und Fell. So viel Arbeit steckt in jedem Bild, das wir für Sie spannen.</p></li>
+      </ol>
+      <p class="fine">Das ist die echte Spannreihenfolge unserer Software für dieses Foto. Ziehen Sie den Regler oder lassen Sie es <button type="button" class="linkbtn" id="replay">noch einmal abspielen</button>.</p>
+    </div>
   </div>
 </section>
 
@@ -103,35 +115,70 @@
   <p class="fine">Simulationen unserer Software mit 0,2 mm Faden. Vorlagen sind gemeinfreie Gemälde und ein frei lizenziertes Foto.</p>
 </section>
 
-<!-- 7. Größen über dem Sofa, im echten Maßstab -->
+<!-- 7. Raum-Planer: Größe, Format und Holz im echten Maßstab -->
 <section class="sec size-sec" data-label="Größen">
-  <h2 class="h2">Wie groß wirkt es bei Ihnen?</h2>
+  <h2 class="h2">Wie wirkt es bei Ihnen?</h2>
+  <p class="sub">Wählen Sie Raum, Format, Größe und Holz. Wand und Möbel färben Sie wie bei sich zu Hause. Alles ist maßstabsgetreu.</p>
   <div class="room">
-    <svg class="room-svg" viewBox="0 0 300 200" role="img" aria-label="Wand mit Sofa, darüber das Fadenbild in der gewählten Größe, im Maßstab">
-      <defs>
-        <pattern id="woodPat" patternUnits="objectBoundingBox" patternContentUnits="objectBoundingBox" width="1" height="1"><image href="{{ url_for('static', filename='img/holz/nussbaum.jpg') }}" width="1" height="1" preserveAspectRatio="xMidYMid slice"/></pattern>
-        <clipPath id="artClip"><circle id="artCircle" cx="150" cy="85" r="22.5"/></clipPath>
-      </defs>
-      <rect x="0" y="0" width="300" height="200" class="room-wall"/>
-      <rect x="0" y="192" width="300" height="8" class="room-floor"/>
-      <g class="room-sofa">
-        <rect x="40" y="128" width="220" height="40" rx="6"/>
-        <rect x="32" y="140" width="22" height="42" rx="6"/>
-        <rect x="246" y="140" width="22" height="42" rx="6"/>
-        <rect x="46" y="160" width="208" height="24" rx="4"/>
-        <rect x="52" y="184" width="4" height="8"/><rect x="244" y="184" width="4" height="8"/>
-      </g>
-      <rect id="boardRect" x="125" y="60" width="50" height="50" fill="url(#woodPat)" class="room-board"/>
-      <image id="boardArt" href="{{ url_for('static', filename='img/art-katze.jpg') }}" x="127.5" y="62.5" width="45" height="45" clip-path="url(#artClip)" preserveAspectRatio="xMidYMid slice"/>
-      <text x="150" y="119" class="room-dim" id="roomDim">50 × 50 cm</text>
-    </svg>
-    <div class="size-pick" role="radiogroup" aria-label="Größe wählen">
-      {% for k, w, h, cents in sizes %}
-      <button type="button" class="size-b{% if k == 'M' %} on{% endif %}" role="radio" aria-checked="{{ 'true' if k == 'M' else 'false' }}" data-w="{{ w }}"><b>{{ k }}</b><span>{{ w }} × {{ h }} cm</span><em>ab {{ cents|euro }}</em></button>
-      {% endfor %}
+    <div class="room-view">
+      <svg class="room-svg" id="roomSvg" viewBox="0 0 340 270" role="img" aria-label="Wand mit Möbel, darüber das Fadenbild in der gewählten Größe, maßstabsgetreu">
+        <defs>
+          <pattern id="woodPat" patternUnits="userSpaceOnUse" width="120" height="120"><image href="{{ url_for('static', filename='img/holz/nussbaum.jpg') }}" width="120" height="120"/></pattern>
+          <clipPath id="artClip"><circle id="artCircle" cx="170" cy="100" r="22"/></clipPath>
+          <filter id="hang" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="1.6" stdDeviation="1.6" flood-opacity=".35"/></filter>
+        </defs>
+        <rect class="room-wall" id="roomWall" x="0" y="0" width="340" height="270"/>
+        <rect class="room-floor" x="0" y="262" width="340" height="8"/>
+        <rect class="room-skirt" x="0" y="258" width="340" height="4"/>
+        <g id="sofa" class="furn">
+          <g transform="translate(60 177)">
+            <rect class="f-main" x="0" y="0" width="220" height="48" rx="7"/>
+            <rect class="f-dark" x="-8" y="22" width="24" height="56" rx="7"/>
+            <rect class="f-dark" x="204" y="22" width="24" height="56" rx="7"/>
+            <rect class="f-main" x="10" y="44" width="200" height="22" rx="5"/>
+            <rect class="f-dark" x="10" y="62" width="200" height="12" rx="3"/>
+            <rect class="f-leg" x="6" y="78" width="4" height="7"/><rect class="f-leg" x="210" y="78" width="4" height="7"/>
+          </g>
+        </g>
+        <g id="bed" class="furn" hidden>
+          <g transform="translate(75 152)">
+            <rect class="f-dark" x="-58" y="50" width="46" height="58" rx="2"/>
+            <rect class="f-dark" x="202" y="50" width="46" height="58" rx="2"/>
+            <rect class="f-lamp" x="-41" y="36" width="12" height="14" rx="2"/><rect class="f-lamp" x="219" y="36" width="12" height="14" rx="2"/>
+            <rect class="f-main" x="0" y="0" width="190" height="110" rx="5"/>
+            <rect class="f-pillow" x="16" y="48" width="70" height="20" rx="8"/>
+            <rect class="f-pillow" x="104" y="48" width="70" height="20" rx="8"/>
+            <rect class="f-duvet" x="2" y="62" width="186" height="30" rx="6"/>
+            <rect class="f-dark" x="0" y="88" width="190" height="16" rx="2"/>
+            <rect class="f-leg" x="6" y="104" width="5" height="6"/><rect class="f-leg" x="179" y="104" width="5" height="6"/>
+          </g>
+        </g>
+        <g id="board" filter="url(#hang)">
+          <rect id="boardRect" class="room-board" x="145" y="77" width="50" height="50" fill="url(#woodPat)"/>
+          <circle id="boardDisc" class="room-board" cx="170" cy="102" r="25" fill="url(#woodPat)" hidden/>
+          <image id="boardArt" href="{{ url_for('static', filename='img/art-katze.jpg') }}" x="147.5" y="79.5" width="45" height="45" clip-path="url(#artClip)" preserveAspectRatio="xMidYMid slice"/>
+        </g>
+        <text class="room-dim" id="roomDim" x="170" y="140">50 × 50 cm</text>
+        <text class="room-ref" id="roomRef" x="170" y="268">Sofa 2,20 m</text>
+      </svg>
+      <div class="room-price"><p><span id="rpLabel">Quadratisch M, Nussbaum Premium</span><b id="rpPrice">ab 229,00 €</b></p><a href="/configure" class="btn btn-gold">So gestalten</a></div>
+    </div>
+    <div class="room-ctl">
+      <fieldset><legend>Raum</legend><div class="seg" data-k="room">
+        <button type="button" class="on" data-v="wohn" aria-pressed="true">Wohnzimmer</button><button type="button" data-v="schlaf" aria-pressed="false">Schlafzimmer</button></div></fieldset>
+      <fieldset><legend>Format</legend><div class="seg seg4" data-k="fmt">
+        <button type="button" data-v="rund" aria-pressed="false">Rund</button><button type="button" class="on" data-v="quad" aria-pressed="true">Quadratisch</button><button type="button" data-v="hoch" aria-pressed="false">Hochformat</button><button type="button" data-v="quer" aria-pressed="false">Querformat</button></div></fieldset>
+      <fieldset><legend>Größe</legend><div class="seg seg4 sizes-seg" data-k="size">
+        {% for k in ['S','M','L','XL'] %}<button type="button" data-v="{{ k }}" class="{{ 'on' if k == 'M' }}" aria-pressed="{{ 'true' if k == 'M' else 'false' }}"><b>{{ k }}</b><small></small></button>{% endfor %}</div></fieldset>
+      <fieldset><legend>Holz</legend><div class="dots" data-k="wood">
+        {% for k, name, extra in woods %}<button type="button" class="dot wood-dot{{ ' on' if k == 'nussbaum' }}" data-v="{{ k }}" aria-pressed="{{ 'true' if k == 'nussbaum' else 'false' }}" aria-label="{{ name }}" title="{{ name }}" style="background-image:url({{ url_for('static', filename='img/holz/' ~ k ~ '.jpg') }})"></button>{% endfor %}</div></fieldset>
+      <fieldset><legend>Wandfarbe</legend><div class="dots" data-k="wall">
+        {% for v, name in [('#ece6dc','Weiß'),('#cfcac2','Hellgrau'),('#d8c7ad','Beige'),('#a9b29c','Salbei'),('#b8735a','Terrakotta'),('#6e4f3a','Braun'),('#2f4f55','Petrol'),('#3a3836','Anthrazit')] %}<button type="button" class="dot{{ ' on' if loop.first }}" data-v="{{ v }}" aria-pressed="{{ 'true' if loop.first else 'false' }}" aria-label="{{ name }}" title="{{ name }}" style="background:{{ v }}"></button>{% endfor %}</div></fieldset>
+      <fieldset><legend id="furnLegend">Farbe des Sofas</legend><div class="dots" data-k="furn">
+        {% for v, name in [('#7d7a74','Grau'),('#2a2726','Schwarz'),('#e5ded2','Weiß'),('#cdbb9d','Beige'),('#8a5530','Cognac'),('#4f5e4a','Grün'),('#34465e','Blau')] %}<button type="button" class="dot{{ ' on' if loop.first }}" data-v="{{ v }}" aria-pressed="{{ 'true' if loop.first else 'false' }}" aria-label="{{ name }}" title="{{ name }}" style="background:{{ v }}"></button>{% endfor %}</div></fieldset>
     </div>
   </div>
-  <p class="fine">Das Sofa ist 2,20 m breit. Preise gelten für quadratische Bretter mit 240 Nägeln und Klassik-Holz, 360 Nägel kosten {{ (pins_eur * 100)|euro }} mehr. Runde, hohe und breite Formate wählen Sie im Konfigurator.</p>
+  <p class="fine">Preise für 240 Nägel und schwarzen Faden, inklusive gewähltem Holz. 360 Nägel kosten {{ (pins_eur * 100)|euro }} mehr, Schwarz und Weiß {{ (sw_eur * 100)|euro }}. Sofa 2,20 m, Bett 1,80 m breit.</p>
 </section>
 
 <!-- 8. Ablauf -->
@@ -205,7 +252,7 @@
       for (let e = Math.min(L.length, i + k); i < e; i++) { const [a, b, col, w] = L[i];
         ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(P[a][0], P[a][1]); ctx.lineTo(P[b][0], P[b][1]); ctx.stroke(); }
       ctx.globalCompositeOperation = 'source-over'; };
-    const done = () => { for (let k = 0; k < n; k++) pin(k); cnt.textContent = de(L.length); };
+    const done = () => { for (let k = 0; k < n; k++) pin(k); cnt.textContent = de(L.length); $('.hero-ring').classList.add('on'); };
     if (reduce) { pinsTo(n); step(L.length); return done(); }
     const t0 = performance.now(), PIN = 1800, DUR = 15000;
     const frame = t => { const e = t - t0;
@@ -216,36 +263,59 @@
     requestAnimationFrame(frame);
   })();
 
-  /* Wie es entsteht: Scrollfortschritt = Anzahl gespannter Fäden (echte Reihenfolge der Engine) */
-  const build = (() => {
+  /* Wie es entsteht: Reglerstand = Anzahl gespannter Fäden (echte Reihenfolge der Engine) */
+  (() => {
     const sec = $('#entsteht'), cv = $('#buildCanvas'), ctx = cv.getContext('2d'), S = cv.width, c = S / 2, R = c * .985;
-    const nEl = $('#bN'), mEl = $('#bM'), steps = $$('.build-steps li'), orig = $('.build-orig');
-    let D = null, P, cum, drawn = 0, cur;
+    const nEl = $('#bN'), mEl = $('#bM'), steps = $$('.build-steps li');
+    const sc = $('#scrub'), fillEl = $('.scrub-fill'), knob = $('.scrub-knob'), ticks = $('.scrub-ticks');
+    let D = null, P, cum, drawn = 0, cur, N = 1, val = 0, play = null;
     const col = ['rgba(14,12,10,.45)', 'rgba(240,233,220,.42)'];
     const reset = () => { ctx.clearRect(0, 0, S, S); ctx.fillStyle = '#100d0a'; ctx.beginPath(); ctx.arc(c, c, c, 0, 7); ctx.fill();
       ctx.fillStyle = '#b48d3c'; P.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, 2, 0, 7); ctx.fill(); }); drawn = 0; cur = D.s.slice(); };
     const drawTo = k => { if (k < drawn) reset(); ctx.lineWidth = 1.05;
       for (; drawn < k; drawn++) { const f = +D.k[drawn], a = P[cur[f]], b = P[D.p[drawn]];
         ctx.strokeStyle = col[f]; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); cur[f] = D.p[drawn]; } };
-    const update = () => {
-      if (!D) return;
-      const r = sec.getBoundingClientRect(), span = Math.max(1, r.height - innerHeight);
-      const q = reduce ? 1 : Math.min(1, Math.max(0, -r.top / span));
-      const p = Math.min(1, Math.max(0, (q - .08) / .84));                       /* oben kurz das Original, unten kurz das fertige Bild */
-      const k = Math.round(D.p.length * Math.pow(p, 1.25));
-      drawTo(k); nEl.textContent = de(k); mEl.textContent = de(cum[k]);
-      const si = q < .08 ? 0 : p < .33 ? 1 : p < .7 ? 2 : 3;
+    const vert = () => { const r = sc.getBoundingClientRect(); return r.height > r.width; };
+    const set = v => {                                                          /* v: 0..1 */
+      val = Math.min(1, Math.max(0, v));
+      const k = Math.round(N * val);
+      if (D) { drawTo(k); nEl.textContent = de(k); mEl.textContent = de(cum[k]); }
+      const pct = (val * 100).toFixed(2) + '%';
+      if (vert()) { fillEl.style.height = pct; fillEl.style.width = ''; knob.style.top = pct; knob.style.left = ''; }
+      else { fillEl.style.width = pct; fillEl.style.height = ''; knob.style.left = pct; knob.style.top = ''; }
+      sc.setAttribute('aria-valuenow', k); sc.setAttribute('aria-valuetext', de(k) + ' Fäden');
+      const si = val < .3 ? 0 : val < .7 ? 1 : 2;
       steps.forEach((li, j) => li.classList.toggle('on', j === si));
     };
+    const stop = () => { if (play) cancelAnimationFrame(play); play = null; };
+    const run = (from = 0) => { stop(); if (reduce) return set(1);
+      const t0 = performance.now(), dur = 11000 * (1 - from);
+      const f = t => { const p = Math.min(1, (t - t0) / dur), e = from + (1 - from) * (1 - Math.pow(1 - p, 2)); set(e); if (p < 1) play = requestAnimationFrame(f); else play = null; };
+      play = requestAnimationFrame(f); };
+    const fromEvent = e => { const r = sc.getBoundingClientRect();
+      return vert() ? (e.clientY - r.top) / r.height : (e.clientX - r.left) / r.width; };
+    sc.addEventListener('pointerdown', e => { stop(); sc.setPointerCapture(e.pointerId); sc.classList.add('drag'); set(fromEvent(e)); });
+    sc.addEventListener('pointermove', e => { if (sc.hasPointerCapture(e.pointerId)) set(fromEvent(e)); });
+    const end = e => { sc.classList.remove('drag'); };
+    sc.addEventListener('pointerup', end); sc.addEventListener('pointercancel', end);
+    sc.addEventListener('keydown', e => { const st = { ArrowUp: -.02, ArrowLeft: -.02, ArrowDown: .02, ArrowRight: .02, PageUp: -.1, PageDown: .1 }[e.key];
+      if (st !== undefined) { stop(); set(val + st); e.preventDefault(); }
+      if (e.key === 'Home') { stop(); set(0); e.preventDefault(); } if (e.key === 'End') { stop(); set(1); e.preventDefault(); } });
+    $('#replay').addEventListener('click', () => run(0));
+    addEventListener('resize', () => set(val));
     fetch('{{ url_for("static", filename="img/demo-katze.json") }}').then(r => r.json()).then(d => {
-      D = d; const n = d.n;
+      D = d; N = d.p.length; const n = d.n;
+      sc.setAttribute('aria-valuemax', N);
+      for (let t = 0; t <= N; t += 500) ticks.insertAdjacentHTML('beforeend', `<span style="--p:${(100 * t / N).toFixed(2)}%" class="${t % 1000 ? '' : 'big'}">${t % 2000 ? '' : '<em>' + de(t) + '</em>'}</span>`);
       P = Array.from({ length: n }, (_, i) => [c + R * Math.cos(2 * Math.PI * i / n), c + R * Math.sin(2 * Math.PI * i / n)]);
-      cum = new Float32Array(d.p.length + 1); const c2 = d.s.slice();            /* Fadenlänge in Metern (Bild 45 cm Durchmesser) */
+      cum = new Float32Array(N + 1); const c2 = d.s.slice();                      /* Fadenlänge in Metern (Bild 45 cm Durchmesser) */
       d.p.forEach((q, i) => { const f = +d.k[i], dp = Math.abs(q - c2[f]), dd = Math.min(dp, n - dp);
         cum[i + 1] = cum[i] + .45 * Math.sin(Math.PI * dd / n); c2[f] = q; });
-      reset(); update();
+      reset(); set(val);
+      /* einmal von selbst abspielen, sobald der Abschnitt im Bild ist; jeder Griff an den Regler stoppt es */
+      const io = new IntersectionObserver(es => { if (es[0].isIntersecting) { io.disconnect(); run(val); } }, { threshold: .45 });
+      io.observe(sec);
     });
-    return update;
   })();
 
   /* Faden-Leiste */
@@ -267,7 +337,6 @@
     let cur = 0; pinsEl.forEach((li, i) => { const on = p + .002 >= +li.dataset.y; li.classList.toggle('on', on); if (on) cur = i; });
     pinsEl.forEach((li, i) => li.classList.toggle('cur', i === cur));
     document.body.classList.toggle('scrolled', scrollY > 40);
-    build();
   };
   addEventListener('scroll', () => { if (!ticking) { ticking = true; requestAnimationFrame(onScroll); } }, { passive: true });
   addEventListener('resize', () => { layout(); onScroll(); });
@@ -282,18 +351,51 @@
     $('#woodPat image').setAttribute('href', "{{ url_for('static', filename='img/holz/') }}" + b.dataset.wood + '.jpg');
   }));
 
-  /* Größe über dem Sofa (Maßstab: 1 Einheit = 1 cm) */
-  const rect = $('#boardRect'), art = $('#boardArt'), circ = $('#artCircle'), dim = $('#roomDim');
-  const setSize = w => { const bottom = 110, x = 150 - w / 2, y = bottom - w, d = w * .9, o = (w - d) / 2;
-    [['x', x], ['y', y], ['width', w], ['height', w]].forEach(([k, v]) => rect.setAttribute(k, v));
-    [['x', x + o], ['y', y + o], ['width', d], ['height', d]].forEach(([k, v]) => art.setAttribute(k, v));
-    circ.setAttribute('cy', y + w / 2); circ.setAttribute('r', d / 2);
-    dim.setAttribute('y', bottom + 9); dim.textContent = `${w} × ${w} cm`; };
-  $$('.size-b').forEach(b => b.addEventListener('click', () => {
-    $$('.size-b').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', x === b); });
-    setSize(+b.dataset.w);
-  }));
-  setSize(50);
+  /* Raum-Planer (1 Einheit im Bild = 1 cm) */
+  (() => {
+    const CFG = {{ room|tojson }};
+    const st = { room: 'wohn', fmt: 'quad', size: 'M', wood: 'nussbaum', wall: '#ece6dc', furn: '#7d7a74' };
+    const svg = $('#roomSvg'), rect = $('#boardRect'), disc = $('#boardDisc'), art = $('#boardArt'), circ = $('#artCircle');
+    const pat = $('#woodPat'), patImg = $('#woodPat image'), dim = $('#roomDim'), ref = $('#roomRef');
+    const FMT = { rund: 'Rund', quad: 'Quadratisch', hoch: 'Hochformat', quer: 'Querformat' };
+    const euro = c => (c / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+    const shade = (hex, f) => { const n = parseInt(hex.slice(1), 16), ch = s => Math.round(Math.min(255, Math.max(0, ((n >> s) & 255) * f)));
+      return `rgb(${ch(16)},${ch(8)},${ch(0)})`; };
+    const draw = () => {
+      const [w, h] = CFG.sizes[st.fmt][st.size], round = CFG.round.includes(st.fmt), cx = 170;
+      const bottom = st.room === 'wohn' ? 152 : 127;                              /* 25 cm über Sofalehne bzw. Kopfteil */
+      const x = cx - w / 2, y = bottom - h;
+      pat.setAttribute('x', x); pat.setAttribute('y', y);                         /* Holz in echter Größe: Textur = 120 cm */
+      const vis = (el, on) => el.toggleAttribute('hidden', !on);                   /* SVG kennt .hidden nicht */
+      vis(rect, !round); vis(disc, round);
+      if (round) { disc.setAttribute('cx', cx); disc.setAttribute('cy', y + h / 2); disc.setAttribute('r', w / 2); }
+      else { [['x', x], ['y', y], ['width', w], ['height', h]].forEach(([k, v]) => rect.setAttribute(k, v)); }
+      const d = (round ? .95 : .9) * Math.min(w, h), ay = y + h / 2;
+      [['x', cx - d / 2], ['y', ay - d / 2], ['width', d], ['height', d]].forEach(([k, v]) => art.setAttribute(k, v));
+      circ.setAttribute('cx', cx); circ.setAttribute('cy', ay); circ.setAttribute('r', d / 2);
+      dim.setAttribute('y', bottom + 7); dim.textContent = round ? `Ø ${w} cm` : `${w} × ${h} cm`;
+      vis($('#sofa'), st.room === 'wohn'); vis($('#bed'), st.room !== 'wohn');
+      ref.textContent = st.room === 'wohn' ? 'Sofa 2,20 m' : 'Bett 1,80 m';
+      $('#furnLegend').textContent = st.room === 'wohn' ? 'Farbe des Sofas' : 'Farbe des Betts';
+      svg.style.setProperty('--wall', st.wall); svg.style.setProperty('--furn', st.furn);
+      svg.style.setProperty('--furn-dark', shade(st.furn, .82)); svg.style.setProperty('--furn-light', shade(st.furn, 1.12));
+      const dark = parseInt(st.wall.slice(1, 3), 16) < 140; svg.classList.toggle('dark-wall', dark);
+      patImg.setAttribute('href', "{{ url_for('static', filename='img/holz/') }}" + st.wood + '.jpg');
+      $$('.sizes-seg button').forEach(b => { const [bw, bh] = CFG.sizes[st.fmt][b.dataset.v];
+        b.querySelector('small').textContent = round ? `Ø ${bw}` : `${bw}×${bh}`; });
+      const area = w * h * (round ? CFG.round_area : 1);
+      const cents = CFG.base_cents + Math.round(Math.max(0, area - CFG.base_area) * CFG.cents_per_cm2) + CFG.wood[st.wood][1] * 100;
+      $('#rpLabel').textContent = `${FMT[st.fmt]} ${st.size}, ${CFG.wood[st.wood][0]}`;
+      $('#rpPrice').textContent = 'ab ' + euro(cents);
+    };
+    $$('.room-ctl [data-k]').forEach(g => g.addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      st[g.dataset.k] = b.dataset.v;
+      [...g.querySelectorAll('button')].forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
+      draw();
+    }));
+    draw();
+  })();
 })();
 </script>
 {% endblock %}

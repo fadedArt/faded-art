@@ -315,3 +315,5 @@ body.home .logo{white-space:nowrap}
 .t-fill{position:absolute;inset:0;background:linear-gradient(var(--gold-t),var(--gold));transform-origin:top;transform:scaleY(0);box-shadow:0 0 8px rgba(212,175,55,.7);border-radius:2px}
 .thread-pins{top:0;bottom:auto}
 @media(max-width:900px){.thread{width:14px;right:4px}.t-line{margin-left:6px}}
+/* Holz in echter Größe: Textur zeigt 120 cm, ein kleines Brett zeigt also gröbere Maserung als ein großes */
+.board[data-wood]{background-size:calc(12000% / var(--w)) auto!important;background-position:center!important}

@@ -1402,7 +1402,9 @@ def machine_done(ref):
 def index():
     sizes = [(k, w, h, BASE_CENTS + round(max(0, w * h - BASE_AREA) * CENTS_PER_CM2)) for k, (w, h) in SIZES["quad"].items()]
     woods = [(k, v[0], v[2]) for k, v in WOOD.items()]
-    return render_template("index.html", sizes=sizes, woods=woods, sw_eur=SW_EUR, pins_eur=PINS[360], note=PREORDER_NOTE)
+    room = {"sizes": SIZES, "base_cents": BASE_CENTS, "base_area": BASE_AREA, "cents_per_cm2": CENTS_PER_CM2,
+            "round_area": ROUND_AREA, "round": sorted(ROUND_FORMATS), "wood": {k: [v[0], v[2]] for k, v in WOOD.items()}}
+    return render_template("index.html", sizes=sizes, woods=woods, sw_eur=SW_EUR, pins_eur=PINS[360], note=PREORDER_NOTE, room=room)
 
 @app.get("/configure")
 def configure():
