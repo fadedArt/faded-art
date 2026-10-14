@@ -48,10 +48,20 @@
   </details></div>
 </header>
 <main>{% block content %}{% endblock %}</main>
-<footer>
-  <div>&copy; 2026 Faded Art</div>
-  <div style="margin-top:.4rem;font-size:.78rem">Alle Preise in Euro{% if shop.ust == "klein" %}. Gemäß § 19 UStG wird keine Umsatzsteuer berechnet{% endif %}, zzgl. Versand.</div>
-  <nav style="margin-top:.75rem"><a href="/impressum">Impressum</a><a href="/datenschutz">Datenschutz</a><a href="/agb">AGB</a><a href="/widerruf">Widerruf</a></nav>
+<footer class="site-foot">
+  <div class="sf-grid">
+    <div class="sf-brand"><a href="/" class="logo">FADED ART</a>
+      <p>Fadenbilder aus deinem Foto. Berechnet, gespannt und signiert in Feldkirchen bei München.</p></div>
+    <nav class="sf-col" aria-label="Shop"><p class="sf-h">Shop</p>
+      <a href="/configure">Bild gestalten</a><a href="/gutschein">Gutschein verschenken</a><a href="/gutschein#einloesen">Gutschein einlösen</a><a href="/ueber-uns">Über uns</a></nav>
+    <nav class="sf-col" aria-label="Rechtliches"><p class="sf-h">Rechtliches</p>
+      <a href="/impressum">Impressum</a><a href="/datenschutz">Datenschutz</a><a href="/agb">AGB</a><a href="/widerruf">Widerruf</a></nav>
+    <div class="sf-col"><p class="sf-h">Kontakt</p>
+      {% if shop.email %}<a href="mailto:{{ shop.email }}">{{ shop.email }}</a>{% endif %}
+      <span>Sicher bezahlen über Stripe: Karte, Apple Pay, Google Pay</span></div>
+  </div>
+  <div class="sf-base"><span>&copy; 2026 Faded Art</span>
+    <span>Alle Preise in Euro{% if shop.ust == "klein" %}. Gemäß § 19 UStG wird keine Umsatzsteuer berechnet{% endif %}, zzgl. Versand.</span></div>
 </footer>
 </div>
 <script>document.addEventListener('click',e=>{const m=document.querySelector('.menu');if(m&&!m.contains(e.target))m.open=false})</script>

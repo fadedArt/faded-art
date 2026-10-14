@@ -10,7 +10,7 @@
 /* Farben: Galerie bei Nacht (dunkel) */
 body.v2{
   --walnut:#0f0f10; --walnut-2:#161617; --walnut-3:#202022;
-  --gold:#d8d6d1; --gold-hi:#f1f0ec; --ivory:#ecebe7; --muted:#9a9893; --faint:#6e6c68; --soft:#c8c6c1;
+  --gold:#d8d6d1; --gold-hi:#f1f0ec; --ivory:#ecebe7; --muted:#9a9893; --faint:#8a8883; --soft:#c8c6c1;
   --acc:216,214,209; --acchi:241,240,236; --bgrgb:15,15,16; --fgrgb:236,235,231;
   --on-acc:#0f0f10; --glow:transparent; --deep:#0b0b0c; --frame:#0b0b0b; --knob-dark:#9a9893;
   --line:rgba(var(--fgrgb),.14);
@@ -21,7 +21,7 @@ body.v2{
 /* Galeriewand (hell, Standard) */
 html[data-theme=light] body.v2{
   --walnut:#ededea; --walnut-2:#f7f7f5; --walnut-3:#e2e2de;
-  --gold:#141414; --gold-hi:#141414; --ivory:#141414; --muted:#62615d; --faint:#8b8a86; --soft:#2c2c2a;
+  --gold:#141414; --gold-hi:#141414; --ivory:#141414; --muted:#62615d; --faint:#72716d; --soft:#2c2c2a;
   --acc:20,20,20; --acchi:20,20,20; --bgrgb:237,237,234; --fgrgb:20,20,20;
   --on-acc:#f7f7f5; --deep:#e4e4e0; --frame:#141414; --knob-dark:#141414;
   --line:rgba(20,20,20,.14);
@@ -203,3 +203,27 @@ body.v2 .rv-stars label{color:rgba(128,128,128,.45)}
 body.v2 .rv-stars input:checked~label,body.v2 .rv-stars label:hover,body.v2 .rv-stars label:hover~label{color:var(--gold)}
 body.v2 .rv-stars input:focus-visible+label{outline:2px solid var(--gold)}
 .rv-form textarea{width:100%;font:inherit}
+
+/* ---------- Feinschliff: ruhiger, edler ---------- */
+/* Kopfzeile beim Scrollen: blickdicht mit feinem Weichzeichner, nichts scheint grau durch */
+body.v2.scrolled header.top,body.v2.page header.top{background:rgb(var(--bgrgb));-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+/* Abschnitte etwas enger: weniger Leerlauf, besonders am Handy */
+body.v2 .sec{padding-block:clamp(3.75rem,8vw,7.5rem)}
+/* Beschriftung der Abschnitts-Leiste rechts nur dort dauerhaft, wo daneben Platz ist (sonst nur beim Darüberfahren) */
+@media(max-width:1600px){body.v2 .thread-pins li.cur span{opacity:0;transform:translateX(6px)}
+  body.v2 .thread-pins a:hover span,body.v2 .thread-pins a:focus-visible span{opacity:1;transform:none}}
+/* Fließtext ruhiger lesbar */
+body.v2 main p,body.v2 .sec p{line-height:1.7}
+/* Fußzeile */
+body.v2 footer.site-foot{max-width:1240px;margin:0 auto;padding:clamp(3rem,6vw,4.5rem) clamp(1.25rem,4vw,3rem) 2rem;border-top:1px solid var(--line);text-align:left;font-size:.88rem;color:var(--muted)}
+.sf-grid{display:grid;grid-template-columns:1.6fr 1fr 1fr 1.3fr;gap:2.5rem}
+.sf-brand .logo{display:inline-block;margin:0 0 1rem;font-size:1rem;letter-spacing:.28em}
+.sf-brand p{max-width:34ch;line-height:1.7;margin:0}
+.sf-col{display:flex;flex-direction:column;gap:.55rem;align-items:flex-start}
+.sf-col a,.sf-col span{margin:0;padding:.15rem 0;text-decoration:none;color:var(--muted);transition:color .25s}
+body.v2 .sf-col a{color:var(--muted)}
+body.v2 .sf-col a:hover{color:var(--ivory)}
+.sf-h{font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;color:var(--ivory);margin:0 0 .4rem}
+.sf-base{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem 2rem;margin-top:3rem;padding-top:1.4rem;border-top:1px solid var(--line);font-size:.78rem;color:var(--faint)}
+@media(max-width:820px){.sf-grid{grid-template-columns:1fr 1fr;gap:2rem 1.5rem}.sf-brand{grid-column:1/-1}}
+@media(max-width:700px){.sf-col a{padding:.55rem 0}}
