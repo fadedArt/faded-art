@@ -16,11 +16,11 @@
       <p class="hint" style="margin-bottom:.2rem">Bilder: {{ total|euro }}</p>
       {% if cc %}<p class="hint">Code {{ cc.code }}: − {{ cdisc|euro }} ({{ cc.pct }} %) <button type="button" class="linkbtn" id="ccrm">entfernen</button></p>{% endif %}
       {% if voucher %}<p class="hint">Gutschein {{ voucher.code }}: − {{ disc|euro }} <button type="button" class="linkbtn" id="vrm">entfernen</button></p>{% endif %}
+      {% if not (voucher and cc) %}<div class="field" style="margin:.8rem 0 1rem"><label for="vcode">Gutschein oder Rabattcode einlösen</label>
+        <div class="row"><input type="text" id="vcode" placeholder="z. B. FA-XXXX-XXXX oder LENA10" autocapitalize="characters" autocomplete="off"><button type="button" class="btn" id="vapply">Einlösen</button></div></div>{% endif %}
       <div class="field" style="margin:.6rem 0 .4rem"><label for="zone">Lieferland</label>
         <select id="zone">{% for z, s in ship.items() %}<option value="{{ z }}" data-c="{{ s.cents }}">{{ s.name }} – Versand {{ s.cents|euro }}</option>{% endfor %}</select></div>
       <p class="price" style="margin:.4rem 0 1rem" id="topay" data-pay="{{ pay }}">Zu zahlen: {{ (pay + ship.de.cents)|euro }} <span class="hint">inkl. Versand</span></p>
-      {% if not (voucher and cc) %}<div class="field" style="margin-top:.8rem"><label for="vcode">Gutschein- oder Rabattcode</label>
-        <div class="row"><input type="text" id="vcode" placeholder="z. B. FA-XXXX-XXXX oder LENA10" autocapitalize="characters" autocomplete="off"><button type="button" class="btn" id="vapply">Einlösen</button></div></div>{% endif %}
       <p class="hint" style="margin-bottom:1rem">{{ note }}</p>
       <div class="field"><label for="email">E-Mail für deine Bestellung</label><input type="email" id="email" autocomplete="email" placeholder="name@beispiel.de"></div>
       <div class="field"><label style="text-transform:none;font-weight:400"><input type="checkbox" id="agb">Ich akzeptiere die <a href="/agb" target="_blank" rel="noopener">AGB</a> und habe die <a href="/widerruf" target="_blank" rel="noopener">Widerrufsbelehrung</a> gelesen. Mir ist bekannt, dass für individuell angefertigte Ware kein Widerrufsrecht besteht.</label></div>

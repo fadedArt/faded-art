@@ -51,10 +51,10 @@ REF_RE = re.compile(r"^[0-9a-f]{32}$")
 WOOD = {
     "weiss": ("Klassik Weiß matt", (250, 250, 250), 0),
     "mdf": ("MDF Schwarz matt", (18, 18, 18), 0),
-    "eiche": ("Eiche Natur geölt", (168, 122, 82), 50),
-    "nussbaum": ("Nussbaum Premium", (59, 39, 22), 80),
-    "esche": ("Schwarze Esche", (33, 33, 33), 90),
-    "beton": ("Beton-Look", (110, 110, 110), 60),
+    "eiche": ("Eiche Natur geölt", (168, 122, 82), 20),        # Aufpreise gesenkt am 14.10.2026 (vorher 50/80/90/60)
+    "nussbaum": ("Nussbaum Premium", (59, 39, 22), 35),
+    "esche": ("Schwarze Esche", (33, 33, 33), 40),
+    "beton": ("Beton-Look", (110, 110, 110), 25),
 }
 COLORS = {
     "schwarz": ("Tiefschwarz", (12, 12, 12)),
@@ -79,7 +79,7 @@ MULTI_SAT, MULTI_CHROMA = 1.8, 2.5        # Mehrfarbig: Sättigung des Fotos, Ge
 MULTI_LINEAR, MULTI_LINES_F = True, 1.3   # Mehrfarbig nach dem linearen Modell (wie Einfarbig); Linien = LINES x Faktor
 MULTI_MAX, MULTI_EUR = 4, 0   # höchstens so viele Fadenfarben; Aufpreis für Mehrfarbig in € (noch festlegen!)
 SW = "sw"                     # Schwarz + Weiß gemischt: zwei Fäden, Engine 2 (engine2.py), Testsieger vom 13.10.2026
-SW_EUR = 40                   # Aufpreis für Schwarz + Weiß in € (Platzhalter, bitte festlegen!)
+SW_EUR = 25                   # Aufpreis für Schwarz + Weiß in € (14.10.2026: vorher 40)
 SW_PAL = ["schwarz", "weiss"]
 SW_LINES = {240: 9000, 360: 12000}   # Höchstzahl Fäden (gemischt braucht ca. 3x so viel Faden wie Einfarbig)
 SW_STYLE = {"a": dict(gamma=1.0, clip=0.008), "b": dict(gamma=1.2, clip=0.012), "c": dict(gamma=0.85, clip=0.005)}
@@ -143,10 +143,10 @@ MIN_CONTRAST = 60
 
 def lum(rgb):
     return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
-PINS = {240: 0, 360: 70}                       # Pins -> Aufpreis in €
+PINS = {240: 0, 360: 30}                       # Pins -> Aufpreis in € (14.10.2026: vorher 70)
 BUILD = "b32"   # Versionsnummer: app.py, configure.html, configure.js und style.css müssen dieselbe tragen
 TEST_QUAD_CENTS = int(os.environ.get("TESTPREIS_QUAD_CENTS", "0"))   # Testpreis für ALLE quadratischen Bretter; 0 = aus (Live-Betrieb)
-BASE_CENTS, BASE_AREA, CENTS_PER_CM2 = 14900, 2500, 2.5   # Vorschlag: 149 € bis 50 x 50 cm, darüber 2,5 Cent je cm² (70 x 70 = 209 €, 100 x 100 = 336 €)
+BASE_CENTS, BASE_AREA, CENTS_PER_CM2 = 7900, 900, 1.25   # 14.10.2026: 79 € für 30 x 30 cm, darüber 1,25 Cent je cm² (50 x 50 = 99 €, 70 x 70 = 129 €, 100 x 100 = 192,75 €). Vorher 149/209/336 €
 PREORDER_NOTE = os.environ.get("VORBESTELL_HINWEIS", "Vorbestellung: Wir fertigen ab Februar 2027 in der Reihenfolge der Bestellungen.")
 
 # ---------- Gutscheine (Wertgutscheine, auch zum Vorbestellen) ----------
@@ -293,7 +293,8 @@ def price_cents(m):
         return TEST_QUAD_CENTS
     area = m["w"] * m["h"] * (ROUND_AREA if m.get("fmt") in ROUND_FORMATS else 1)
     extra = max(0, area - BASE_AREA) * CENTS_PER_CM2
-    return BASE_CENTS + round(extra) + (WOOD[m["wood"]][2] + PINS[m["pins"]] + (MULTI_EUR if m.get("color") == MULTI else 0) + (SW_EUR if m.get("color") == SW else 0)) * 100
+    total = BASE_CENTS + round(extra) + (WOOD[m["wood"]][2] + PINS[m["pins"]] + (MULTI_EUR if m.get("color") == MULTI else 0) + (SW_EUR if m.get("color") == SW else 0)) * 100
+    return int(math.ceil(total / 100)) * 100                 # volle Euro
 
 
 # ---------- String-Art-Berechnung (dein Algorithmus, pro Bestellung isoliert) ----------
@@ -1205,7 +1206,7 @@ def voucher_mail(v):
 @app.get("/gutschein")
 def voucher_page():
     left = (VOUCHER_LIMIT - voucher_sold()) if VOUCHER_LIMIT else None
-    return render_template("gutschein.html", values=[(c, voucher_pay_cents(c)) for c in VOUCHER_VALUES], left=left, note=PREORDER_NOTE,
+    return render_template("gutschein.html", values=[(c, voucher_pay_cents(c)) for c in VOUCHER_VALUES], left=left, note=PREORDER_NOTE, base_cents=price_cents(dict(fmt="quad", w=30, h=30, wood="weiss", pins=240, color="schwarz")), m_cents=price_cents(dict(fmt="quad", w=50, h=50, wood="weiss", pins=240, color="schwarz")),
                            years=VOUCHER_YEARS, sale=VOUCHER_SALE_PCT if voucher_sale_on() else 0, until=sale_until_de())
 
 @app.post("/gutschein/kaufen")
@@ -1423,7 +1424,7 @@ def machine_done(ref):
 # ---------- Seiten ----------
 @app.get("/")
 def index():
-    sizes = [(k, w, h, BASE_CENTS + round(max(0, w * h - BASE_AREA) * CENTS_PER_CM2)) for k, (w, h) in SIZES["quad"].items()]
+    sizes = [(k, w, h, price_cents(dict(fmt="quad", w=w, h=h, wood="weiss", pins=240, color="schwarz"))) for k, (w, h) in SIZES["quad"].items()]
     woods = [(k, v[0], v[2]) for k, v in WOOD.items()]
     room = {"sizes": SIZES, "base_cents": BASE_CENTS, "base_area": BASE_AREA, "cents_per_cm2": CENTS_PER_CM2,
             "round_area": ROUND_AREA, "round": sorted(ROUND_FORMATS), "wood": {k: [v[0], v[2]] for k, v in WOOD.items()}}
@@ -1700,7 +1701,9 @@ SHOP = {   # Anbieterdaten für Impressum, AGB, Datenschutz. Fehlende Angaben pe
 
 @app.context_processor
 def inject_cart():
-    return {"cart_count": len(session.get("cart", [])), "asset_v": asset_v, "shop": SHOP}
+    v = voucher_load(session["voucher"]) if session.get("voucher") else None
+    return {"cart_count": len(session.get("cart", [])), "asset_v": asset_v, "shop": SHOP,
+            "voucher": v if v and voucher_ok(v) else None, "creator": session.get("creator")}
 
 @app.errorhandler(413)
 def too_big(e):

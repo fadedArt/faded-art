@@ -44,10 +44,10 @@
       <select id="wood">
         <option value="weiss">Klassik Weiß matt</option>
         <option value="mdf">MDF Schwarz matt</option>
-        <option value="eiche">Eiche Natur geölt (+50 €)</option>
-        <option value="nussbaum">Nussbaum Premium (+80 €)</option>
-        <option value="esche">Schwarze Esche (+90 €)</option>
-        <option value="beton">Beton-Look (+60 €)</option>
+        <option value="eiche">Eiche Natur geölt (+{{ cfg.pricing.wood.eiche }} €)</option>
+        <option value="nussbaum">Nussbaum Premium (+{{ cfg.pricing.wood.nussbaum }} €)</option>
+        <option value="esche">Schwarze Esche (+{{ cfg.pricing.wood.esche }} €)</option>
+        <option value="beton">Beton-Look (+{{ cfg.pricing.wood.beton }} €)</option>
       </select></div>
   </section>
   <section data-step="4" hidden>
@@ -86,9 +86,12 @@
         <option value="kupfer" data-hex="#b87333">Kupfer</option>
       </select></div>
     <div class="field"><label for="pins">Anzahl Pins</label>
-      <select id="pins"><option value="240">240 Pins (Standard)</option><option value="360">360 Pins (+70 €)</option></select></div>
+      <select id="pins"><option value="240">240 Pins (Standard)</option><option value="360">360 Pins (+{{ cfg.pricing.pins[360] }} €)</option></select></div>
     <p class="price" id="price"></p>
     <p class="hint">Vorläufiger Preis. Der Endpreis wird beim Bezahlen vom Server berechnet.</p>
+    <details class="vbox"{% if voucher %} open{% endif %}><summary>Gutschein oder Rabattcode einlösen</summary>
+      {% include "_redeem.html" %}
+    </details>
     <div id="checkout" hidden style="margin-top:1.5rem">
       <button type="button" class="btn btn-gold" id="buy" style="width:100%">Jetzt kaufen</button>
       <button type="button" class="btn" id="addcart" style="width:100%;margin-top:.75rem">In den Warenkorb</button>

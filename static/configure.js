@@ -29,7 +29,7 @@ function price() {
   }
   const area = c.w * c.h * (c.format === 'rund' ? PRICE.round_factor : 1);
   const cents = PRICE.base_cents + Math.max(0, area - PRICE.base_area) * PRICE.cents_per_cm2;
-  const p = Math.round(cents) / 100 + PRICE.wood[c.wood] + PRICE.pins[c.pins] + (c.multi ? PRICE.multi || 0 : 0) + (c.sw ? PRICE.sw || 0 : 0);
+  const p = Math.ceil(Math.round(cents) / 100 + PRICE.wood[c.wood] + PRICE.pins[c.pins] + (c.multi ? PRICE.multi || 0 : 0) + (c.sw ? PRICE.sw || 0 : 0));   // volle Euro wie der Server
   $('price').textContent = 'Preis: ' + p.toFixed(2).replace('.', ',') + ' € (' + (PRICE.vat || 'zzgl. Versand') + ')';
 }
 

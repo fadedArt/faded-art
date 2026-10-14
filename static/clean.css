@@ -159,3 +159,16 @@ body.v2 .hero-copy{order:0}
 .nf404-art{width:150px;height:150px;color:var(--ivory);margin-bottom:1rem}
 .nf404 h1{font-family:var(--serif);font-weight:400;font-size:clamp(2.6rem,7vw,4.4rem);line-height:1}
 .nf404 .lead{color:var(--muted);max-width:44ch}
+/* Gutschein einlösen */
+body.v2 .vbox{margin-top:1rem;border-top:1px solid var(--line);padding-top:.8rem}
+body.v2 .vbox summary{cursor:pointer;color:var(--ivory);font-size:.95rem;list-style:none;display:flex;justify-content:space-between}
+body.v2 .vbox summary::-webkit-details-marker{display:none}
+body.v2 .vbox summary::after{content:"+";font-size:1.2rem;line-height:1}
+body.v2 .vbox[open] summary::after{content:"−"}
+body.v2 .vbox .redeem{margin-top:.7rem}
+body.v2 .redeem .row{gap:.5rem}
+body.v2 .redeem .btn{flex:0 0 auto;padding:.85rem 1.2rem}
+body.v2 .redeem-ok{font-size:.9rem;color:var(--ivory);margin-bottom:.7rem;padding:.6rem .8rem;border:1px solid var(--line);border-radius:var(--r)}
+body.v2 .redeem-msg.ok{color:var(--ivory)}
+body.v2 .redeem-sec{padding-bottom:1rem}
+html body.v2 .redeem-msg.ok{color:var(--ivory)}

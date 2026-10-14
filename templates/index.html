@@ -247,7 +247,7 @@
   <div>
     <h2 class="h2">Verschenken, ohne das Foto zu kennen.</h2>
     <p>Du kaufst den Gutschein, der Beschenkte lädt sein Foto selbst hoch und wählt sein Bild. Den Gutschein bekommst du sofort als PDF zum Ausdrucken.</p>
-    <div class="cta-row"><a href="/gutschein" class="btn btn-gold">Gutschein kaufen</a></div>
+    <div class="cta-row"><a href="/gutschein" class="btn btn-gold">Gutschein kaufen</a><a href="/gutschein#einloesen" class="btn btn-quiet">Gutschein einlösen</a></div>
   </div>
 </section>
 
@@ -459,7 +459,7 @@
       $$('.sizes-seg button').forEach(b => { const [bw, bh] = CFG.sizes[st.fmt][b.dataset.v];
         b.querySelector('small').textContent = round ? `Ø ${bw}` : `${bw}×${bh}`; });
       const area = w * h * (round ? CFG.round_area : 1);
-      const cents = CFG.base_cents + Math.round(Math.max(0, area - CFG.base_area) * CFG.cents_per_cm2) + CFG.wood[st.wood][1] * 100;
+      const cents = Math.ceil((CFG.base_cents + Math.round(Math.max(0, area - CFG.base_area) * CFG.cents_per_cm2) + CFG.wood[st.wood][1] * 100) / 100) * 100;   /* volle Euro wie im Warenkorb */
       $('#rpLabel').textContent = `${FMT[st.fmt]} ${st.size}, ${CFG.wood[st.wood][0]}`;
       $('#rpPrice').textContent = 'ab ' + euro(cents);
     };

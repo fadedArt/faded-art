@@ -1,0 +1,25 @@
+{# Gutschein- oder Rabattcode einlösen: speichert den Code für den Warenkorb #}
+<div class="redeem">
+  {% if voucher %}<p class="redeem-ok">Gutschein <b>{{ voucher.code }}</b> ist gespeichert: noch {{ voucher.left|euro }} Guthaben. Er wird im Warenkorb automatisch abgezogen.</p>{% endif %}
+  {% if creator %}<p class="redeem-ok">Rabattcode <b>{{ creator }}</b> ist gespeichert und wird im Warenkorb abgezogen.</p>{% endif %}
+  <div class="row"><input type="text" class="redeem-in" placeholder="z. B. FA-XXXX-XXXX" autocapitalize="characters" autocomplete="off" aria-label="Gutschein- oder Rabattcode"><button type="button" class="btn redeem-btn">Einlösen</button></div>
+  <p class="msg redeem-msg" role="status"></p>
+</div>
+<script>
+document.querySelectorAll('.redeem').forEach(box => {
+  if (box.dataset.ready) return; box.dataset.ready = 1;
+  const go = async () => {
+    const msg = box.querySelector('.redeem-msg'), code = box.querySelector('.redeem-in').value.trim();
+    if (!code) { msg.textContent = 'Bitte gib deinen Code ein.'; return; }
+    try {
+      const r = await fetch('/cart/gutschein', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
+      const d = await r.json();
+      if (!r.ok) { msg.textContent = d.message || 'Der Code ist ungültig.'; return; }
+      msg.classList.add('ok');
+      msg.textContent = d.left != null ? 'Gutschein gespeichert: ' + (d.left / 100).toFixed(2).replace('.', ',') + ' € Guthaben. Er wird im Warenkorb abgezogen.' : 'Code gespeichert. Er wird im Warenkorb abgezogen.';
+    } catch (e) { msg.textContent = 'Keine Verbindung. Bitte gleich noch einmal versuchen.'; }
+  };
+  box.querySelector('.redeem-btn').addEventListener('click', go);
+  box.querySelector('.redeem-in').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+});
+</script>
