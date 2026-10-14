@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import stripe
-from flask import Flask, url_for, abort, jsonify, render_template, render_template_string, request, send_file, session
+from flask import Flask, url_for, abort, jsonify, render_template, render_template_string, request, send_file, session, redirect
 from werkzeug.middleware.proxy_fix import ProxyFix
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 from fpdf import FPDF
@@ -1457,7 +1457,7 @@ def cart_voucher():
 
 # ---------- Rabatt- und Creator-Codes ----------
 # Codes verwaltest du unter /admin/creator?key=ADMIN_KEY. Jeder Code: Rabatt für den Kunden (%) und Provision für den Creator (%).
-# Creator-Link: https://faded-art.onrender.com/?code=LENA10 merkt sich den Code automatisch für den Einkauf.
+# Creator-Link: https://fadedart.de/?code=LENA10 merkt sich den Code automatisch für den Einkauf.
 CC_FILE = os.path.join(DATA_DIR, "creator_codes.json")
 CC_SALES = os.path.join(DATA_DIR, "creator_sales.jsonl")
 CC_RE = re.compile(r"^[A-Z0-9_-]{3,20}$")
@@ -1490,6 +1490,15 @@ def cc_record(sid, code, cents):
             pass
         with open(CC_SALES, "a") as f:
             f.write(json.dumps(dict(sid=sid, code=code, cents=cents, t=time.time())) + "\n")
+
+CANON_HOST = os.environ.get("HAUPT_DOMAIN", "fadedart.de")   # alte onrender-Adresse leitet hierhin um
+
+@app.before_request
+def _canonical_host():
+    """faded-art.onrender.com -> fadedart.de (nur Seitenaufrufe; Webhook, Maschine und POSTs laufen weiter über beide Adressen)."""
+    h = request.host.split(":")[0]
+    if CANON_HOST and h.endswith(".onrender.com") and request.method == "GET" and not request.path.startswith(("/api/", "/webhook", "/health", "/status", "/live")):
+        return redirect("https://" + CANON_HOST + request.full_path.rstrip("?"), 301)
 
 @app.before_request
 def _creator_link():
