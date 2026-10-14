@@ -5,7 +5,7 @@
 <h1>Impressum</h1>
 <p>Angaben gemäß § 5 DDG</p>
 <h2>Anbieter</h2>
-<p>{{ shop.name }}<br>Faded Art<br>{{ shop.strasse }}<br>{{ shop.ort }}<br>Deutschland</p>
+<p>Faded Art<br>Inhaber: {{ shop.name }}<br>{{ shop.strasse }}<br>{{ shop.ort }}<br>Deutschland</p>
 <h2>Kontakt</h2>
 <p>E-Mail: {% if shop.email %}<a href="mailto:{{ shop.email }}">{{ shop.email }}</a>{% else %}<mark>[E-Mail-Adresse]</mark>{% endif %}<br>Telefon: {% if shop.telefon %}{{ shop.telefon }}{% else %}<mark>[Telefonnummer]</mark>{% endif %}</p>
 <h2>Umsatzsteuer</h2>

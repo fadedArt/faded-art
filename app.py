@@ -1679,7 +1679,7 @@ SHOP = {   # Anbieterdaten für Impressum, AGB, Datenschutz. Fehlende Angaben pe
     "email": os.environ.get("SHOP_EMAIL", ""),
     "telefon": os.environ.get("SHOP_TELEFON", ""),
     "ust": os.environ.get("SHOP_UST", ""),          # "klein" = Kleinunternehmer nach § 19 UStG, sonst die USt-IdNr. (DE...)
-    "lieferzeit": os.environ.get("SHOP_LIEFERZEIT", ""),   # z. B. "10 bis 15"
+    "lieferzeit": os.environ.get("SHOP_LIEFERZEIT", ""),   # Freitext, z. B. "bis zu zwei Monate"
 }
 
 @app.context_processor
