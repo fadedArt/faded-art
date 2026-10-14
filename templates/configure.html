@@ -11,8 +11,11 @@
 <div class="card panel">
   <div class="restart-row" id="restartRow" hidden><button type="button" class="restart" id="restart">Neues Bild wählen</button></div>
   <section data-step="1">
+    <h1 class="sr-only">Dein Fadenbild gestalten</h1>
     <h2>Foto hochladen</h2>
-    <div class="field"><label for="file">Bilddatei (JPG oder PNG, max. 15 MB)</label><input type="file" id="file" accept="image/jpeg,image/png"></div>
+    <div class="field upload"><input type="file" id="file" accept="image/jpeg,image/png" class="sr-only">
+      <label for="file" class="btn btn-gold upload-btn" id="fileBtn">Foto auswählen</label>
+      <p class="hint" id="fileHint">JPG oder PNG, max. 15 MB. Am besten wirkt ein Gesicht, das den Kreis gut füllt.</p></div>
     <div class="field" id="zoomBox" hidden><label for="zoom">Ausschnitt: zoomen, Bild im Kreis ziehen</label>
       <div class="row"><button type="button" class="btn zbtn" id="zout" aria-label="Wegzoomen">−</button><input type="range" id="zoom"><button type="button" class="btn zbtn" id="zin" aria-label="Näher heranzoomen">+</button></div>
       <button type="button" class="btn" id="center" style="margin-top:.75rem">Zentrieren</button></div>
@@ -118,7 +121,7 @@
       <canvas id="cv" width="600" height="600" hidden aria-label="Bildausschnitt, mit Maus oder Finger verschiebbar"></canvas>
       <canvas id="big" width="600" height="600" hidden style="cursor:default;touch-action:auto" aria-label="Live-Ansicht der Fäden"></canvas>
       <img id="result" alt="Berechnete String-Art-Vorschau" hidden>
-      <div class="ph" id="ph">Noch kein Bild gewählt</div>
+      <div class="ph" id="ph" role="button" tabindex="0">Tippe hier, um ein Foto auszuwählen</div>
     </div>
     <div class="spin" id="spin" hidden></div>
   </div>

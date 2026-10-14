@@ -101,8 +101,11 @@ function fit() {
   z.min = view.cover * .5; z.max = view.cover * 4; z.step = view.cover / 100; z.value = view.s;
 }
 
+$('ph').addEventListener('click', () => $('file').click());                   // leerer Kreis öffnet die Fotoauswahl
+$('ph').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('file').click(); } });
 $('file').addEventListener('change', e => {
   const f = e.target.files[0]; if (!f) return;
+  $('fileBtn').textContent = 'Anderes Foto wählen'; $('fileHint').textContent = f.name;
   if (!/^image\/(jpeg|png)$/.test(f.type) || f.size > 15 * 1024 * 1024) { msg('Bitte JPG oder PNG bis 15 MB wählen.'); e.target.value = ''; return; }
   msg(''); forgotten = false; const url = URL.createObjectURL(f);          // neues Foto: wieder merken
   if (step !== 1 || !$('variants').hidden || orderRef) { freshUI(); show(1); }   // mitten in der Bestellung: alles zurück auf Anfang

@@ -21,7 +21,7 @@ header.top{display:flex;justify-content:space-between;align-items:center;padding
 .hero{padding:5rem 0 4rem;text-align:center}
 .hero h1{font-size:clamp(2rem,5vw,3.2rem);line-height:1.2;margin-bottom:1.25rem}
 .hero p{max-width:60ch;margin:0 auto 2rem;color:var(--muted);font-weight:300}
-h2.title{font-size:clamp(1.5rem,3vw,2rem);text-align:center;margin-bottom:2.5rem}
+h2.title,h1.title{font-size:clamp(1.5rem,3vw,2rem);text-align:center;margin-bottom:2.5rem}
 section.block{padding:3rem 0}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.5rem}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:1.75rem}
@@ -324,3 +324,16 @@ body.home .logo{white-space:nowrap}
 .cut-seg button.on{background:#2c2618;box-shadow:inset 0 0 0 1px var(--gold);color:var(--gold-t)}
 .cut-l{font-size:.85rem;color:var(--gold-t)}
 .cut-tools .row .btn{padding:.6rem 1rem;font-size:.8rem}
+
+/* Nur für Screenreader und Suchmaschinen sichtbar */
+.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+/* Foto hochladen: große Schaltfläche statt des schlichten Browser-Feldes; leerer Kreis öffnet ebenfalls die Auswahl */
+.upload-btn{display:block;width:100%;text-align:center;padding:1rem 1.2rem;font-size:1rem}
+#file:focus-visible+.upload-btn{outline:2px solid currentColor;outline-offset:3px}
+.upload .hint{margin-top:.6rem}
+.disc .ph{cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+/* Handy: Tippflächen mindestens 44 px hoch (Kopfzeile, Fußzeile) */
+@media(max-width:700px){
+  .top .logo,.top .cartlink{display:inline-flex;align-items:center;min-height:44px}
+  footer nav a{display:inline-block;padding:.7rem .2rem}
+}
