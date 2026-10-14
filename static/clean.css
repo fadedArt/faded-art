@@ -172,3 +172,17 @@ body.v2 .redeem-ok{font-size:.9rem;color:var(--ivory);margin-bottom:.7rem;paddin
 body.v2 .redeem-msg.ok{color:var(--ivory)}
 body.v2 .redeem-sec{padding-bottom:1rem}
 html body.v2 .redeem-msg.ok{color:var(--ivory)}
+/* Kreis nutzt 92 % des Bretts (50-cm-Brett: Kreis 46 cm) */
+body.v2 .disc{width:92%}
+body.v2 .board.wide .disc{width:auto;height:92%}
+body.v2 .wood-board img{width:92%}
+/* Unterseiten: Kopfzeile immer mit Hintergrund, damit nichts darunter durchscheint */
+body.v2.page header.top{background:rgba(var(--bgrgb),.94);border-bottom-color:var(--line)}
+/* Format als Form statt Wort */
+.fmt{display:block;margin:0 auto;border:1.5px solid currentColor}
+.fmt-rund{width:22px;height:22px;border-radius:50%}
+.fmt-quad{width:22px;height:22px}
+.fmt-hoch{width:17px;height:23px}
+.fmt-quer{width:26px;height:19px}
+.seg[data-k=fmt] button{padding:.7rem .3rem;display:grid;place-items:center}
+@media(max-width:600px){.seg[data-k=fmt]{grid-template-columns:repeat(4,1fr)}}

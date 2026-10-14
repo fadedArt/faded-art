@@ -29,13 +29,13 @@ function price() {
   }
   const area = c.w * c.h * (c.format === 'rund' ? PRICE.round_factor : 1);
   const cents = PRICE.base_cents + Math.max(0, area - PRICE.base_area) * PRICE.cents_per_cm2;
-  const p = Math.ceil(Math.round(cents) / 100 + PRICE.wood[c.wood] + PRICE.pins[c.pins] + (c.multi ? PRICE.multi || 0 : 0) + (c.sw ? PRICE.sw || 0 : 0));   // volle Euro wie der Server
-  $('price').textContent = 'Preis: ' + p.toFixed(2).replace('.', ',') + ' € (' + (PRICE.vat || 'zzgl. Versand') + ')';
+  const p = Math.ceil((Math.round(cents) / 100 + PRICE.wood[c.wood] + PRICE.pins[c.pins] + (c.multi ? PRICE.multi || 0 : 0) + (c.sw ? PRICE.sw || 0 : 0)) / 5) * 5 - 0.01;   // wie der Server: nächster Fünfer minus 1 Cent
+  ['price', 'price5'].forEach(id => { const el = $(id); if (el) el.textContent = 'Preis: ' + p.toFixed(2).replace('.', ',') + ' € (' + (PRICE.vat || 'zzgl. Versand') + ')'; });
 }
 
 let threadTouched = false;
 function recommendThread() {                                   // größeres Bild = derselbe Faden wirkt feiner: dickeren Faden empfehlen
-  const c = cfg(), disc = (c.format === 'rund' ? 0.95 : 0.9) * Math.min(c.w, c.h), want = 0.20 * disc / 45;
+  const c = cfg(), disc = (c.format === 'rund' ? 0.95 : 0.92) * Math.min(c.w, c.h), want = 0.20 * disc / 45;
   const opts = [...$('thick').options].map(o => parseFloat(o.value));
   const rec = opts.reduce((a, b) => Math.abs(b - want) < Math.abs(a - want) ? b : a);
   if (!threadTouched) $('thick').value = rec.toFixed(2);
@@ -287,7 +287,7 @@ function show(n) {
     i + 1 === n ? li.setAttribute('aria-current', 'step') : li.removeAttribute('aria-current');
   });
   $('back').style.visibility = n > 1 ? 'visible' : 'hidden';
-  $('next').textContent = n === 5 ? 'Varianten berechnen' : 'Weiter';
+  $('next').textContent = n === 5 ? 'Varianten berechnen' : 'Weiter'; $('next').hidden = n === 6;   // Schritt 6: Ergebnis, kein Weiter
   cv.style.cursor = n === 1 ? ((cut && tool !== 'move') ? 'crosshair' : 'grab') : 'default'; cv.style.touchAction = n === 1 ? 'none' : 'auto'; // Verschieben nur in Schritt 1
   msg(''); if (n >= 4 && lowContrast()) msg(MSG);
   draw(); saveState();
@@ -463,7 +463,7 @@ function roomDraw() {
   vis($('rcRect'), !round); vis($('rcDisc'), round);
   if (round) { $('rcDisc').setAttribute('cx', cx); $('rcDisc').setAttribute('cy', y + h / 2); $('rcDisc').setAttribute('r', w / 2); }
   else [['x', x], ['y', y], ['width', w], ['height', h]].forEach(([a, v]) => $('rcRect').setAttribute(a, v));
-  const d = (round ? .95 : .9) * Math.min(w, h), ay = y + h / 2, art = $('rcArt');
+  const d = (round ? .95 : .92) * Math.min(w, h), ay = y + h / 2, art = $('rcArt');
   [['x', cx - d / 2], ['y', ay - d / 2], ['width', d], ['height', d]].forEach(([a, v]) => art.setAttribute(a, v));
   $('rcCircle').setAttribute('cx', cx); $('rcCircle').setAttribute('cy', ay); $('rcCircle').setAttribute('r', d / 2);
   const src = roomArt(); if (src) art.setAttribute('href', src);
@@ -573,7 +573,7 @@ async function resume(jobId, want) {                           // nach Zurück-T
 async function generate() {
   if (busy) return;
   if (lowContrast()) return msg(MSG);
-  busy = true; msg(''); $('next').disabled = true;
+  busy = true; msg(''); $('next').disabled = true; show(6);
   $('wait').textContent = 'Berechnung läuft, das dauert meist unter einer Minute …';
   resetResults();
   try {
@@ -712,7 +712,7 @@ show(1); board();
   await useImage(keep.img, v);
   board(); show(keep.step || 1);
   try { const s2 = JSON.parse(sessionStorage.getItem(SKEY) || '{}'); s2.img = keep.img; s2.imgScale = 1; s2.job = keep.job; s2.variant = keep.variant; sessionStorage.setItem(SKEY, JSON.stringify(s2)); } catch (e) {}
-  if (keep.job && (keep.step || 1) === 5) resume(keep.job, keep.variant);
+  if (keep.job && (keep.step || 1) >= 5) { show(6); resume(keep.job, keep.variant); }
 })();
 
 async function checkBuild() {                                  // Selbsttest: passen alle vier Dateien zusammen?

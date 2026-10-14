@@ -211,7 +211,7 @@
       <fieldset><legend>Raum</legend><div class="seg" data-k="room">
         <button type="button" class="on" data-v="wohn" aria-pressed="true">Wohnzimmer</button><button type="button" data-v="schlaf" aria-pressed="false">Schlafzimmer</button></div></fieldset>
       <fieldset><legend>Format</legend><div class="seg seg4" data-k="fmt">
-        <button type="button" data-v="rund" aria-pressed="false">Rund</button><button type="button" class="on" data-v="quad" aria-pressed="true">Quadratisch</button><button type="button" data-v="hoch" aria-pressed="false">Hochformat</button><button type="button" data-v="quer" aria-pressed="false">Querformat</button></div></fieldset>
+        <button type="button" data-v="rund" aria-pressed="false" aria-label="Rund" title="Rund"><i class="fmt fmt-rund"></i></button><button type="button" class="on" data-v="quad" aria-pressed="true" aria-label="Quadratisch" title="Quadratisch"><i class="fmt fmt-quad"></i></button><button type="button" data-v="hoch" aria-pressed="false" aria-label="Hochformat" title="Hochformat"><i class="fmt fmt-hoch"></i></button><button type="button" data-v="quer" aria-pressed="false" aria-label="Querformat" title="Querformat"><i class="fmt fmt-quer"></i></button></div></fieldset>
       <fieldset><legend>Größe</legend><div class="seg seg4 sizes-seg" data-k="size">
         {% for k in ['S','M','L','XL'] %}<button type="button" data-v="{{ k }}" class="{{ 'on' if k == 'M' }}" aria-pressed="{{ 'true' if k == 'M' else 'false' }}"><b>{{ k }}</b><small></small></button>{% endfor %}</div></fieldset>
       <fieldset><legend>Holz</legend><div class="dots" data-k="wood">
@@ -445,7 +445,7 @@
       vis(rect, !round); vis(disc, round);
       if (round) { disc.setAttribute('cx', cx); disc.setAttribute('cy', y + h / 2); disc.setAttribute('r', w / 2); }
       else { [['x', x], ['y', y], ['width', w], ['height', h]].forEach(([k, v]) => rect.setAttribute(k, v)); }
-      const d = (round ? .95 : .9) * Math.min(w, h), ay = y + h / 2;
+      const d = (round ? .95 : .92) * Math.min(w, h), ay = y + h / 2;
       [['x', cx - d / 2], ['y', ay - d / 2], ['width', d], ['height', d]].forEach(([k, v]) => art.setAttribute(k, v));
       circ.setAttribute('cx', cx); circ.setAttribute('cy', ay); circ.setAttribute('r', d / 2);
       dim.setAttribute('y', bottom + 7); dim.textContent = round ? `Ø ${w} cm` : `${w} × ${h} cm`;
@@ -459,7 +459,7 @@
       $$('.sizes-seg button').forEach(b => { const [bw, bh] = CFG.sizes[st.fmt][b.dataset.v];
         b.querySelector('small').textContent = round ? `Ø ${bw}` : `${bw}×${bh}`; });
       const area = w * h * (round ? CFG.round_area : 1);
-      const cents = Math.ceil((CFG.base_cents + Math.round(Math.max(0, area - CFG.base_area) * CFG.cents_per_cm2) + CFG.wood[st.wood][1] * 100) / 100) * 100;   /* volle Euro wie im Warenkorb */
+      const cents = Math.ceil((CFG.base_cents + Math.round(Math.max(0, area - CFG.base_area) * CFG.cents_per_cm2) + CFG.wood[st.wood][1] * 100) / 500) * 500 - 1;   /* wie im Warenkorb: nächster Fünfer minus 1 Cent */
       $('#rpLabel').textContent = `${FMT[st.fmt]} ${st.size}, ${CFG.wood[st.wood][0]}`;
       $('#rpPrice').textContent = 'ab ' + euro(cents);
     };

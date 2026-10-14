@@ -3,7 +3,7 @@
 {% block nav %}<a href="/" class="btn">Zur Startseite</a>{% endblock %}
 {% block content %}
 <ol class="steps" id="steps">
-  <li><b>1</b><span>Bild</span></li><li><b>2</b><span>Format</span></li><li><b>3</b><span>Untergrund</span></li><li><b>4</b><span>Faden</span></li><li><b>5</b><span>Pins</span></li>
+  <li><b>1</b><span>Bild</span></li><li><b>2</b><span>Format</span></li><li><b>3</b><span>Untergrund</span></li><li><b>4</b><span>Faden</span></li><li><b>5</b><span>Pins</span></li><li><b>6</b><span>Ergebnis</span></li>
 </ol>
 
 <div id="buildinfo" data-build="b32" hidden></div>
@@ -87,6 +87,12 @@
       </select></div>
     <div class="field"><label for="pins">Anzahl Pins</label>
       <select id="pins"><option value="240">240 Pins (Standard)</option><option value="360">360 Pins (+{{ cfg.pricing.pins[360] }} €)</option></select></div>
+    <p class="price" id="price5"></p>
+    <p class="hint">Mit „Varianten berechnen“ rechnen wir drei Varianten für dich. Danach wählst du im letzten Schritt deinen Favoriten.</p>
+  </section>
+  <section data-step="6" hidden>
+    <h2>Dein Ergebnis</h2>
+    <p class="hint" style="margin-bottom:1rem">Tippe auf deine Lieblingsvariante. Nägel oder Pins ändern? Geh einen Schritt zurück, dann rechnen wir neu.</p>
     <p class="price" id="price"></p>
     <p class="hint">Vorläufiger Preis. Der Endpreis wird beim Bezahlen vom Server berechnet.</p>
     <details class="vbox"{% if voucher %} open{% endif %}><summary>Gutschein oder Rabattcode einlösen</summary>

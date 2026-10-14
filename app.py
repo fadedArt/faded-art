@@ -282,8 +282,8 @@ def update_variant(ref, key, pct=None, live=None, ready=False, used=None, lines=
         _write(ref, m)
 
 def ring_cm(m):
-    """Durchmesser des Nagelkreises: bei rundem Holz sitzen die Nägel direkt am Rand (95 %), sonst 90 % der kürzeren Seite."""
-    return (0.95 if m.get("fmt") in ROUND_FORMATS else 0.9) * min(m["w"], m["h"])
+    """Durchmesser des Nagelkreises: bei rundem Holz sitzen die Nägel direkt am Rand (95 %), sonst 92 % der kürzeren Seite."""
+    return (0.95 if m.get("fmt") in ROUND_FORMATS else 0.92) * min(m["w"], m["h"])   # 50-cm-Brett: Kreis 46 cm (Radius 23)
 
 def board_label(m):
     return f"rund, Durchmesser {m['w']} cm" if m.get("fmt") in ROUND_FORMATS else f"{m['w']} x {m['h']} cm"
@@ -294,7 +294,7 @@ def price_cents(m):
     area = m["w"] * m["h"] * (ROUND_AREA if m.get("fmt") in ROUND_FORMATS else 1)
     extra = max(0, area - BASE_AREA) * CENTS_PER_CM2
     total = BASE_CENTS + round(extra) + (WOOD[m["wood"]][2] + PINS[m["pins"]] + (MULTI_EUR if m.get("color") == MULTI else 0) + (SW_EUR if m.get("color") == SW else 0)) * 100
-    return int(math.ceil(total / 100)) * 100                 # volle Euro
+    return int(math.ceil(total / 500)) * 500 - 1               # auf den nächsten Fünfer aufrunden, minus 1 Cent: 79,99 / 99,99 / 129,99 €
 
 
 # ---------- String-Art-Berechnung (dein Algorithmus, pro Bestellung isoliert) ----------
