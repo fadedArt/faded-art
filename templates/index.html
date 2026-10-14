@@ -2,6 +2,7 @@
 {% block title %}Faded Art – Dein Foto, gespannt aus Faden{% endblock %}
 {% block body_class %}home2{% endblock %}
 
+{% block head %}<script type="application/ld+json">{{ ld|tojson }}</script>{% endblock %}
 {% block content %}
 <!-- Faden-Leiste rechts: füllt sich beim Scrollen, ein Nagel je Abschnitt -->
 <nav class="thread" aria-label="Abschnitte der Seite">

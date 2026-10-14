@@ -17,6 +17,10 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=asset_v('style.css')) }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='home.css', v=asset_v('home.css')) }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='clean.css', v=asset_v('clean.css')) }}">
+<script type="application/ld+json">{{ {"@context": "https://schema.org", "@type": "OnlineStore", "name": "Faded Art", "url": request.url_root,
+  "logo": url_for('static', filename='img/logo-siegel.svg', _external=True), "founder": {"@type": "Person", "name": shop.name},
+  "telephone": shop.telefon, "email": shop.email or None,
+  "address": {"@type": "PostalAddress", "streetAddress": shop.strasse, "postalCode": shop.ort.split(' ')[0], "addressLocality": shop.ort.split(' ', 1)[1] if ' ' in shop.ort else shop.ort, "addressCountry": "DE"}}|tojson }}</script>
 {% block head %}{% endblock %}
 </head>
 <body class="v2 {% block body_class %}page{% endblock %}">

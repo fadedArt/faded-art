@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import stripe
-from flask import Flask, abort, jsonify, render_template, render_template_string, request, send_file, session
+from flask import Flask, url_for, abort, jsonify, render_template, render_template_string, request, send_file, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 from fpdf import FPDF
@@ -1427,7 +1427,13 @@ def index():
     woods = [(k, v[0], v[2]) for k, v in WOOD.items()]
     room = {"sizes": SIZES, "base_cents": BASE_CENTS, "base_area": BASE_AREA, "cents_per_cm2": CENTS_PER_CM2,
             "round_area": ROUND_AREA, "round": sorted(ROUND_FORMATS), "wood": {k: [v[0], v[2]] for k, v in WOOD.items()}}
-    return render_template("index.html", sizes=sizes, woods=woods, sw_eur=SW_EUR, pins_eur=PINS[360], note=PREORDER_NOTE, room=room)
+    ld = {"@context": "https://schema.org", "@type": "Product", "name": "Fadenbild nach deinem Foto",
+          "description": "Personalisiertes Fadenbild (String Art) aus deinem Foto, aus schwarzem oder schwarzem und weißem Faden um 240 oder 360 Nägel gespannt, auf Holz.",
+          "brand": {"@type": "Brand", "name": "Faded Art"}, "image": [url_for("static", filename="img/wand-katze.jpg", _external=True)],
+          "offers": {"@type": "AggregateOffer", "priceCurrency": "EUR", "lowPrice": f"{min(c for *_, c in sizes) / 100:.2f}",
+                     "highPrice": f"{max(c for *_, c in sizes) / 100 + max(v[2] for v in WOOD.values()) + PINS[360] + SW_EUR:.2f}",
+                     "offerCount": len(sizes), "availability": "https://schema.org/PreOrder"}}
+    return render_template("index.html", sizes=sizes, woods=woods, sw_eur=SW_EUR, pins_eur=PINS[360], note=PREORDER_NOTE, room=room, ld=ld)
 
 @app.get("/configure")
 def configure():
@@ -1699,6 +1705,33 @@ def inject_cart():
 @app.errorhandler(413)
 def too_big(e):
     return jsonify(message="Das Bild ist zu groß (maximal 16 MB)"), 413
+
+app.jinja_env.filters.update(cos=math.cos, sin=math.sin)
+
+@app.errorhandler(404)
+def not_found(e):
+    if request.path.startswith(("/api/", "/status/", "/live/", "/preview/", "/thumb/", "/zoom/", "/admin", "/static/")):
+        return jsonify(message="Nicht gefunden"), 404           # Technik-Adressen: weiter JSON für den Browser-Code
+    return render_template("404.html"), 404
+
+PUBLIC_PAGES = ["/", "/configure", "/gutschein", "/ueber-uns", "/impressum", "/datenschutz", "/agb", "/widerruf"]
+
+@app.get("/robots.txt")
+def robots():
+    body = ("User-agent: *\nAllow: /\n"
+            "Disallow: /admin\nDisallow: /api/\nDisallow: /status/\nDisallow: /live/\nDisallow: /preview/\n"
+            "Disallow: /thumb/\nDisallow: /zoom/\nDisallow: /warenkorb\nDisallow: /success\n"
+            f"\nSitemap: {request.url_root}sitemap.xml\n")
+    return app.response_class(body, mimetype="text/plain")
+
+@app.get("/sitemap.xml")
+def sitemap():
+    root = request.url_root.rstrip("/")
+    day = datetime.fromtimestamp(os.path.getmtime(__file__)).strftime("%Y-%m-%d")
+    urls = "".join(f"<url><loc>{root}{p}</loc><lastmod>{day}</lastmod><priority>{'1.0' if p == '/' else '0.8' if p in ('/configure', '/gutschein') else '0.3'}</priority></url>"
+                   for p in PUBLIC_PAGES)
+    xml = f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>'
+    return app.response_class(xml, mimetype="application/xml")
 
 @app.errorhandler(400)
 def bad_request(e):
