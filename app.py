@@ -1434,8 +1434,15 @@ def configure():
     warm_up_once()                          # Rechenkerne übersetzen, während der Kunde sein Foto auswählt
     cfg = {"sizes": SIZES, "pricing": {
         "test_quad_cents": TEST_QUAD_CENTS, "round_factor": ROUND_AREA, "base_cents": BASE_CENTS, "base_area": BASE_AREA, "cents_per_cm2": CENTS_PER_CM2,
-        "wood": {k: v[2] for k, v in WOOD.items()}, "pins": PINS, "multi": MULTI_EUR, "sw": SW_EUR}}
+        "wood": {k: v[2] for k, v in WOOD.items()}, "pins": PINS, "multi": MULTI_EUR, "sw": SW_EUR, "vat": price_note()}}
     return render_template("configure.html", cfg=cfg)
+
+def price_note():
+    """Hinweis hinter jedem Preis: Kleinunternehmer dürfen keine Umsatzsteuer ausweisen."""
+    ship = euro(min(v[2][0] for v in SHIP.values()))
+    if SHOP["ust"] == "klein":
+        return f"kein Ausweis der Umsatzsteuer nach § 19 UStG, zzgl. Versand ab {ship}"
+    return f"inkl. MwSt., zzgl. Versand ab {ship}"
 
 @app.get("/ueber-uns")
 def about():

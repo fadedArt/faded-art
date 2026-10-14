@@ -30,7 +30,7 @@ function price() {
   const area = c.w * c.h * (c.format === 'rund' ? PRICE.round_factor : 1);
   const cents = PRICE.base_cents + Math.max(0, area - PRICE.base_area) * PRICE.cents_per_cm2;
   const p = Math.round(cents) / 100 + PRICE.wood[c.wood] + PRICE.pins[c.pins] + (c.multi ? PRICE.multi || 0 : 0) + (c.sw ? PRICE.sw || 0 : 0);
-  $('price').textContent = 'Preis: ' + p.toFixed(2).replace('.', ',') + ' € (inkl. MwSt., zzgl. Versand ab 7,90 €)';
+  $('price').textContent = 'Preis: ' + p.toFixed(2).replace('.', ',') + ' € (' + (PRICE.vat || 'zzgl. Versand') + ')';
 }
 
 let threadTouched = false;
@@ -105,12 +105,13 @@ $('file').addEventListener('change', e => {
   const f = e.target.files[0]; if (!f) return;
   if (!/^image\/(jpeg|png)$/.test(f.type) || f.size > 15 * 1024 * 1024) { msg('Bitte JPG oder PNG bis 15 MB wählen.'); e.target.value = ''; return; }
   msg(''); forgotten = false; const url = URL.createObjectURL(f);          // neues Foto: wieder merken
+  if (step !== 1 || !$('variants').hidden || orderRef) { freshUI(); show(1); }   // mitten in der Bestellung: alles zurück auf Anfang
   useImage(url, null).then(() => { URL.revokeObjectURL(url); storeImage(); saveState({ job: null, variant: null }); });
 });
 function useImage(url, v) {                                   // Foto anzeigen; v = gespeicherter Ausschnitt (nach Zurück-Taste)
   return new Promise(res => {
     img.onload = () => { hasImg = true; fit(); if (v) { view.x = v.x; view.y = v.y; view.s = v.s; $('zoom').value = v.s; }
-      $('ph').hidden = true; cv.hidden = false; $('zoomBox').hidden = false; $('bgBox').hidden = false; $('result').hidden = true; orderRef = null;
+      $('ph').hidden = true; cv.hidden = false; $('zoomBox').hidden = false; $('bgBox').hidden = false; $('restartRow').hidden = false; $('result').hidden = true; orderRef = null;
       cut = null; $('cutTools').hidden = true; setTool('move'); draw(); if ($('bgcut').checked) freistellen(); res(); };
     img.onerror = () => { msg('Das Bild konnte nicht gelesen werden.'); res(); };
     img.src = url;
@@ -677,6 +678,21 @@ $('buy').addEventListener('click', async () => {
   if (!orderRef) return msg('Bitte zuerst die Vorschau berechnen.');
   try { await addToCart(); forget(); location.href = '/warenkorb'; }
   catch (err) { msg('Kauf nicht möglich: ' + err.message); }
+});
+
+// "Neues Bild wählen": Fotoauswahl öffnen; beim neuen Foto wird alles zurückgesetzt
+function freshUI() {
+  dropSpec();
+  ['variants', 'checkout', 'bigInfo', 'big', 'spin', 'result', 'roomC', 'sugg'].forEach(id => { const el = $(id); if (el) el.hidden = true; });
+  $('cartinfo').textContent = ''; variantKey = null; fin = {}; orderRef = null; curRef = null;
+  try { sessionStorage.removeItem(SKEY); } catch (e) {}
+}
+$('restart').addEventListener('click', () => {
+  if (busy) {                                                   // Berechnung läuft: abbrechen und leer neu starten
+    if (curRef) fetch('/cancel/' + curRef, { method: 'POST' }).catch(() => {});
+    forget(); location.href = '/configure?neu=1'; return;
+  }
+  $('file').value = ''; $('file').click();
 });
 
 const FRESH = new URLSearchParams(location.search).has('neu');      // ?neu=1: nach einer Bestellung frisch anfangen

@@ -349,3 +349,8 @@ body.v2.page .menu summary{color:var(--gold-hi)}
 .zoomov .zscroll{touch-action:pan-x pan-y;cursor:grab}
 .zoomov .zscroll img{user-select:none;-webkit-user-drag:none}
 .zoomov{z-index:60}.zoomov .zbar{padding-top:max(.6rem,env(safe-area-inset-top,0px))}
+/* Neues Bild wählen */
+.restart-row{display:flex;justify-content:flex-end;margin:-.75rem 0 .75rem}
+.restart{display:inline-flex;align-items:center;gap:.45rem;font:inherit;font-size:.88rem;color:var(--gold-hi);background:transparent;border:1px solid var(--line);border-radius:999px;padding:.45rem .95rem;cursor:pointer}
+.restart::before{content:"↺";font-size:1rem;line-height:1}
+.restart:hover{border-color:var(--gold)}

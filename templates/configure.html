@@ -9,6 +9,7 @@
 <div id="buildinfo" data-build="b32" hidden></div>
 <form id="cfg" class="cfg" novalidate data-cfg='{{ cfg|tojson }}'>
 <div class="card panel">
+  <div class="restart-row" id="restartRow" hidden><button type="button" class="restart" id="restart">Neues Bild wählen</button></div>
   <section data-step="1">
     <h2>Foto hochladen</h2>
     <div class="field"><label for="file">Bilddatei (JPG oder PNG, max. 15 MB)</label><input type="file" id="file" accept="image/jpeg,image/png"></div>
