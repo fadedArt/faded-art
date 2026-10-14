@@ -1436,7 +1436,7 @@ def configure():
 
 @app.get("/ueber-uns")
 def about():
-    return render_template("about.html")
+    return render_template("about.html", note=PREORDER_NOTE)
 
 @app.get("/success")
 def success():
