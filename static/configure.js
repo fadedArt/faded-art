@@ -413,7 +413,7 @@ function drawBig(s) {
   x.globalAlpha = 1; x.drawImage(s.cvs, 0, 0);
   if (s.prev) {
     const [x0, y0] = pinXY(s.prev[0], s.n), [x1, y1] = pinXY(s.prev[1], s.n);
-    x.strokeStyle = '#e6ca65'; x.globalAlpha = .95; x.lineWidth = 2.5; x.beginPath(); x.moveTo(x0, y0); x.lineTo(x1, y1); x.stroke();
+    x.strokeStyle = '#8fb3e0'; x.globalAlpha = .95; x.lineWidth = 2.5; x.beginPath(); x.moveTo(x0, y0); x.lineTo(x1, y1); x.stroke();
   }
   b.hidden = false; $('result').hidden = true; cv.hidden = true;
 }

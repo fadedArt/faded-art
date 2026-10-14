@@ -275,27 +275,38 @@
   const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
   const de = v => Math.round(v).toLocaleString('de-DE');
 
-  /* Hero: Logo spannt sich (Nagel i -> i+75, verblassender Ring) */
+  /* Hero: Logo spannt sich (Nagel i -> i+75, verblassender Ring). Silber im dunklen, Graphit im hellen Modus */
   (() => {
     const cv = $('#heroCanvas'), cnt = $('#heroN'), ctx = cv.getContext('2d'), S = cv.width, c = S / 2, R = S * .40, n = 240;
     const ang = i => Math.PI / 2 + 2 * Math.PI * (i % n) / n;
     const P = Array.from({ length: n }, (_, i) => [c + R * Math.cos(ang(i)), c + R * Math.sin(ang(i))]);
     const fade = i => Math.pow(Math.cos(2 * Math.PI * i / n + Math.PI) * .5 + .5, 1.6);
     const L = [];
-    for (let i = 0; i < n; i++) L.push([i, (i + 75) % n, 'rgba(222,184,82,' + (.05 + .5 * fade(i)).toFixed(3) + ')', 1.4]);
-    for (let i = 0; i < n; i++) if (fade(i) > .25) L.push([i, (i + 100) % n, 'rgba(242,236,222,' + (.18 * fade(i)).toFixed(3) + ')', 1.2]);
-    ctx.strokeStyle = 'rgba(201,162,74,.55)'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(c, c, R + 22, 0, 7); ctx.stroke();
-    ctx.strokeStyle = 'rgba(201,162,74,.25)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(c, c, R + 34, 0, 7); ctx.stroke();
-    const pin = i => { const [x, y] = P[i];
-      ctx.fillStyle = '#8a6b26'; ctx.beginPath(); ctx.arc(x, y, 3.2, 0, 7); ctx.fill();
-      ctx.fillStyle = '#f3dd96'; ctx.beginPath(); ctx.arc(x - .9, y - .9, 1.3, 0, 7); ctx.fill(); };
-    let i = 0, pd = 0;
+    for (let i = 0; i < n; i++) L.push([i, (i + 75) % n, 0, .05 + .5 * fade(i), 1.4]);
+    for (let i = 0; i < n; i++) if (fade(i) > .25) L.push([i, (i + 100) % n, 1, .18 * fade(i), 1.2]);
+    const pal = () => document.documentElement.dataset.theme === 'light'
+      ? { line: ['43,49,56', '120,128,138'], mix: 'multiply', ring: '95,104,115', pin: '#8d949c', hi: '#ffffff' }
+      : { line: ['214,220,228', '255,255,255'], mix: 'lighter', ring: '167,174,183', pin: '#6f767e', hi: '#f4f6f8' };
+    let i = 0, pd = 0, C = pal();
+    const rings = () => {
+      ctx.strokeStyle = `rgba(${C.ring},.55)`; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(c, c, R + 22, 0, 7); ctx.stroke();
+      ctx.strokeStyle = `rgba(${C.ring},.25)`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(c, c, R + 34, 0, 7); ctx.stroke(); };
+    const pin = k => { const [x, y] = P[k];
+      ctx.fillStyle = C.pin; ctx.beginPath(); ctx.arc(x, y, 3.2, 0, 7); ctx.fill();
+      ctx.fillStyle = C.hi; ctx.beginPath(); ctx.arc(x - .9, y - .9, 1.3, 0, 7); ctx.fill(); };
+    const line = j => { const [a, b, f, al, w] = L[j];
+      ctx.strokeStyle = `rgba(${C.line[f]},${al.toFixed(3)})`; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(P[a][0], P[a][1]); ctx.lineTo(P[b][0], P[b][1]); ctx.stroke(); };
     const pinsTo = k => { for (; pd < Math.min(n, k); pd++) pin(pd); };
-    const step = k => { ctx.globalCompositeOperation = 'lighter';
-      for (let e = Math.min(L.length, i + k); i < e; i++) { const [a, b, col, w] = L[i];
-        ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(P[a][0], P[a][1]); ctx.lineTo(P[b][0], P[b][1]); ctx.stroke(); }
+    const step = k => { ctx.globalCompositeOperation = C.mix;
+      for (let e = Math.min(L.length, i + k); i < e; i++) line(i);
       ctx.globalCompositeOperation = 'source-over'; };
-    const done = () => { for (let k = 0; k < n; k++) pin(k); cnt.textContent = de(L.length); $('.hero-ring').classList.add('on'); };
+    const redraw = () => {                                        // nach Umschalten Hell/Dunkel: alles bisher Gespannte neu zeichnen
+      C = pal(); ctx.clearRect(0, 0, S, S); rings();
+      ctx.globalCompositeOperation = C.mix; for (let j = 0; j < i; j++) line(j); ctx.globalCompositeOperation = 'source-over';
+      for (let k = 0; k < pd; k++) pin(k); };
+    addEventListener('fa-theme', redraw);
+    rings();
+    const done = () => { for (let k = 0; k < n; k++) pin(k); pd = n; cnt.textContent = de(L.length); $('.hero-ring').classList.add('on'); };
     if (reduce) { pinsTo(n); step(L.length); return done(); }
     const t0 = performance.now(), PIN = 1800, DUR = 15000;
     const frame = t => { const e = t - t0;
@@ -313,8 +324,8 @@
     const sc = $('#scrub'), fillEl = $('.scrub-fill'), knob = $('.scrub-knob'), ticks = $('.scrub-ticks');
     let D = null, P, cum, drawn = 0, cur, N = 1, val = 0, play = null;
     const col = ['rgba(14,12,10,.45)', 'rgba(240,233,220,.42)'];
-    const reset = () => { ctx.clearRect(0, 0, S, S); ctx.fillStyle = '#100d0a'; ctx.beginPath(); ctx.arc(c, c, c, 0, 7); ctx.fill();
-      ctx.fillStyle = '#b48d3c'; P.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, 2, 0, 7); ctx.fill(); }); drawn = 0; cur = D.s.slice(); };
+    const reset = () => { ctx.clearRect(0, 0, S, S); ctx.fillStyle = '#0f1012'; ctx.beginPath(); ctx.arc(c, c, c, 0, 7); ctx.fill();
+      ctx.fillStyle = '#a9b0b8'; P.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, 2, 0, 7); ctx.fill(); }); drawn = 0; cur = D.s.slice(); };
     const drawTo = k => { if (k < drawn) reset(); ctx.lineWidth = 1.05;
       for (; drawn < k; drawn++) { const f = +D.k[drawn], a = P[cur[f]], b = P[D.p[drawn]];
         ctx.strokeStyle = col[f]; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); cur[f] = D.p[drawn]; } };
