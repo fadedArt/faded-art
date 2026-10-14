@@ -1091,25 +1091,59 @@ def admin_ok():
 
 @app.get("/admin")
 def admin():
+    """Nur bezahlte Bestellungen. Antippen öffnet den Auftrag mit allem für die Maschine."""
     if not admin_ok():
         abort(404)
     rows = []
     for ref in os.listdir(DATA_DIR):
         m = load(ref)
-        if m and m.get("status") == "done" and (m.get("paid") or m.get("variant") or request.args.get("alle")):
-            rows.append(dict(ref=ref, paid=m.get("paid", False), email=m.get("email") or "", title=item_title(m),
-                             cents=price_cents(m), created=time.strftime("%d.%m.%Y %H:%M", time.localtime(m.get("created", 0)))))
-    rows.sort(key=lambda r: (not r["paid"], r["created"]), reverse=False)
-    return render_template_string("""<!doctype html><meta name=viewport content="width=device-width,initial-scale=1"><title>Bestellungen</title>
-<body style="font-family:system-ui;background:#111;color:#eee;padding:1rem"><h1>Bestellungen</h1><p><a style="color:#e6ca65" href="/admin/bewertungen?key={{ key|urlencode }}">Bewertungen verwalten</a> · <a style="color:#e6ca65" href="/admin/creator?key={{ key|urlencode }}">Creator-Codes</a></p>
-{% for r in rows %}<p style="border-bottom:1px solid #333;padding:.6rem 0"><b>{{ "BEZAHLT" if r.paid else "nicht bezahlt" }}</b> {{ r.created }}<br>
-{{ r.title }}, {{ (r.cents / 100)|round(2) }} €<br>{{ r.email }}<br>
-<a style="color:#e6ca65" href="/admin/{{ r.ref }}/anleitung.pdf?key={{ key|urlencode }}">Anleitung (PDF)</a> |
-<a style="color:#e6ca65" href="/admin/{{ r.ref }}/anleitung.txt?key={{ key|urlencode }}">als Text</a> |
-<a style="color:#e6ca65" href="/admin/{{ r.ref }}/pinfolge.txt?key={{ key|urlencode }}">Pinfolge</a> |
-<a style="color:#e6ca65" href="/admin/{{ r.ref }}/final.png?key={{ key|urlencode }}">Bild in voller Größe</a></p>{% else %}<p>Noch keine Bestellungen.</p>{% endfor %}
-<p style="color:#999;margin-top:1.5rem">Gezeigt: bezahlte Bestellungen und Bilder im Warenkorb. <a style="color:#e6ca65" href="?key={{ key|urlencode }}&alle=1">Alle Berechnungen zeigen</a></p>""",
-        rows=rows, key=request.args.get("key"))
+        if m and m.get("paid"):
+            rows.append(dict(ref=ref, nr=ref[:6].upper(), title=item_title(m), email=m.get("email") or "", cents=price_cents(m),
+                             done=bool(m.get("gespannt")), t=m.get("created", 0),
+                             created=time.strftime("%d.%m.%Y %H:%M", time.localtime(m.get("created", 0)))))
+    rows.sort(key=lambda r: (r["done"], -r["t"]))          # offene zuerst, neueste oben
+    return render_template_string(ADMIN_CSS + """<title>Bestellungen</title>
+<h1>Bestellungen</h1><p class=nav><a href="/admin/bewertungen?key={{ key|urlencode }}">Bewertungen</a> · <a href="/admin/creator?key={{ key|urlencode }}">Creator-Codes</a></p>
+<p class=sub>{{ rows|rejectattr('done')|list|length }} offen · {{ rows|selectattr('done')|list|length }} gespannt</p>
+{% for r in rows %}<a class=row href="/admin/auftrag/{{ r.ref }}?key={{ key|urlencode }}">
+<b>Nr. {{ r.nr }}</b> <span class="tag {{ 'ok' if r.done else 'open' }}">{{ 'gespannt' if r.done else 'offen' }}</span><br>
+{{ r.title }}<br><span class=sub>{{ r.created }} · {{ r.cents|euro }} · {{ r.email }}</span></a>
+{% else %}<p>Noch keine bezahlten Bestellungen.</p>{% endfor %}""", rows=rows, key=request.args.get("key"))
+
+ADMIN_CSS = """<!doctype html><meta name=viewport content="width=device-width,initial-scale=1"><meta name=robots content=noindex>
+<style>body{font-family:system-ui;background:#111;color:#eee;padding:1rem;max-width:720px;margin:auto}a{color:#e6ca65}
+.row{display:block;color:#eee;text-decoration:none;border:1px solid #333;border-radius:10px;padding:.9rem;margin:.6rem 0}
+.sub{color:#999;font-size:.9rem}.tag{font-size:.75rem;padding:.1rem .45rem;border-radius:99px;margin-left:.3rem}.ok{background:#264;color:#bfb}.open{background:#653;color:#fd9}
+.btn{display:block;text-align:center;background:#e6ca65;color:#111;font-weight:600;padding:.9rem;border-radius:10px;margin:.5rem 0;text-decoration:none;border:0;width:100%;font-size:1rem}
+.btn2{background:#222;color:#eee;border:1px solid #444}table{width:100%;border-collapse:collapse}td{padding:.35rem 0;border-bottom:1px solid #2a2a2a}td:first-child{color:#999;width:45%}</style>"""
+
+@app.route("/admin/auftrag/<ref>", methods=["GET", "POST"])
+def admin_order(ref):
+    m = load(ref) if admin_ok() else None
+    if not m or not m.get("paid"):
+        abort(404)
+    if request.method == "POST":
+        update(ref, gespannt=None if m.get("gespannt") else time.time())
+        m = load(ref)
+    job = machine_job(ref) or {}
+    k = request.args.get("key")
+    info = [("Bestellnummer", ref[:6].upper()), ("Bestellt am", time.strftime("%d.%m.%Y %H:%M", time.localtime(m.get("created", 0)))),
+            ("Produkt", item_title(m)), ("Brett", f"{m['w']} × {m['h']} cm"), ("Nägel", m["pins"]),
+            ("Kreis-Durchmesser", f"{job.get('ring_cm', round(ring_cm(m), 1))} cm"), ("Fadenstärke", f"{m.get('thick')} mm"),
+            ("Faden-Abschnitte", " → ".join(thread_name(r["color"]) if r["color"] in COLORS or r["color"] in MULTI_COLORS else str(r["color"]) for r in job.get("runs", []))),
+            ("Verbindungen", job.get("lines", "–")), ("Preis", euro(price_cents(m))), ("Kunde", m.get("email") or "–"),
+            ("Status", "gespannt am " + time.strftime("%d.%m.%Y", time.localtime(m["gespannt"])) if m.get("gespannt") else "offen")]
+    return render_template_string(ADMIN_CSS + """<title>Auftrag {{ nr }}</title>
+<p><a href="/admin?key={{ key|urlencode }}">← alle Bestellungen</a></p><h1>Auftrag {{ nr }}</h1>
+<img src="/admin/{{ ref }}/final.png?key={{ key|urlencode }}" style="width:100%;max-width:420px;display:block;margin:0 auto 1rem;border-radius:8px">
+<table>{% for a, b in info %}<tr><td>{{ a }}</td><td>{{ b }}</td></tr>{% endfor %}</table>
+<h2>Für die Maschine</h2>
+<a class=btn href="/admin/{{ ref }}/anleitung.pdf?key={{ key|urlencode }}">Anleitung (PDF)</a>
+<a class="btn btn2" href="/admin/{{ ref }}/pinfolge.txt?key={{ key|urlencode }}">Pinfolge (Text)</a>
+<a class="btn btn2" href="/api/maschine/{{ ref }}?key={{ key|urlencode }}">Maschinendaten (JSON)</a>
+<p class=sub>Die Maschine kann den Auftrag auch direkt holen: {{ host }}api/maschine/{{ nr|lower }}?key=… Darin stehen Nägelzahl, Kreisdurchmesser, Fadenfarben und alle Pins in Reihenfolge.</p>
+<form method=post><button class="btn btn2">{{ 'Doch nicht gespannt' if done else 'Als gespannt markieren' }}</button></form>""",
+        nr=ref[:6].upper(), ref=ref, key=k, info=info, done=bool(m.get("gespannt")), host=request.host_url)
 
 # ---------- Bewertungen: nur echte Käufer (Link mit Bestellnummer), Freigabe unter /admin/bewertungen?key=ADMIN_KEY ----------
 RV_FILE = os.path.join(DATA_DIR, "bewertungen.json")
@@ -1518,6 +1552,8 @@ def machine_job(ref):
     """Alles, was die Spannmaschine braucht: Nagelzahl, Kreisdurchmesser und die Abschnitte [(Farbe, Pins)] in Spannreihenfolge."""
     m = load(ref)
     p = os.path.join(odir(ref), "pinfolge.txt")
+    if m and not os.path.exists(p):
+        p = os.path.join(odir(ref), f"pinfolge_{m.get('variant') or 'a'}.txt")
     if not m or not os.path.exists(p):
         return None
     names = {thread_name(k): k for k in list(COLORS) + list(MULTI_COLORS)}
