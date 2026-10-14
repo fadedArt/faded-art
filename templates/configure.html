@@ -114,7 +114,8 @@
   </div>
   <div class="biginfo" id="bigInfo" hidden><span id="bigLines"></span><button type="button" class="btn" id="zoomBtn" hidden>Heranzoomen</button></div>
   <div class="zoomov" id="zoomOv" hidden role="dialog" aria-label="Bild vergrößert">
-    <div class="zbar"><button type="button" class="btn" id="zminus" aria-label="Verkleinern">−</button><button type="button" class="btn" id="zplus" aria-label="Vergrößern">+</button><button type="button" class="btn btn-gold" id="zclose">Schließen</button></div>
+    <div class="zbar"><button type="button" class="btn" id="zminus" aria-label="Verkleinern">−</button><input type="range" id="zrange" min="1" max="8" step="0.01" value="2" aria-label="Zoomstufe"><button type="button" class="btn" id="zplus" aria-label="Vergrößern">+</button><span id="zval" class="zval">200 %</span><button type="button" class="btn btn-gold" id="zclose">Schließen</button></div>
+    <p class="zhint">Ziehen zum Verschieben · Mausrad oder zwei Finger zum Zoomen · Doppeltippen springt hinein und heraus</p>
     <div class="zscroll" id="zscroll"><img id="zimg" alt="Fadenbild in voller Auflösung"></div>
   </div>
   <div id="variants" hidden>

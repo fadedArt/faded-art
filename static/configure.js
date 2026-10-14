@@ -610,15 +610,51 @@ async function pollSugg(id, want) {                             // Vorschläge l
 }
 
 // Zoom: fertiges Bild in voller Auflösung, einzelne Fäden sichtbar
+// Heranzoomen: Regler, Plus/Minus, Mausrad, Ziehen mit der Maus, Zwei-Finger-Zoom und Doppeltippen
 let zl = 2;
-const zset = () => { $('zimg').style.width = (zl * 100) + '%'; };
+const ZMIN = 1, ZMAX = 8, zsc = () => $('zscroll');
+function zoomTo(z, fx, fy) {                                      // fx, fy: Punkt im Sichtfenster, der beim Zoomen stehen bleibt
+  const sc = zsc(), r = sc.getBoundingClientRect(), img = $('zimg');
+  z = Math.min(ZMAX, Math.max(ZMIN, z));
+  if (fx === undefined) { fx = r.width / 2; fy = r.height / 2; }
+  const w0 = img.offsetWidth || 1, h0 = img.offsetHeight || 1;
+  const px = (sc.scrollLeft + fx) / w0, py = (sc.scrollTop + fy) / h0;   // Anteil im Bild unter dem Fixpunkt
+  zl = z; img.style.width = (zl * 100) + '%';
+  const w1 = img.offsetWidth, h1 = img.offsetHeight;
+  sc.scrollLeft = px * w1 - fx; sc.scrollTop = py * h1 - fy;
+  $('zrange').value = zl; $('zval').textContent = Math.round(zl * 100) + ' %';
+}
 $('zoomBtn').addEventListener('click', () => {
   if (!variantKey || !curRef) return;
-  $('zimg').src = '/zoom/' + curRef + '/' + variantKey + '.png'; zl = 2; zset(); $('zoomOv').hidden = false;
-  const sc = $('zscroll'); setTimeout(() => { sc.scrollLeft = (sc.scrollWidth - sc.clientWidth) / 2; sc.scrollTop = (sc.scrollHeight - sc.clientHeight) / 2; }, 300);
+  $('zimg').src = '/zoom/' + curRef + '/' + variantKey + '.png'; $('zoomOv').hidden = false;
+  const go = () => { $('zimg').style.width = '100%'; zl = 1; zoomTo(2); };
+  $('zimg').complete ? setTimeout(go, 50) : ($('zimg').onload = go);
 });
-$('zplus').addEventListener('click', () => { zl = Math.min(8, zl * 1.5); zset(); });
-$('zminus').addEventListener('click', () => { zl = Math.max(1, zl / 1.5); zset(); });
+$('zplus').addEventListener('click', () => zoomTo(zl * 1.5));
+$('zminus').addEventListener('click', () => zoomTo(zl / 1.5));
+$('zrange').addEventListener('input', e => zoomTo(parseFloat(e.target.value)));
+zsc().addEventListener('wheel', e => {                            // Mausrad / Trackpad: zum Mauszeiger hin zoomen
+  e.preventDefault(); const r = zsc().getBoundingClientRect();
+  zoomTo(zl * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX - r.left, e.clientY - r.top);
+}, { passive: false });
+let zdrag = null;                                                  // Maus: Bild greifen und verschieben
+zsc().addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse') return; zdrag = { x: e.clientX, y: e.clientY }; zsc().setPointerCapture(e.pointerId); zsc().style.cursor = 'grabbing'; });
+zsc().addEventListener('pointermove', e => { if (!zdrag) return; zsc().scrollLeft -= e.clientX - zdrag.x; zsc().scrollTop -= e.clientY - zdrag.y; zdrag = { x: e.clientX, y: e.clientY }; });
+['pointerup', 'pointercancel'].forEach(t => zsc().addEventListener(t, () => { zdrag = null; zsc().style.cursor = 'grab'; }));
+let pinch = null, lastTap = 0;                                     // Handy: zwei Finger auseinander/zusammen
+const tdist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+zsc().addEventListener('touchstart', e => {
+  if (e.touches.length === 2) { const r = zsc().getBoundingClientRect();
+    pinch = { d: tdist(e.touches), z: zl, x: (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left, y: (e.touches[0].clientY + e.touches[1].clientY) / 2 - r.top }; e.preventDefault(); }
+  else if (e.touches.length === 1) {                               // Doppeltippen: hinein / heraus
+    const now = Date.now(), t = e.touches[0], r = zsc().getBoundingClientRect();
+    if (now - lastTap < 300) { zoomTo(zl < 2.5 ? 3 : 1, t.clientX - r.left, t.clientY - r.top); e.preventDefault(); }
+    lastTap = now;
+  }
+}, { passive: false });
+zsc().addEventListener('touchmove', e => { if (pinch && e.touches.length === 2) { e.preventDefault(); zoomTo(pinch.z * tdist(e.touches) / pinch.d, pinch.x, pinch.y); } }, { passive: false });
+zsc().addEventListener('touchend', e => { if (e.touches.length < 2) pinch = null; });
+zsc().addEventListener('dblclick', e => { const r = zsc().getBoundingClientRect(); zoomTo(zl < 2.5 ? 3 : 1, e.clientX - r.left, e.clientY - r.top); });
 $('zclose').addEventListener('click', () => { $('zoomOv').hidden = true; });
 
 async function addToCart() {

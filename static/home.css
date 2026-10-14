@@ -341,3 +341,11 @@ body.v2.page .menu summary{color:var(--gold-hi)}
 .room-c{margin-top:1.4rem;display:grid;gap:.7rem}
 .rc-ctl{gap:.7rem}
 .rc-ctl .dot{width:28px;height:28px}
+/* Zoom-Ansicht */
+.zoomov .zbar{align-items:center;flex-wrap:wrap}
+#zrange{width:min(42vw,280px);padding:0;accent-color:var(--gold)}
+.zval{min-width:3.6rem;text-align:center;color:var(--gold-hi);font-variant-numeric:tabular-nums;font-size:.9rem}
+.zhint{text-align:center;color:var(--muted);font-size:.8rem;margin:0 0 .4rem}
+.zoomov .zscroll{touch-action:pan-x pan-y;cursor:grab}
+.zoomov .zscroll img{user-select:none;-webkit-user-drag:none}
+.zoomov{z-index:60}.zoomov .zbar{padding-top:max(.6rem,env(safe-area-inset-top,0px))}
