@@ -1089,7 +1089,7 @@ def admin_ok():
     key = os.environ.get("ADMIN_KEY", "")
     return bool(key) and hmac.compare_digest(request.args.get("key", "").encode(), key.encode())   # Bytes: Umlaute im Schlüssel erlaubt
 
-@app.get("/admin")
+@app.get("/admin", strict_slashes=False)
 def admin():
     """Nur bezahlte Bestellungen. Antippen öffnet den Auftrag mit allem für die Maschine."""
     if not admin_ok():
