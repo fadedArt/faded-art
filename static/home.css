@@ -293,3 +293,13 @@ body.v2 .steps-v{max-width:none;margin:3rem 0 0}
 .cmp figcaption b{display:block;font-family:var(--serif);font-weight:500;font-size:1.35rem;color:var(--ivory)}
 .cmp-lux figcaption b{color:var(--gold-hi)}
 @media(max-width:900px) and (orientation:portrait),(max-width:600px){.cmp{grid-template-columns:1fr 1fr;gap:1.5rem 1rem}.cmp figcaption{font-size:.82rem}.cmp figcaption b{font-size:1.1rem}}
+/* Player unter dem Katzenbild */
+.player{display:flex;align-items:center;gap:.6rem;margin-top:1.5rem;flex-wrap:wrap}
+.player button{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--walnut-2);color:var(--ivory);display:grid;place-items:center;cursor:pointer;transition:border-color .2s,background .2s}
+.player button:hover{border-color:var(--gold)}
+.player button.main{width:54px;height:54px;background:linear-gradient(180deg,var(--gold-hi),var(--gold));border:0;color:#1a120a}
+.player svg{width:20px;height:20px;fill:currentColor}
+.player .main svg{width:24px;height:24px}
+.player .i-play,.player .paused .i-pause{display:none}
+.player .paused .i-play{display:block}
+.player-note{color:var(--muted);font-size:.9rem;margin-left:.4rem;min-width:11ch}

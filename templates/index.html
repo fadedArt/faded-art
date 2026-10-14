@@ -55,7 +55,13 @@
         <li><h3>Dann Schatten und Kontur.</h3><p>Der schwarze Faden zeichnet die Schatten, der weiße das Licht. Die Form tritt hervor.</p></li>
         <li><h3>Zum Schluss der Blick.</h3><p>Die letzten Fäden schärfen Augen und Fell. So viel Arbeit steckt in jedem Bild, das wir für Sie spannen.</p></li>
       </ol>
-      <p class="fine">Das ist die echte Spannreihenfolge unserer Software für dieses Foto. Ziehen Sie den Regler oder lassen Sie es <button type="button" class="linkbtn" id="replay">noch einmal abspielen</button>.</p>
+      <div class="player" role="group" aria-label="Spannen steuern">
+        <button type="button" id="pBack" aria-label="Rückwärts abspielen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 6 3 12l8 6zM20 6l-8 6 8 6z"/></svg></button>
+        <button type="button" id="pPlay" class="main" aria-label="Pause"><svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg><svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
+        <button type="button" id="pFwd" aria-label="Vorwärts abspielen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 6l8 6-8 6zM4 6l8 6-8 6z"/></svg></button>
+        <span class="player-note" id="pNote">Spannt sich</span>
+      </div>
+      <p class="fine">Das ist die echte Spannreihenfolge unserer Software für dieses Foto. Sie können auch am Regler ziehen.</p>
     </div>
   </div>
 </section>
@@ -303,11 +309,23 @@
       const si = val < .3 ? 0 : val < .7 ? 1 : 2;
       steps.forEach((li, j) => li.classList.toggle('on', j === si));
     };
-    const stop = () => { if (play) cancelAnimationFrame(play); play = null; };
-    const run = (from = 0) => { stop(); if (reduce) return set(1);
-      const t0 = performance.now(), dur = 11000 * (1 - from);
-      const f = t => { const p = Math.min(1, (t - t0) / dur), e = from + (1 - from) * (1 - Math.pow(1 - p, 2)); set(e); if (p < 1) play = requestAnimationFrame(f); else play = null; };
-      play = requestAnimationFrame(f); };
+    const pBtn = $('#pPlay'), note = $('#pNote');
+    let dir = 1;
+    const ui = () => { const on = !!play; pBtn.classList.toggle('paused', !on); pBtn.setAttribute('aria-label', on ? 'Pause' : 'Abspielen');
+      note.textContent = on ? (dir > 0 ? 'Spannt sich' : 'Fäden werden abgenommen') : (val >= 1 ? 'Fertig gespannt' : val <= 0 ? 'Leeres Brett' : 'Angehalten'); };
+    const stop = () => { if (play) cancelAnimationFrame(play); play = null; ui(); };
+    const run = (d = dir) => { stop(); dir = d; if (reduce) { set(d > 0 ? 1 : 0); return ui(); }
+      if (d > 0 && val >= 1) set(0);                                            /* am Ende: von vorn */
+      if (d < 0 && val <= 0) set(1);
+      let last = performance.now();
+      const f = t => { const dt = (t - last) / 1000; last = t;
+        set(val + d * dt / 12);                                                   /* ganzes Bild in 12 s */
+        if ((d > 0 && val >= 1) || (d < 0 && val <= 0)) { play = null; return ui(); }
+        play = requestAnimationFrame(f); };
+      play = requestAnimationFrame(f); ui(); };
+    pBtn.addEventListener('click', () => play ? stop() : run(dir));
+    $('#pFwd').addEventListener('click', () => run(1));
+    $('#pBack').addEventListener('click', () => run(-1));
     const fromEvent = e => { const r = sc.getBoundingClientRect();
       return vert() ? (e.clientY - r.top) / r.height : (e.clientX - r.left) / r.width; };
     sc.addEventListener('pointerdown', e => { stop(); sc.setPointerCapture(e.pointerId); sc.classList.add('drag'); set(fromEvent(e)); });
@@ -317,7 +335,6 @@
     sc.addEventListener('keydown', e => { const st = { ArrowUp: -.02, ArrowLeft: -.02, ArrowDown: .02, ArrowRight: .02, PageUp: -.1, PageDown: .1 }[e.key];
       if (st !== undefined) { stop(); set(val + st); e.preventDefault(); }
       if (e.key === 'Home') { stop(); set(0); e.preventDefault(); } if (e.key === 'End') { stop(); set(1); e.preventDefault(); } });
-    $('#replay').addEventListener('click', () => run(0));
     addEventListener('resize', () => set(val));
     fetch('{{ url_for("static", filename="img/demo-katze.json") }}').then(r => r.json()).then(d => {
       D = d; N = d.p.length; const n = d.n;
@@ -329,7 +346,7 @@
         cum[i + 1] = cum[i] + .45 * Math.sin(Math.PI * dd / n); c2[f] = q; });
       reset(); set(val);
       /* einmal von selbst abspielen, sobald der Abschnitt im Bild ist; jeder Griff an den Regler stoppt es */
-      const io = new IntersectionObserver(es => { if (es[0].isIntersecting) { io.disconnect(); run(val); } }, { threshold: .45 });
+      const io = new IntersectionObserver(es => { if (es[0].isIntersecting) { io.disconnect(); run(1); } }, { threshold: .45 });
       io.observe(sec);
     });
   })();
