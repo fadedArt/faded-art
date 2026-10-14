@@ -1224,16 +1224,117 @@ def voucher_download(code):
 
 @app.post("/cart/gutschein")
 def cart_voucher():
-    code = str((request.get_json(silent=True) or {}).get("code", "")).strip().upper()
+    body = request.get_json(silent=True) or {}
+    code = str(body.get("code", "")).strip().upper()
+    if body.get("creator_off"):
+        session.pop("creator", None)
+        return jsonify(ok=True)
     if not code:
         session.pop("voucher", None)
         return jsonify(ok=True)
+    if not CODE_RE.match(code):                       # kein Gutschein-Format: Rabatt-/Creator-Code?
+        if cc_get(code):
+            session["creator"] = code
+            return jsonify(ok=True)
+        return jsonify(message="Dieser Code ist ungültig."), 400
     v = voucher_load(code)
     if not voucher_ok(v):
         return jsonify(message="Dieser Gutscheincode ist ungültig, abgelaufen oder schon aufgebraucht."), 400
     session["voucher"] = v["code"]
     return jsonify(ok=True, left=v["left"])
 
+
+# ---------- Rabatt- und Creator-Codes ----------
+# Codes verwaltest du unter /admin/creator?key=ADMIN_KEY. Jeder Code: Rabatt für den Kunden (%) und Provision für den Creator (%).
+# Creator-Link: https://faded-art.onrender.com/?code=LENA10 merkt sich den Code automatisch für den Einkauf.
+CC_FILE = os.path.join(DATA_DIR, "creator_codes.json")
+CC_SALES = os.path.join(DATA_DIR, "creator_sales.jsonl")
+CC_RE = re.compile(r"^[A-Z0-9_-]{3,20}$")
+_cclock = threading.Lock()
+
+def cc_all():
+    try:
+        with open(CC_FILE) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+def cc_get(code):
+    code = (code or "").strip().upper()
+    c = cc_all().get(code)
+    return dict(c, code=code) if c and c.get("active", True) else None
+
+def cc_disc(code, total):
+    c = cc_get(code)
+    return round(total * c["pct"] / 100) if c else 0
+
+def cc_record(sid, code, cents):
+    """Verkauf für die Provisionsabrechnung merken (einmal je Zahlung)."""
+    with _cclock:
+        try:
+            with open(CC_SALES) as f:
+                if any(json.loads(l).get("sid") == sid for l in f if l.strip()):
+                    return
+        except OSError:
+            pass
+        with open(CC_SALES, "a") as f:
+            f.write(json.dumps(dict(sid=sid, code=code, cents=cents, t=time.time())) + "\n")
+
+@app.before_request
+def _creator_link():
+    code = request.args.get("code", "")
+    if code and request.method == "GET" and cc_get(code):
+        session["creator"] = code.strip().upper()
+
+@app.route("/admin/creator", methods=["GET", "POST"])
+def admin_creator():
+    if not admin_ok():
+        abort(404)
+    msg = ""
+    if request.method == "POST":
+        f = request.form
+        code = f.get("code", "").strip().upper()
+        with _cclock:
+            cs = cc_all()
+            if f.get("off") and code in cs:
+                cs[code]["active"] = not cs[code].get("active", True); msg = f"{code} umgeschaltet"
+            elif CC_RE.match(code):
+                try:
+                    cs[code] = dict(name=f.get("name", "").strip()[:60], pct=max(0, min(50, int(f.get("pct", 10)))),
+                                    prov=max(0, min(50, int(f.get("prov", 10)))), active=True)
+                    msg = f"{code} gespeichert"
+                except ValueError:
+                    msg = "Zahlen prüfen"
+            else:
+                msg = "Code: 3–20 Zeichen, nur A–Z, 0–9, - und _"
+            with open(CC_FILE + ".tmp", "w") as fh:
+                json.dump(cs, fh)
+            os.replace(CC_FILE + ".tmp", CC_FILE)
+    stats = {}
+    try:
+        with open(CC_SALES) as fh:
+            for l in fh:
+                if l.strip():
+                    r = json.loads(l); st = stats.setdefault(r["code"], [0, 0]); st[0] += 1; st[1] += r["cents"]
+    except OSError:
+        pass
+    rows = [dict(code=k, **v, n=stats.get(k, [0, 0])[0], umsatz=stats.get(k, [0, 0])[1],
+                 provision=round(stats.get(k, [0, 0])[1] * v["prov"] / 100)) for k, v in sorted(cc_all().items())]
+    return render_template_string("""<!doctype html><meta name=viewport content="width=device-width,initial-scale=1"><title>Creator-Codes</title>
+<body style="font-family:system-ui;background:#111;color:#eee;padding:1rem;max-width:760px"><h1>Creator- und Rabattcodes</h1>
+{% if msg %}<p style="color:#e6ca65">{{ msg }}</p>{% endif %}
+<form method=post style="display:grid;gap:.4rem;grid-template-columns:1fr 1fr;margin-bottom:1.5rem">
+<input name=code placeholder="CODE z.B. LENA10" required><input name=name placeholder="Creator / Zweck">
+<label>Rabatt Kunde % <input name=pct type=number value=10 min=0 max=50></label><label>Provision Creator % <input name=prov type=number value=10 min=0 max=50></label>
+<button style="grid-column:1/3">Code anlegen / ändern</button></form>
+<table style="width:100%;border-collapse:collapse">
+<tr style="text-align:left"><th>Code</th><th>Creator</th><th>Rabatt</th><th>Prov.</th><th>Verkäufe</th><th>Umsatz</th><th>Provision</th><th></th></tr>
+{% for r in rows %}<tr style="border-top:1px solid #333;{{ '' if r.active else 'opacity:.4' }}"><td>{{ r.code }}</td><td>{{ r.name }}</td><td>{{ r.pct }} %</td><td>{{ r.prov }} %</td>
+<td>{{ r.n }}</td><td>{{ r.umsatz|euro }}</td><td><b>{{ r.provision|euro }}</b></td>
+<td><form method=post><input type=hidden name=code value="{{ r.code }}"><button name=off value=1>{{ 'deaktivieren' if r.active else 'aktivieren' }}</button></form></td></tr>
+{% else %}<tr><td colspan=8>Noch keine Codes.</td></tr>{% endfor %}</table>
+<p style="color:#999">Creator-Link: {{ host }}?code=CODE (Code wird beim Besuch gemerkt). Umsatz = bezahlter Bildpreis ohne Versand, nach Rabatt.</p>""",
+        rows=rows, msg=msg, host=request.host_url)
 
 # ---------- Maschine: holt bezahlte Aufträge (nur mit ADMIN_KEY) ----------
 def machine_job(ref):
@@ -1559,10 +1660,13 @@ def cart():
     if not voucher_ok(v):
         v = None
         session.pop("voucher", None)
+    cc = cc_get(session.get("creator"))
+    cdisc = cc_disc(cc["code"], total) if cc else 0
+    total -= cdisc
     disc = min(v["left"], total) if v else 0
     refs = [i["ref"] for i in items]
     ship = {z: {"name": SHIP[z][0], "cents": ship_cents(refs, z)} for z in SHIP}
-    return render_template("cart.html", items=items, total=total, voucher=v, disc=disc, pay=total - disc, note=PREORDER_NOTE, ship=ship)
+    return render_template("cart.html", items=items, total=total + cdisc, cc=cc, cdisc=cdisc, voucher=v, disc=disc, pay=total - disc, note=PREORDER_NOTE, ship=ship)
 
 @app.post("/cart/add")
 def cart_add():
@@ -1599,6 +1703,15 @@ def checkout():
     if zone not in SHIP:
         return jsonify(message="Bitte ein Lieferland wählen"), 400
     total = sum(i["cents"] for i in items)
+    cc = cc_get(session.get("creator"))
+    cdisc = cc_disc(cc["code"], total) if cc else 0
+    if cdisc:                                            # Creator-Rabatt anteilig auf die Bilder
+        rest = cdisc
+        for n_, i in enumerate(items):
+            cut = rest if n_ == len(items) - 1 else min(rest, round(cdisc * i["cents"] / total))
+            i["cents"] -= cut; rest -= cut
+            i["title"] += f" (Code {cc['code']} −{cc['pct']} %)"
+        total -= cdisc
     ship = ship_cents([i["ref"] for i in items], zone)
     v = voucher_load(session.get("voucher"))
     disc = min(v["left"], total) if voucher_ok(v) else 0   # Gutschein gilt für die Bilder, Versand wird immer bezahlt (so kommt auch die Lieferadresse)
@@ -1625,6 +1738,7 @@ def checkout():
                 "product_data": {"name": f"Versand {SHIP[zone][0]}" + (" (Bilder per Gutschein bezahlt)" if all(i["cents"] == 0 for i in items) else "")}}}],
             shipping_address_collection={"allowed_countries": SHIP[zone][1]},   # Adresse muss zur gewählten Versandzone passen
             metadata={"order_refs": ",".join(i["ref"] for i in items), "versand": zone, "versand_cents": str(ship),
+                      **({"creator": cc["code"], "creator_cents": str(total)} if cc else {}),
                       **({"gutschein": v["code"], "gutschein_cents": str(disc)} if disc else {})},
             success_url=request.host_url + "success?session_id={CHECKOUT_SESSION_ID}",
             cancel_url=request.host_url + "warenkorb")
@@ -1701,6 +1815,8 @@ def handle_checkout(s):
                               int(meta["gutschein_bezahlt"]) if "gutschein_bezahlt" in meta else None)
     if "gutschein" in meta:                      # Bestellung mit Gutschein (Teilbetrag): Guthaben abziehen
         voucher_use(meta["gutschein"], int(meta["gutschein_cents"]), s["id"])
+    if "creator" in meta:                        # Creator-Provision: bezahlter Bildpreis nach Rabatt (vor Gutschein)
+        cc_record(s["id"], meta["creator"], int(meta["creator_cents"]))
     refs = meta["order_refs"] if "order_refs" in meta else ""
     email = s["customer_email"] if "customer_email" in s else None
     for ref in refs.split(","):
