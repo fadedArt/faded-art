@@ -1103,7 +1103,7 @@ def admin():
                              created=time.strftime("%d.%m.%Y %H:%M", time.localtime(m.get("created", 0)))))
     rows.sort(key=lambda r: (r["done"], -r["t"]))          # offene zuerst, neueste oben
     return render_template_string(ADMIN_CSS + """<title>Bestellungen</title>
-<h1>Bestellungen</h1><p class=nav><a href="/admin/bewertungen?key={{ key|urlencode }}">Bewertungen</a> · <a href="/admin/creator?key={{ key|urlencode }}">Creator-Codes</a></p>
+<h1>Bestellungen</h1><p class=nav><a href="/admin/bewertungen?key={{ key|urlencode }}">Bewertungen</a> · <a href="/admin/creator?key={{ key|urlencode }}">Creator-Codes</a> · <a href="/admin/mail-test?key={{ key|urlencode }}">Test-Mail senden</a></p>
 <p class=sub>{{ rows|rejectattr('done')|list|length }} offen · {{ rows|selectattr('done')|list|length }} gespannt</p>
 {% for r in rows %}<a class=row href="/admin/auftrag/{{ r.ref }}?key={{ key|urlencode }}">
 <b>Nr. {{ r.nr }}</b> <span class="tag {{ 'ok' if r.done else 'open' }}">{{ 'gespannt' if r.done else 'offen' }}</span><br>
@@ -1296,6 +1296,29 @@ def stripe_check():
         info["Verbindung zu Stripe"] = "FEHLER: " + str(getattr(e, "user_message", None) or e)[:300]
     return jsonify(info)
 
+@app.get("/admin/mail-test")
+def mail_test():
+    """Schickt eine Test-Mail an ORDER_MAIL_TO und zeigt, was dabei passiert: /admin/mail-test?key=DEIN_ADMIN_KEY"""
+    if not admin_ok():
+        abort(404)
+    pw, to = mail_env("SMTP_PASS"), mail_env("ORDER_MAIL_TO")
+    info = {"Versand über": "Resend" if mail_env("RESEND_API_KEY") else ("SMTP" if mail_env("SMTP_HOST") else "nicht eingerichtet"),
+            "Empfänger (ORDER_MAIL_TO)": to or "FEHLT", "SMTP_HOST": mail_env("SMTP_HOST") or "-", "SMTP_PORT": mail_env("SMTP_PORT", "587"),
+            "SMTP_USER": mail_env("SMTP_USER") or "-",
+            "SMTP_PASS": f"{len(pw)} Zeichen" + (", Format wie ein Apple-App-Passwort (xxxx-xxxx-xxxx-xxxx)"
+                                                 if re.fullmatch(r"[a-z]{4}(-[a-z]{4}){3}", pw) else ", KEIN Apple-App-Passwort-Format") if pw else "FEHLT"}
+    try:
+        if not to:
+            raise RuntimeError("ORDER_MAIL_TO fehlt")
+        send_mail(to, "Faded Art: Test-Mail", "Diese Test-Mail zeigt, dass der Versand der Bestell-Mails funktioniert.")
+        info["Ergebnis"] = f"OK, Test-Mail an {to} gesendet"
+    except smtplib.SMTPAuthenticationError:
+        info["Ergebnis"] = ("FEHLER: Anmeldung abgelehnt. Bei iCloud ein neues app-spezifisches Passwort erstellen "
+                            "(account.apple.com > Anmelden und Sicherheit > App-spezifische Passwörter) und als SMTP_PASS eintragen, mit Bindestrichen.")
+    except Exception as e:
+        info["Ergebnis"] = "FEHLER: " + str(e)[:300]
+    return jsonify(info)
+
 @app.get("/admin/<ref>/<name>")
 def admin_file(ref, name):
     m = load(ref) if admin_ok() else None
@@ -1347,9 +1370,14 @@ def voucher_pdf(v):
                    f"Gültig bis {voucher_valid_until(v['created'])}. {PREORDER_NOTE} Keine Barauszahlung.")
     return bytes(pdf.output())
 
+def mail_env(name, default=""):
+    """Mail-Einstellung ohne versehentliche Leerzeichen oder Anführungszeichen (beim Kopieren ins Render-Dashboard passiert das leicht)."""
+    v = os.environ.get(name, default).strip().strip("\"'")
+    return re.sub(r"\s+", "", v) if name == "SMTP_PASS" else v      # App-Passwörter enthalten nie Leerzeichen
+
 def send_mail(to, subject, text, files=()):
     """E-Mail über Resend (RESEND_API_KEY) oder SMTP. files: [(Name, MIME-Typ, Bytes)]."""
-    key = os.environ.get("RESEND_API_KEY", "").strip()
+    key = mail_env("RESEND_API_KEY")
     if key:
         body = json.dumps({"from": os.environ.get("MAIL_FROM", "Faded Art <onboarding@resend.dev>"), "to": [to], "subject": subject,
                            "text": text, "attachments": [{"filename": n, "content": base64.b64encode(b).decode()} for n, _, b in files]})
@@ -1359,15 +1387,15 @@ def send_mail(to, subject, text, files=()):
             urllib.request.urlopen(req, timeout=60).read()
         except urllib.error.HTTPError as e:
             raise RuntimeError(f"Resend {e.code}: {e.read().decode(errors='replace')[:300]}") from None
-    elif os.environ.get("SMTP_HOST"):
+    elif mail_env("SMTP_HOST"):
         msg = EmailMessage()
-        msg["Subject"], msg["To"], msg["From"] = subject, to, os.environ.get("SMTP_USER", to)
+        msg["Subject"], msg["To"], msg["From"] = subject, to, mail_env("MAIL_FROM") or mail_env("SMTP_USER", to)
         msg.set_content(text)
         for name, kind, data in files:
             msg.add_attachment(data, maintype=kind.split("/")[0], subtype=kind.split("/")[1], filename=name)
-        with smtplib.SMTP(os.environ["SMTP_HOST"], int(os.environ.get("SMTP_PORT", "587")), timeout=30) as sm:
+        with smtplib.SMTP(mail_env("SMTP_HOST"), int(mail_env("SMTP_PORT", "587")), timeout=30) as sm:
             sm.starttls()
-            sm.login(os.environ["SMTP_USER"], os.environ["SMTP_PASS"])
+            sm.login(mail_env("SMTP_USER"), mail_env("SMTP_PASS"))
             sm.send_message(msg)
     else:
         raise RuntimeError("kein E-Mail-Versand eingerichtet")
@@ -2034,16 +2062,13 @@ def checkout():
         return jsonify(message="Checkout konnte nicht gestartet werden" + detail), 500
 
 def notify_owner(ref):
-    """Schickt dir bei jeder bezahlten Bestellung Anleitung und Bild per E-Mail (sichert die Daten, falls der Server-Speicher gelöscht wird).
-    Mit RESEND_API_KEY über die Resend-API (HTTPS, funktioniert auch auf Render Free), sonst über SMTP (blockiert Render Free)."""
+    """Schickt dir bei jeder bezahlten Bestellung Anleitung und Bild per E-Mail (Kopie der Fertigungsdaten)."""
     try:
-        to = os.environ.get("ORDER_MAIL_TO")
-        key = os.environ.get("RESEND_API_KEY", "").strip()
-        if not to or not (key or os.environ.get("SMTP_HOST")):
+        to = mail_env("ORDER_MAIL_TO")
+        if not to or not (mail_env("RESEND_API_KEY") or mail_env("SMTP_HOST")):
             app.logger.warning("Bestellung %s bezahlt. ORDER_MAIL_TO bzw. RESEND_API_KEY/SMTP_HOST fehlen, keine E-Mail. Daten liegen in %s", ref, odir(ref))
             return
         m = load(ref)
-        subject = f"Neue Bestellung: {item_title(m)}"
         text = (f"Bezahlt: {price_cents(m) / 100:.2f} EUR\nKunden-E-Mail: {m.get('email')}\nBestellnummer: {ref}\n"
                 "Im Anhang: Anleitung als PDF (Maße, Einstellungen, Pinfolge zum Abhaken), das Bild und die Anleitung als Text.\n"
                 "Die Lieferadresse steht im Stripe-Dashboard.")
@@ -2051,25 +2076,7 @@ def notify_owner(ref):
         for name, kind in (("anleitung.pdf", "application/pdf"), ("final.png", "image/png"), ("anleitung.txt", "text/plain")):
             with open(os.path.join(odir(ref), name), "rb") as f:
                 files.append((name, kind, f.read()))
-        if key:
-            body = json.dumps({"from": os.environ.get("MAIL_FROM", "Faded Art <onboarding@resend.dev>"), "to": [to], "subject": subject,
-                               "text": text, "attachments": [{"filename": n, "content": base64.b64encode(b).decode()} for n, _, b in files]})
-            req = urllib.request.Request("https://api.resend.com/emails", data=body.encode(), method="POST",
-                                         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json", "User-Agent": "faded-art"})
-            try:
-                urllib.request.urlopen(req, timeout=60).read()
-            except urllib.error.HTTPError as e:
-                raise RuntimeError(f"Resend {e.code}: {e.read().decode(errors='replace')[:300]}") from None
-        else:
-            msg = EmailMessage()
-            msg["Subject"], msg["To"], msg["From"] = subject, to, os.environ.get("SMTP_USER", to)
-            msg.set_content(text)
-            for name, kind, data in files:
-                msg.add_attachment(data, maintype=kind.split("/")[0], subtype=kind.split("/")[1], filename=name)
-            with smtplib.SMTP(os.environ["SMTP_HOST"], int(os.environ.get("SMTP_PORT", "587")), timeout=30) as s:
-                s.starttls()
-                s.login(os.environ["SMTP_USER"], os.environ["SMTP_PASS"])
-                s.send_message(msg)
+        send_mail(to, f"Neue Bestellung: {item_title(m)}", text, files)
         app.logger.warning("Bestell-E-Mail für %s an %s gesendet", ref, to)
     except Exception:
         app.logger.exception("Bestell-E-Mail konnte nicht gesendet werden (%s)", ref)
