@@ -1926,7 +1926,7 @@ SHOP = {   # Anbieterdaten für Impressum, AGB, Datenschutz. Fehlende Angaben pe
     "name": os.environ.get("SHOP_NAME", "Tobias Appelt"),
     "strasse": os.environ.get("SHOP_STRASSE", "Olympiastraße 12b"),
     "ort": os.environ.get("SHOP_ORT", "85622 Feldkirchen"),
-    "email": os.environ.get("SHOP_EMAIL", ""),
+    "email": os.environ.get("SHOP_EMAIL", "info@fadedart.de"),
     "telefon": os.environ.get("SHOP_TELEFON", ""),
     "ust": os.environ.get("SHOP_UST", ""),          # "klein" = Kleinunternehmer nach § 19 UStG, sonst die USt-IdNr. (DE...)
     "lieferzeit": os.environ.get("SHOP_LIEFERZEIT", ""),   # Freitext, z. B. "bis zu zwei Monate"
