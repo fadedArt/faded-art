@@ -1,4 +1,4 @@
-:root{--build:"b31"}
+:root{--build:"b32"}
 [hidden]{display:none!important}   /* sonst überschreiben display-Regeln das hidden-Attribut (z. B. Ergebnisbild im Kreis) */
 @font-face{font-family:Cinzel;src:url(fonts/cinzel.woff2) format("woff2");font-weight:400 700;font-display:swap}
 @font-face{font-family:"Plus Jakarta Sans";src:url(fonts/plus-jakarta-sans.woff2) format("woff2");font-weight:300 600;font-display:swap}
@@ -116,6 +116,10 @@ mark{background:rgba(212,175,55,.2);color:var(--gold-t);padding:0 .25rem;border-
 .gs-vals{display:flex;flex-wrap:wrap;gap:.5rem}
 .gs-val{padding:.6rem 1.2rem}
 .gs-val.on{background:var(--grad);color:#0b0b0b;border-color:transparent}
+.gs-val{display:flex;flex-direction:column;align-items:center;line-height:1.25}
+.gs-p{font-size:.78rem;font-weight:600;opacity:.85}
+.gs-sale{display:flex;flex-direction:column;gap:.2rem;max-width:560px;margin-bottom:1rem;padding:.8rem 1rem;border-radius:12px;background:var(--grad);color:#0b0b0b}
+.gs-sale span{font-size:.9rem}
 .gs-code{font-family:ui-monospace,Menlo,monospace;font-size:2rem;letter-spacing:.12em;color:var(--gold-t);margin:1rem 0}
 .linkbtn{background:none;border:0;color:var(--gold-t);text-decoration:underline;cursor:pointer;font:inherit;padding:0}
 .biginfo{display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin:.6rem 0 .2rem;font-size:.9rem;color:var(--gold-t)}

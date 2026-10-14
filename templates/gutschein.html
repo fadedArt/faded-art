@@ -4,6 +4,7 @@
 {% block content %}
 <section class="block">
   <h2 class="title">Gutschein verschenken</h2>
+  {% if sale %}<div class="gs-sale"><b>Weihnachtsaktion: {{ sale }} % auf alle Gutscheine</b><span>Du zahlst {{ 100 - sale }} %, der Gutschein gilt zum vollen Wert. Nur bis {{ until }}</span></div>{% endif %}
   <p class="hint" style="max-width:60ch;margin-bottom:1.25rem">Ein Fadenbild aus dem Lieblingsfoto: Du schenkst den Gutschein, der Beschenkte lädt sein Foto hoch und sucht sich sein Bild aus. Den Gutschein bekommst du sofort als PDF zum Ausdrucken. {{ note }}</p>
   {% if left is not none and left <= 0 %}
   <div class="card"><h3>Ausverkauft</h3><p>Alle Gutscheine für diese Runde sind vergeben. Schau bald wieder vorbei.</p></div>
@@ -11,7 +12,7 @@
   <div class="card" style="max-width:560px">
     <div class="field"><label>Betrag</label>
       <div class="gs-vals" role="radiogroup" aria-label="Betrag">
-        {% for c in values %}<button type="button" class="btn gs-val{% if loop.index == 2 %} on{% endif %}" data-c="{{ c }}" role="radio" aria-checked="{{ 'true' if loop.index == 2 else 'false' }}">{{ (c // 100) }} €</button>{% endfor %}
+        {% for c, pay in values %}<button type="button" class="btn gs-val{% if loop.index == 2 %} on{% endif %}" data-c="{{ c }}" role="radio" aria-checked="{{ 'true' if loop.index == 2 else 'false' }}"><span class="gs-w">{{ (c // 100) }} €{% if sale %} Wert{% endif %}</span>{% if sale %}<span class="gs-p">du zahlst {{ pay|euro }}</span>{% endif %}</button>{% endfor %}
       </div>
       <p class="hint" style="margin-top:.5rem">Richtwert: Größe M (50 × 50 cm) ab 149 €.</p></div>
     <div class="field"><label for="gname">Für wen? (steht auf dem Gutschein, optional)</label><input type="text" id="gname" maxlength="60" placeholder="z. B. Lena"></div>

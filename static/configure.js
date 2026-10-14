@@ -1,5 +1,5 @@
 (() => {
-const BUILD = 'b31';
+const BUILD = 'b32';
 window.addEventListener('error', e => { const m = document.getElementById('msg'); if (m && !m.textContent && e.message) m.textContent = 'Technischer Fehler: ' + e.message; });
 const $ = id => document.getElementById(id);
 const S = 600, R = S * 0.49;     // Nagelring sitzt fast am Rand des Bildkreises (wie im berechneten Ergebnis)
@@ -29,7 +29,7 @@ function price() {
   const area = c.w * c.h * (c.format === 'rund' ? PRICE.round_factor : 1);
   const cents = PRICE.base_cents + Math.max(0, area - PRICE.base_area) * PRICE.cents_per_cm2;
   const p = Math.round(cents) / 100 + PRICE.wood[c.wood] + PRICE.pins[c.pins] + (c.multi ? PRICE.multi || 0 : 0) + (c.sw ? PRICE.sw || 0 : 0);
-  $('price').textContent = 'Preis: ' + p.toFixed(2).replace('.', ',') + ' €';
+  $('price').textContent = 'Preis: ' + p.toFixed(2).replace('.', ',') + ' € (inkl. MwSt., zzgl. Versand ab 7,90 €)';
 }
 
 let threadTouched = false;
