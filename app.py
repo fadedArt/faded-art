@@ -751,7 +751,7 @@ def compute_sw(ref, m, key):
     t_mm = float(mm["thick"])
     a_r = t_mm * engine2.RASTER / (disc_cm * 10)            # Deckkraft eines Fadens im Rechenraster (Fadendicke / Rasterzelle)
     L = engine2.lines_for(n)
-    t, w = engine2.target(os.path.join(d, "input.png"), gamma=st["gamma"], clip=st["clip"], edges=bool(sg and sg["edges"]))
+    t, w = engine2.target(os.path.join(d, "input.png"), gamma=st["gamma"], clip=st["clip"], edges=bool(sg and sg["edges"]), faces=order_faces(ref))
     max_lines = int(SW_LINES[n] * min(1.6, max(1.0, (0.20 / t_mm) * (disc_cm / D0_CM))))
     geo = geometry(n)
     px, py, rp = geo["px"], geo["py"], geo["rp"]
@@ -1711,6 +1711,27 @@ def clamp(v, lo, hi):
     except (TypeError, ValueError):
         return lo
 
+def faces_from_form(raw):
+    """Gesichter, die der Browser im Bildausschnitt gefunden hat (MediaPipe, static/mp): höchstens 8, Koordinaten 0..1.
+    Alles Ungültige wird verworfen; ohne Gesichter rechnet die Engine wie bisher."""
+    try:
+        out = []
+        for f in json.loads(raw or "[]")[:8]:
+            box = [min(1.0, max(0.0, float(v))) for v in f["box"]][:4]
+            pts = [[min(1.0, max(0.0, float(x))), min(1.0, max(0.0, float(y)))] for x, y in f["pts"][:80]]
+            if len(box) == 4 and box[2] > box[0] and box[3] > box[1]:
+                out.append({"box": box, "pts": pts})
+        return out
+    except (ValueError, TypeError, KeyError):
+        return []
+
+def order_faces(ref):
+    try:
+        with open(os.path.join(odir(ref), "faces.json")) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
 @app.post("/generate")
 def generate():
     f, form = request.files.get("image"), request.form
@@ -1742,6 +1763,10 @@ def generate():
     ref = uuid.uuid4().hex
     os.makedirs(odir(ref))
     img.save(os.path.join(odir(ref), "input.png"))
+    faces = faces_from_form(form.get("faces"))
+    if faces:
+        with open(os.path.join(odir(ref), "faces.json"), "w") as fj:
+            json.dump(faces, fj)
     update(ref, fmt=fmt, size=size, w=SIZES[fmt][size][0], h=SIZES[fmt][size][1], wood=wood,
            color=color, disc=disc, pin=pin, thick=thick, pins=pins, status="queued", paid=False, created=time.time())
     pool.submit(run_job, ref)

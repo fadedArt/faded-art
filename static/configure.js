@@ -157,6 +157,30 @@ function segmenter() {
   })().catch(e => { segPromise = null; throw e; });
   return segPromise;
 }
+// Gesichter finden (MediaPipe Face Landmarker, ebenfalls nur im Browser): Augen, Brauen, Mund und Nase bekommen bei der
+// Berechnung mehr Gewicht, dadurch werden Gesichter auch auf Paar- und Familienfotos erkennbar
+let facePromise = null;
+const FACE_PTS = [33, 133, 159, 145, 468, 362, 263, 386, 374, 473, 70, 105, 107, 336, 334, 300, 61, 291, 0, 17, 13, 14, 1, 98, 327];
+function faceLandmarker() {
+  if (!facePromise) facePromise = (async () => {
+    const { FaceLandmarker } = await import('/static/mp/vision_bundle.mjs');
+    return FaceLandmarker.createFromOptions(
+      { wasmLoaderPath: '/static/mp/vision_wasm_internal.js', wasmBinaryPath: '/static/mp/vision_wasm_internal.wasm' },
+      { baseOptions: { modelAssetPath: '/static/mp/face_landmarker.task', delegate: 'CPU' }, runningMode: 'IMAGE', numFaces: 8, minFaceDetectionConfidence: .3 });
+  })().catch(e => { facePromise = null; throw e; });
+  return facePromise;
+}
+async function findFaces(canvas) {                              // [{box, pts}] in 0..1; null, wenn es nicht klappt (dann ohne)
+  try {
+    const fl = await Promise.race([faceLandmarker(), new Promise((_, no) => setTimeout(() => no(new Error('Zeit')), 8000))]);
+    const r3 = v => Math.round(v * 1000) / 1000;
+    return fl.detect(canvas).faceLandmarks.map(L => {
+      const xs = L.map(p => p.x), ys = L.map(p => p.y);
+      return { box: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)].map(r3),
+               pts: FACE_PTS.filter(i => L[i]).map(i => [r3(L[i].x), r3(L[i].y)]) };
+    });
+  } catch (e) { console.warn('Gesichter:', e); return null; }
+}
 // Maske verfeinern: Guided Filter (Kanten folgen dem Foto, z. B. Haare), dann Reste und Schleier entfernen
 function boxBlur(src, w, h, r) {                               // Mittelwert über (2r+1)² per Summentabelle
   const I = new Float64Array((w + 1) * (h + 1)), out = new Float32Array(w * h);
@@ -313,9 +337,7 @@ function startSpec() {
   const me = { sig: sg };
   me.ready = (async () => {
     try {
-      const c = cfg(), fd = new FormData(), blob = await cropBlob();
-      fd.append('image', blob, cut ? 'crop.png' : 'crop.jpg');
-      ['format', 'size', 'wood', 'color', 'disc', 'thick', 'pin', 'pins'].forEach(k => fd.append(k, c[k]));
+      const fd = uploadForm(await cropBlob());
       const r = await fetch('/generate', { method: 'POST', body: fd });
       if (!r.ok) return null;
       return (await r.json()).job_id;
@@ -337,7 +359,16 @@ function cropBlob() { // exakt der sichtbare Kreisausschnitt, ohne Pins; freiges
   const c = o.getContext('2d'); if (!cut) { c.fillStyle = '#fff'; c.fillRect(0, 0, o.width, o.height); }
   const dw = img.width * view.s, dh = img.height * view.s, off = S / 2 - R;
   c.drawImage(cut || img, (view.x - dw / 2 - off) * k, (view.y - dh / 2 - off) * k, dw * k, dh * k);
-  return new Promise(r => o.toBlob(r, cut ? 'image/png' : 'image/jpeg', 0.92));   // ohne Freistellung: JPEG, viel kleiner
+  const faces = findFaces(o);
+  return new Promise(r => o.toBlob(r, cut ? 'image/png' : 'image/jpeg', 0.92))   // ohne Freistellung: JPEG, viel kleiner
+    .then(async b => { b.faces = await faces; return b; });
+}
+function uploadForm(blob) {
+  const c = cfg(), fd = new FormData();
+  fd.append('image', blob, cut ? 'crop.png' : 'crop.jpg');
+  ['format', 'size', 'wood', 'color', 'disc', 'thick', 'pin', 'pins'].forEach(k => fd.append(k, c[k]));
+  if (blob.faces && blob.faces.length) fd.append('faces', JSON.stringify(blob.faces));
+  return fd;
 }
 
 async function fetchRetry(url, opts, tries = 4) {   // Server aufgeweckt/neu gestartet? Mehrfach versuchen
@@ -592,9 +623,7 @@ async function generate() {
     dropSpec();
     const [blob] = await Promise.all([cropBlob(), fetchRetry('/health', {}, 10)]);   // Bild vorbereiten, während der Server aufwacht
     $('wait').textContent = 'Berechnung läuft, für drei Varianten kann das einige Minuten dauern …';
-    const c = cfg(), fd = new FormData();
-    fd.append('image', blob, cut ? 'crop.png' : 'crop.jpg');
-    ['format', 'size', 'wood', 'color', 'disc', 'thick', 'pin', 'pins'].forEach(k => fd.append(k, c[k]));
+    const fd = uploadForm(blob);
     const res = await fetchRetry('/generate', { method: 'POST', body: fd });
     if (!res.ok) { let m = ''; try { m = (await res.json()).message; } catch (e) {} throw new Error(m || 'Server-Fehler ' + res.status); }
     const d = await res.json();

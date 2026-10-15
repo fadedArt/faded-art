@@ -14,7 +14,8 @@ import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
 RASTER = 180          # Rechenraster in Pixeln
-SIGMA_MM = 2.3        # Weichzeichnung in mm auf dem Brett (Betrachtungsabstand ca. 1-2 m)
+SIGMA_MM = 1.0        # Weichzeichnung in mm auf dem Brett (15.10.2026: 2,3 -> 1,0, Augen und Mund klarer, bei allen Testfotos besser)
+FACE_W, FEAT_W = 3.0, 4.0   # Gewicht Gesichtsfläche / Augen, Brauen, Mund, Nase (Gesichter kommen aus dem Browser, siehe faces_from_form)
 EVERY = 10            # so oft wird der weichgezeichnete Fehler exakt neu berechnet
 SWITCH_PEN = 100.0    # Wechsel-Bremse (0 = aus)
 DEAD = 8              # so viele Abschnitte ohne Verbesserung, dann Stopp
@@ -144,8 +145,24 @@ def _blur(a, r):
     return np.asarray(im.filter(ImageFilter.GaussianBlur(r)), np.float32) / 255
 
 
-def target(path, size=RASTER, gamma=1.0, clip=0.008, edges=False, bg=0.12):
-    """Zielhelligkeit 0..1 und Gewichtung. Freigestellter Hintergrund (Transparenz) wird gleichmäßig dunkel."""
+def face_weight(faces, size):
+    """Gewichtung aus Gesichtern: [{"box": [x0, y0, x1, y1], "pts": [[x, y], ...]}], Koordinaten 0..1 im Bildausschnitt.
+    Gesichtsfläche weich (FACE_W), Augen, Brauen, Mund und Nase stärker (FEAT_W): dort entscheidet sich, ob man jemanden erkennt."""
+    yy, xx = np.mgrid[:size, :size].astype(np.float32)
+    face, feat = np.zeros((size, size), np.float32), np.zeros((size, size), np.float32)
+    for f in faces or []:
+        x0, y0, x1, y1 = (v * size for v in f["box"])
+        cx, cy, rx, ry = (x0 + x1) / 2, (y0 + y1) / 2, max(1.0, (x1 - x0) / 2 * 1.05), max(1.0, (y1 - y0) / 2 * 1.1)
+        face = np.maximum(face, np.exp(-np.clip(((xx - cx) / rx) ** 2 + ((yy - cy) / ry) ** 2 - 1, 0, None) * 3))
+        s2 = 2 * (0.07 * (x1 - x0)) ** 2 + 1e-6
+        for x, y in f["pts"]:
+            feat = np.maximum(feat, np.exp(-((xx - x * size) ** 2 + (yy - y * size) ** 2) / s2))
+    return 1 + FACE_W * face + FEAT_W * feat
+
+
+def target(path, size=RASTER, gamma=1.0, clip=0.008, edges=False, bg=0.12, faces=None):
+    """Zielhelligkeit 0..1 und Gewichtung. Freigestellter Hintergrund (Transparenz) wird gleichmäßig dunkel.
+    faces: Gesichter aus dem Browser (siehe face_weight); Test 15.10.2026, 4 Fotos: Gesichtsähnlichkeit 0,89 -> 0,93."""
     src = Image.open(path)
     alpha = None
     if src.mode in ("RGBA", "LA"):
@@ -167,6 +184,8 @@ def target(path, size=RASTER, gamma=1.0, clip=0.008, edges=False, bg=0.12):
     if edges:
         e = np.hypot(*np.gradient(_blur(g, 1.0)))
         w = w * (1 + 0.8 * np.clip(e / (np.percentile(e, 99) + 1e-6), 0, 1))
+    if faces:
+        w = w * face_weight(faces, size)
     return t.astype(np.float32), w.astype(np.float32)
 
 

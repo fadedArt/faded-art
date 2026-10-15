@@ -2,3 +2,6 @@ MediaPipe Tasks Vision 1.1.0 (npm @mediapipe/tasks-vision) und das Modell selfie
 von Google, Lizenz Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0).
 Wird nur im Browser des Kunden ausgeführt, um Personen vom Hintergrund freizustellen.
 Selbst gehostet, damit beim Freistellen keine Daten an Dritte gehen.
+
+face_landmarker.task (MediaPipe Face Landmarker, Google, Apache 2.0): findet im Browser Gesichter im Bildausschnitt.
+Übertragen werden nur wenige Punkte (Augen, Brauen, Mund, Nase) als Zahlen, damit die Berechnung Gesichter genauer zeichnet.
