@@ -1,7 +1,7 @@
 import os as _os
 for _v in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS", "NUMBA_NUM_THREADS"):
     _os.environ.setdefault(_v, "1")   # Render gibt nur 0,5 CPU: sonst startet numpy Dutzende Rechen-Threads je Matrixprodukt (massiv langsamer)
-import base64, hashlib, hmac, json, secrets, math, mimetypes, os, re, shutil, smtplib, threading, time, urllib.error, urllib.request, uuid
+import base64, hashlib, io, hmac, json, secrets, math, mimetypes, os, re, shutil, smtplib, threading, time, urllib.error, urllib.request, uuid
 from email.message import EmailMessage
 from datetime import datetime
 from datetime import timedelta
@@ -2119,6 +2119,7 @@ def handle_checkout(s):
         cc_record(s["id"], meta["creator"], int(meta["creator_cents"]))
     refs = meta["order_refs"] if "order_refs" in meta else ""
     email = s["customer_email"] if "customer_email" in s else None
+    new = []
     for ref in refs.split(","):
         with _meta_lock:
             m = load(ref)
@@ -2126,7 +2127,41 @@ def handle_checkout(s):
                 continue
             m.update(paid=True, stripe_session=s["id"], email=email)
             _write(ref, m)
+        new.append(ref)
         threading.Thread(target=notify_owner, args=(ref,), daemon=True).start()
+    if new and email:                            # Bestellbestätigung an den Kunden (nur beim ersten Melden der Zahlung)
+        total = s["amount_total"] if "amount_total" in s else None
+        threading.Thread(target=notify_customer, args=(email, new, total), daemon=True).start()
+
+def notify_customer(email, refs, total=None):
+    """Bestellbestätigung mit Vorschaubild an den Käufer."""
+    host = "https://" + (CANON_HOST or "fadedart.de") + "/"
+    lines, files = [], []
+    for ref in refs:
+        m = load(ref)
+        if not m:
+            continue
+        key = m.get("variant", "a")
+        lines.append(f"- {item_title(m)}\n  Bestellnummer: {ref[:8].upper()}")
+        src = os.path.join(odir(ref), f"preview_{key}.png")
+        if os.path.exists(src):
+            try:
+                im = Image.open(src).convert("RGB"); im.thumbnail((900, 900))
+                buf = io.BytesIO(); im.save(buf, "JPEG", quality=85)
+                files.append((f"Dein-Fadenbild-{ref[:8].upper()}.jpg", "image/jpeg", buf.getvalue()))
+            except Exception:
+                app.logger.exception("Vorschaubild für Kunden-Mail %s", ref)
+    text = ("Hallo,\n\nvielen Dank für deine Bestellung bei Faded Art! Wir haben deine Zahlung erhalten.\n\n"
+            + "\n".join(lines)
+            + (f"\n\nBezahlt: {euro(total)} (inkl. Versand)" if total else "")
+            + f"\n\n{PREORDER_NOTE}\nSobald dein Bild gespannt und verschickt ist, melden wir uns noch einmal.\n\n"
+            "Im Anhang findest du die Vorschau deines Fadenbilds.\n"
+            f"Fragen? Antworte einfach auf diese Mail oder schreib an info@fadedart.de.\n\nViele Grüße\nTobias von Faded Art\n{host}")
+    try:
+        send_mail(email, "Deine Bestellung bei Faded Art", text, files)
+        app.logger.warning("Bestellbestätigung an %s gesendet (%s)", email, ",".join(r[:6] for r in refs))
+    except Exception:
+        app.logger.exception("Bestellbestätigung an %s fehlgeschlagen", email)
 
 
 if __name__ == "__main__":
