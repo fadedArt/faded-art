@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Vormerken – Faded Art{% endblock %}
+{% block desc %}Faded Art startet bald: Dein Foto als Fadenbild. Jetzt vormerken und als Erstes bestellen.{% endblock %}
+{% block content %}
+<section class="block">
+  <h2 class="title">Sei beim Start dabei</h2>
+  <p class="hint" style="max-width:60ch;margin-bottom:1.25rem">Dein Foto als Fadenbild, berechnet und gespannt in Feldkirchen bei München. Den Konfigurator kannst du schon ausprobieren und dein Bild ansehen. Bestellen und Gutscheine kaufen geht ab dem Start.</p>
+  <div class="card" style="max-width:560px">{% set wunsch = 'allgemein' %}{% include "_warteliste.html" %}</div>
+  <p style="margin-top:1.5rem"><a href="/configure" class="btn">Dein Fadenbild jetzt schon ansehen</a></p>
+</section>
+{% endblock %}

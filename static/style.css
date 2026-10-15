@@ -337,3 +337,7 @@ body.home .logo{white-space:nowrap}
   .top .logo,.top .cartlink{display:inline-flex;align-items:center;min-height:44px}
   footer nav a{display:inline-block;padding:.7rem .2rem}
 }
+
+.prelaunch{display:flex;flex-wrap:wrap;gap:.4rem 1rem;justify-content:center;align-items:center;padding:.6rem 1rem;font-size:.9rem;background:var(--grad,#d8c38a);color:#0b0b0b;text-align:center}
+.prelaunch a{color:#0b0b0b;font-weight:700;text-decoration:underline}
+.wl-title{font-weight:700;font-size:1.05rem;margin-bottom:.3rem}

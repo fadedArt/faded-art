@@ -1,0 +1,21 @@
+<div class="wl" data-wunsch="{{ wunsch|default('allgemein') }}">
+  <p class="wl-title">{{ wl_title|default('Noch nicht bestellbar – ' ~ launch_text) }}</p>
+  <p class="hint" style="margin-bottom:.8rem">Trag dich ein und wir schreiben dir, sobald du bestellen kannst. Kein Newsletter, nur diese eine Nachricht.</p>
+  <div class="field"><label for="wlmail">Deine E-Mail</label><input type="email" class="wl-mail" id="wlmail" autocomplete="email" placeholder="name@beispiel.de"></div>
+  <div class="field"><label style="text-transform:none;font-weight:400"><input type="checkbox" class="wl-ok">Ihr dürft mich zum Start per E-Mail informieren. Abmelden geht jederzeit, siehe <a href="/datenschutz" target="_blank" rel="noopener">Datenschutz</a>.</label></div>
+  <button type="button" class="btn btn-gold wl-btn" style="width:100%">Vormerken</button>
+  <p class="msg wl-msg" role="alert"></p>
+</div>
+<script>
+document.querySelectorAll('.wl').forEach(w => { const b = w.querySelector('.wl-btn'); if (b.dataset.on) return; b.dataset.on = 1;
+  b.addEventListener('click', async () => {
+    const m = t => w.querySelector('.wl-msg').textContent = t, email = w.querySelector('.wl-mail').value.trim();
+    if (!/^\S+@\S+\.\S+$/.test(email)) return m('Bitte eine gültige E-Mail-Adresse eingeben.');
+    if (!w.querySelector('.wl-ok').checked) return m('Bitte das Häkchen setzen.');
+    b.disabled = true;
+    try { const r = await fetch('/warteliste', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, ok: true, wunsch: w.dataset.wunsch }) });
+      const d = await r.json(); if (!r.ok) throw new Error(d.message);
+      w.innerHTML = '<p class="wl-title">Du bist vorgemerkt ✓</p><p class="hint">' + (d.schon ? 'Du warst schon auf der Liste.' : 'Wir haben dir eine kurze Bestätigung geschickt.') + ' Wir melden uns zum Start.</p>';
+    } catch (e) { m(e.message || 'Hat nicht geklappt, bitte später nochmal.'); b.disabled = false; }
+  }); });
+</script>

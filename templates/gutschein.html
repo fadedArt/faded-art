@@ -25,10 +25,12 @@
         {% for c, pay in values %}<button type="button" class="btn gs-val{% if loop.index == 2 %} on{% endif %}" data-c="{{ c }}" role="radio" aria-checked="{{ 'true' if loop.index == 2 else 'false' }}"><span class="gs-w">{{ (c // 100) }} €{% if sale %} Wert{% endif %}</span>{% if sale %}<span class="gs-p">du zahlst {{ pay|euro }}</span>{% endif %}</button>{% endfor %}
       </div>
       <p class="hint" style="margin-top:.5rem">Richtwert: Größe S (30 × 30 cm) ab {{ (base_cents)|euro }}, Größe M (50 × 50 cm) ab {{ (m_cents)|euro }}.</p></div>
+    {% if shop_open %}
     <div class="field"><label for="gname">Für wen? (steht auf dem Gutschein, optional)</label><input type="text" id="gname" maxlength="60" placeholder="z. B. Lena"></div>
     <div class="field"><label for="gmail">Deine E-Mail (dorthin schicken wir den Gutschein)</label><input type="email" id="gmail" autocomplete="email" placeholder="name@beispiel.de"></div>
     <div class="field"><label style="text-transform:none;font-weight:400"><input type="checkbox" id="gagb">Ich akzeptiere die <a href="/agb" target="_blank" rel="noopener">AGB</a>. Der Gutschein ist {{ years }} Jahre gültig und wird nicht bar ausgezahlt.</label></div>
     <button type="button" class="btn btn-gold" id="gbuy" style="width:100%">Gutschein kaufen</button>
+    {% else %}{% set wunsch = "gutschein" %}{% set wl_title = "Gutscheine gibt es ab dem Start – " ~ launch_text %}{% include "_warteliste.html" %}{% endif %}
     <p class="msg" id="gmsg" role="alert"></p>
     {% if left is not none %}<p class="hint" style="margin-top:.75rem">Nur noch {{ left }} Gutscheine in dieser Runde.</p>{% endif %}
   </div>
