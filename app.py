@@ -1428,6 +1428,8 @@ def voucher_page():
 
 @app.post("/gutschein/kaufen")
 def voucher_buy():
+    if not shop_open():
+        return jsonify(message=f"Gutscheine gibt es ab dem Start ({LAUNCH_TEXT}). Trag dich auf die Warteliste ein."), 403
     d = request.get_json(silent=True) or {}
     cents, email, name = d.get("cents"), str(d.get("email", "")).strip(), str(d.get("name", "")).strip()[:60]
     if cents not in VOUCHER_VALUES:
@@ -1932,11 +1934,79 @@ SHOP = {   # Anbieterdaten für Impressum, AGB, Datenschutz. Fehlende Angaben pe
     "lieferzeit": os.environ.get("SHOP_LIEFERZEIT", ""),   # Freitext, z. B. "bis zu zwei Monate"
 }
 
+
+# ---------- Vormerk-Modus: solange Stripe im Testmodus läuft, kann niemand echt bestellen, sondern trägt sich auf die Warteliste ein ----------
+LAUNCH_TEXT = os.environ.get("START_TEXT", "Start im November 2026")
+WL_FILE = os.path.join(DATA_DIR, "warteliste.jsonl")
+_wllock = threading.Lock()
+
+def shop_open():
+    """Echt bestellbar nur mit Live-Schlüssel (oder SHOP_OFFEN=1). Testzugang: /testzugang?key=ADMIN_KEY"""
+    return stripe.api_key.startswith(("sk_live", "rk_live")) or os.environ.get("SHOP_OFFEN") == "1" or bool(session.get("tester"))
+
+def wl_all():
+    try:
+        with open(WL_FILE) as f:
+            return [json.loads(l) for l in f if l.strip()]
+    except OSError:
+        return []
+
+@app.get("/testzugang")
+def tester_access():
+    if not admin_ok():
+        abort(404)
+    session["tester"] = True
+    return redirect("/")
+
+@app.get("/warteliste")
+def waitlist_page():
+    return render_template("warteliste.html")
+
+@app.post("/warteliste")
+def waitlist_add():
+    d = request.get_json(silent=True) or {}
+    email = str(d.get("email", "")).strip().lower()[:120]
+    if not re.match(r"^\S+@\S+\.\S+$", email):
+        return jsonify(message="Bitte eine gültige E-Mail-Adresse eingeben."), 400
+    if d.get("ok") is not True:
+        return jsonify(message="Bitte bestätige, dass wir dich zum Start informieren dürfen."), 400
+    with _wllock:
+        if any(r["email"] == email for r in wl_all()):
+            return jsonify(ok=True, schon=True)
+        with open(WL_FILE, "a") as f:
+            f.write(json.dumps(dict(email=email, wunsch=str(d.get("wunsch", ""))[:20], code=session.get("creator") or "",
+                                    t=time.strftime("%Y-%m-%d %H:%M"))) + "\n")
+    def confirm():
+        try:
+            send_mail(email, "Du bist vorgemerkt – Faded Art",
+                      "Hallo,\n\nschön, dass du dabei bist! Du stehst auf unserer Liste und bekommst eine E-Mail, sobald du bei Faded Art "
+                      f"bestellen kannst ({LAUNCH_TEXT}).\n\nWenn du das nicht wolltest oder dich austragen möchtest, antworte einfach mit „Abmelden“.\n\n"
+                      "Viele Grüße\nTobias von Faded Art\nhttps://fadedart.de")
+        except Exception:
+            app.logger.exception("Wartelisten-Mail an %s", email)
+    threading.Thread(target=confirm, daemon=True).start()
+    return jsonify(ok=True)
+
+@app.get("/admin/warteliste")
+def admin_waitlist():
+    if not admin_ok():
+        abort(404)
+    rows = wl_all()
+    if request.args.get("csv"):
+        return app.response_class("email;wunsch;code;datum\n" + "".join(f"{r['email']};{r.get('wunsch','')};{r.get('code','')};{r['t']}\n" for r in rows),
+                                  mimetype="text/csv", headers={"Content-Disposition": "attachment; filename=warteliste.csv"})
+    return render_template_string("""<!doctype html><meta name=viewport content="width=device-width,initial-scale=1"><title>Warteliste</title>
+<body style="font-family:system-ui;background:#111;color:#eee;padding:1rem"><h1>Warteliste: {{ rows|length }}</h1>
+<p><a style="color:#e6ca65" href="?key={{ key|urlencode }}&csv=1">Als CSV herunterladen</a></p>
+{% for r in rows|reverse %}<p style="border-bottom:1px solid #333;padding:.4rem 0">{{ r.t }} · <b>{{ r.email }}</b> · {{ r.wunsch }}{% if r.code %} · Code {{ r.code }}{% endif %}</p>{% endfor %}""",
+        rows=rows, key=request.args.get("key", ""))
+
 @app.context_processor
 def inject_cart():
     v = voucher_load(session["voucher"]) if session.get("voucher") else None
     return {"cart_count": len(session.get("cart", [])), "asset_v": asset_v, "shop": SHOP,
-            "voucher": v if v and voucher_ok(v) else None, "creator": session.get("creator")}
+            "voucher": v if v and voucher_ok(v) else None, "creator": session.get("creator"),
+            "shop_open": shop_open(), "launch_text": LAUNCH_TEXT}
 
 @app.errorhandler(413)
 def too_big(e):
@@ -2013,6 +2083,8 @@ def cart_remove():
 
 @app.post("/checkout")
 def checkout():
+    if not shop_open():
+        return jsonify(message=f"Bestellen ist noch nicht möglich ({LAUNCH_TEXT}). Trag dich auf die Warteliste ein."), 403
     data = request.get_json(silent=True) or {}
     email = str(data.get("email", "")).strip()
     items = cart_items()

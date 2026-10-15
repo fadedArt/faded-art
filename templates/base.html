@@ -47,6 +47,7 @@
     </nav>
   </details></div>
 </header>
+{% if not shop_open %}<div class="prelaunch"><span>🧵 {{ launch_text }} – noch nicht bestellbar.</span> <a href="/warteliste">Jetzt vormerken</a></div>{% endif %}
 <main>{% block content %}{% endblock %}</main>
 <footer class="site-foot">
   <div class="sf-grid">
